@@ -1,0 +1,8 @@
+rclone v1.75.1
+- os/version: Microsoft Windows 11 Home 26H2 26H2 (64 bit)
+- os/kernel: 10.0.26300.9711 (x86_64)
+- os/type: windows
+- os/arch: amd64
+- go/version: go1.26.8
+- go/linking: static
+- go/tags: cmount

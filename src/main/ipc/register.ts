@@ -1,0 +1,55 @@
+/**
+ * 모든 IPC 채널 등록. 채널 이름과 타입은 @/shared/ipc-contract 에만 정의한다.
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+// ========== External imports ==========
+import { app, shell } from "electron";
+
+// ========== Internal imports ==========
+import { clsAppError } from "@/main/lib/app-error";
+import { handle, type itfIpcContext } from "@/main/ipc/handle";
+import type { clsJobStore } from "@/main/store/job-store";
+import type { clsSettingsStore } from "@/main/store/settings-store";
+import { IPC_CHANNELS, type itfAppInfo, type itfAppNotice } from "@/shared/ipc-contract";
+import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
+import { zSettingsPatch } from "@/shared/schemas/settings";
+
+export interface itfIpcServices extends itfIpcContext {
+    settings: clsSettingsStore;
+    jobs: clsJobStore;
+    paths: { userData: string; logs: string };
+    notices: () => itfAppNotice[];
+}
+
+export function registerIpc(s: itfIpcServices): void {
+    handle(s, IPC_CHANNELS.appGetInfo, (): itfAppInfo => ({
+        appVersion: app.getVersion(),
+        electron: process.versions.electron,
+        node: process.versions.node,
+        chrome: process.versions.chrome,
+        platform: process.platform,
+        userDataPath: s.paths.userData,
+        logsPath: s.paths.logs,
+    }));
+    handle(s, IPC_CHANNELS.appGetNotices, () => s.notices());
+    handle(s, IPC_CHANNELS.appOpenLogsFolder, async () => {
+        const err = await shell.openPath(s.paths.logs);
+        if (err) throw new clsAppError("INTERNAL", "로그 폴더를 열지 못했습니다.", err);
+    });
+
+    handle(s, IPC_CHANNELS.settingsGet, () => s.settings.get());
+    handle(s, IPC_CHANNELS.settingsUpdate, (patch) => s.settings.update(patch), zSettingsPatch);
+
+    handle(s, IPC_CHANNELS.jobsList, () => s.jobs.list());
+    handle(s, IPC_CHANNELS.jobsCreate, (draft) => s.jobs.create(draft), zJobCreateInput);
+    handle(
+        s,
+        IPC_CHANNELS.jobsUpdate,
+        ({ id, patch }) => s.jobs.update(id, patch),
+        zJobUpdateInput,
+    );
+    handle(s, IPC_CHANNELS.jobsDelete, ({ id }) => s.jobs.remove(id), zJobId);
+    handle(s, IPC_CHANNELS.jobsDuplicate, ({ id }) => s.jobs.duplicate(id), zJobId);
+}

@@ -1,0 +1,78 @@
+/**
+ * 기본 테마 토큰. 라이트/다크/시스템(prefers-color-scheme), 수동 지정은 <html data-theme>.
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+:root {
+    color-scheme: light;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --text: #1d2330;
+    --muted: #5f6b7d;
+    --border: #d9dee6;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --danger: #c62828;
+    --warning: #a35c00;
+    --success: #1b7f3b;
+    --radius: 6px;
+    --gap: 12px;
+    --font: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+    --font-mono: "Cascadia Mono", Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #15181e;
+    --panel: #1e232b;
+    --text: #e6e9ef;
+    --muted: #9aa5b5;
+    --border: #343b47;
+    --accent: #5b8def;
+    --accent-text: #0b0e13;
+    --danger: #ef6b6b;
+    --warning: #e0a040;
+    --success: #4cc27a;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #15181e;
+        --panel: #1e232b;
+        --text: #e6e9ef;
+        --muted: #9aa5b5;
+        --border: #343b47;
+        --accent: #5b8def;
+        --accent-text: #0b0e13;
+        --danger: #ef6b6b;
+        --warning: #e0a040;
+        --success: #4cc27a;
+    }
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+button {
+    font: inherit;
+}

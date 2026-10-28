@@ -1,0 +1,172 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": [
+        "eslint",
+        "typescript",
+        "unicorn",
+        "oxc",
+        "import",
+        "react",
+        "jsx-a11y",
+        "promise",
+        "vitest"
+    ],
+    "categories": {
+        "correctness": "error",
+        "suspicious": "warn"
+    },
+    "env": {
+        "es2024": true
+    },
+    "settings": {
+        "react": {
+            "version": "19.3.1"
+        }
+    },
+    "rules": {
+        "no-console": "warn",
+        "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+        "typescript/no-explicit-any": "error",
+        "react/react-in-jsx-scope": "off",
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "warn",
+        "react/only-export-components": "warn",
+        "import/no-cycle": "warn",
+        "import/no-unassigned-import": ["warn", { "allow": ["**/*.css"] }],
+        "no-restricted-imports": [
+            "error",
+            {
+                "patterns": [
+                    {
+                        "group": ["../*", "../**"],
+                        "message": "상위 폴더는 상대 경로 대신 \"@/\"로 import 하세요."
+                    }
+                ]
+            }
+        ]
+    },
+    "overrides": [
+        {
+            "files": [
+                "src/main/**/*.ts",
+                "src/preload/**/*.ts",
+                "scripts/**/*.mjs",
+                "electron.vite.config.mts",
+                "eslint.config.mjs",
+                "vitest.config.mts",
+                "vitest.integration.config.mts"
+            ],
+            "env": {
+                "es2024": true,
+                "node": true
+            },
+            "rules": {
+                "no-console": "off"
+            }
+        },
+        {
+            "files": [
+                "src/renderer/**/*.ts",
+                "src/renderer/**/*.tsx",
+                "src/components/**/*.ts",
+                "src/components/**/*.tsx",
+                "src/pages/**/*.ts",
+                "src/pages/**/*.tsx",
+                "src/stores/**/*.ts",
+                "src/lib/**/*.ts"
+            ],
+            "env": {
+                "es2024": true,
+                "browser": true
+            },
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["../*", "../**"],
+                                "message": "상위 폴더는 상대 경로 대신 \"@/\"로 import 하세요."
+                            },
+                            {
+                                "group": [
+                                    "node:*",
+                                    "electron",
+                                    "electron/*",
+                                    "fs",
+                                    "fs/*",
+                                    "path",
+                                    "os",
+                                    "child_process",
+                                    "crypto",
+                                    "@/main/*",
+                                    "@/main/**",
+                                    "@/preload/*",
+                                    "@/preload/**"
+                                ],
+                                "message": "화면 코드는 Node·Electron·main·preload를 import 할 수 없습니다. window.rclonegui를 쓰세요."
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "files": ["src/shared/**/*.ts"],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["../*", "../**"],
+                                "message": "상위 폴더는 상대 경로 대신 \"@/\"로 import 하세요."
+                            },
+                            {
+                                "group": [
+                                    "node:*",
+                                    "electron",
+                                    "electron/*",
+                                    "fs",
+                                    "fs/*",
+                                    "path",
+                                    "os",
+                                    "child_process",
+                                    "crypto",
+                                    "@/main/*",
+                                    "@/main/**",
+                                    "@/preload/*",
+                                    "@/preload/**",
+                                    "@/renderer/*",
+                                    "@/renderer/**"
+                                ],
+                                "message": "src/shared는 Node·Electron·프로세스별 코드에 의존할 수 없습니다."
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "files": ["tests/**/*.ts"],
+            "env": {
+                "es2024": true,
+                "node": true,
+                "vitest": true
+            },
+            "rules": {
+                "no-console": "off"
+            }
+        }
+    ],
+    "ignorePatterns": [
+        "out/**",
+        "dist/**",
+        "release/**",
+        "coverage/**",
+        "docs/**",
+        "tests/fixtures/**",
+        "resources/**",
+        "build/**"
+    ]
+}

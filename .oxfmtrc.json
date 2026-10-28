@@ -1,0 +1,30 @@
+{
+    "printWidth": 100,
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": false,
+    "quoteProps": "as-needed",
+    "jsxSingleQuote": false,
+    "trailingComma": "all",
+    "bracketSpacing": true,
+    "bracketSameLine": false,
+    "arrowParens": "always",
+    "endOfLine": "lf",
+    "insertFinalNewline": true,
+    "proseWrap": "preserve",
+    "sortImports": false,
+    "sortPackageJson": false,
+    "ignorePatterns": [
+        "out/**",
+        "dist/**",
+        "release/**",
+        "coverage/**",
+        "docs/**",
+        "tests/fixtures/**",
+        "resources/**",
+        "build/**",
+        "**/*.md",
+        "pnpm-lock.yaml"
+    ]
+}

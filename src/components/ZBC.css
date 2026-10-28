@@ -1,0 +1,10 @@
+/**
+ * 공용 스타일 진입점. 레이어 순서: base < components < layouts < pages
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer base, components, layouts, pages;
+
+@import "./themes/default.css" layer(base);
+@import "./ZBCToast.css" layer(components);

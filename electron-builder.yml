@@ -1,0 +1,19 @@
+# Windows NSIS 설치 파일(사용자 단위) 설정 초안. `pnpm run dist` → dist/
+# 설치본에는 out/ 과 운영 의존성만 들어간다(소스·테스트·문서·하네스 제외). 코드 서명 없음.
+appId: com.rclonegui.app
+productName: rcloneGUI
+directories:
+    output: dist
+    buildResources: build
+files:
+    - out/**/*
+    - package.json
+win:
+    target:
+        - target: nsis
+          arch:
+              - x64
+nsis:
+    oneClick: false
+    perMachine: false
+    allowToChangeInstallationDirectory: true

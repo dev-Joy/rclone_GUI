@@ -1,0 +1,58 @@
+/**
+ * ZBCToast 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcToast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 420px;
+}
+
+.zbcToastItem {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
+}
+
+.zbcToastItem[data-level="success"] {
+    border-left-color: var(--success);
+}
+
+.zbcToastItem[data-level="warning"] {
+    border-left-color: var(--warning);
+}
+
+.zbcToastItem[data-level="error"] {
+    border-left-color: var(--danger);
+}
+
+.zbcToastLabel {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.zbcToastMessage {
+    flex: 1;
+    overflow-wrap: anywhere;
+}
+
+.zbcToastClose {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
