@@ -52,7 +52,7 @@ updated: 2026-10-28
 
 ## 작업 (Tasks)
 - [x] T-01 [P1] Electron + Vite + React + TypeScript 프로젝트 스캐폴딩 및 Phase 0 호환성 확인(CJS preload 등), IPC 채널 경계 및 공통 타입(Job, DiffEntry, RcloneResult 등) 정의
-- [ ] T-02 [P1] rclone 실행 래퍼 및 환경 감지 (바이너리 경로 탐색, `--version` 확인, `--config` 명시 실행, stdout/stderr/exit code 표준화) (depends: T-01)
+- [x] T-02 [P1] rclone 실행 래퍼 및 환경 감지 (바이너리 경로 탐색, `--version` 확인, `--config` 명시 실행, stdout/stderr/exit code 표준화) (depends: T-01)
 - [ ] T-03 [P1] 경로/remote 선택 UI·검증 (로컬 경로, `\\wsl.localhost\...` UNC, WSL distro 목록 조회 및 `/home/...` → UNC 변환 도우미, rclone remote `name:path`, 접근 가능 여부 사전 확인) (depends: T-01, T-02)
 - [ ] T-04 [P1] 작업(job) CRUD 및 영속화 (원본/대상, 옵션, 사용할 `.conf`, 마지막 실행 결과 저장) (depends: T-01)
 - [ ] T-05 [P1] 메타데이터 기반 폴더 비교 엔진 (`rclone lsjson`/`check`/`--dry-run` 결과 파싱, 원본만·대상만·변경·동일 분류) (depends: T-02, T-03)

@@ -136,6 +136,26 @@ try {
         dst,
     ]);
     f_Probe("lsjson-dst-after-sync", [...ls, ...common, "--", dst]);
+
+    // Phase 3: 환경 감지·경로 확인 (rclone.conf는 임시 폴더 안의 것만 쓴다)
+    const remotesConf = join(work, "remotes.conf");
+    writeFileSync(
+        remotesConf,
+        `[probe-b]\ntype = alias\nremote = ${src}\n\n[probe-alias]\ntype = alias\nremote = ${src}\n`,
+    );
+    const ask = "--ask-password=false";
+    f_Probe("config-file", ["config", "file", ask, ...common]);
+    f_Probe("config-file-missing", ["config", "file", ask, "--config", join(work, "none.conf")]);
+    f_Probe("listremotes", ["listremotes", ask, "--config", remotesConf]);
+    f_Probe("listremotes-missing-conf", ["listremotes", ask, "--config", join(work, "none.conf")]);
+    const probeLs = ["lsjson", "--max-depth", "1", "--no-mimetype", "--no-modtime", ask];
+    f_Probe("lsjson-probe-parent", [...probeLs, ...common, "--", src]);
+    f_Probe("lsjson-probe-missing-parent", [
+        ...probeLs,
+        ...common,
+        "--",
+        join(work, "missing", "deep"),
+    ]);
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

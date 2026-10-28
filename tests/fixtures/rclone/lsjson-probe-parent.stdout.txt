@@ -1,0 +1,7 @@
+[
+{"Path":"changed.txt","Name":"changed.txt","Size":14,"ModTime":"","IsDir":false},
+{"Path":"same.txt","Name":"same.txt","Size":4,"ModTime":"","IsDir":false},
+{"Path":"sub","Name":"sub","Size":0,"ModTime":"","IsDir":true},
+{"Path":"touch.txt","Name":"touch.txt","Size":5,"ModTime":"","IsDir":false},
+{"Path":"한글 파일.txt","Name":"한글 파일.txt","Size":7,"ModTime":"","IsDir":false}
+]

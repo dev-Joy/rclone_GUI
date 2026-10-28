@@ -2,7 +2,11 @@
 import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
-import { clsLsjsonParseError, parseLsjsonOutput } from "@/main/parsers/lsjson-parser";
+import {
+    clsLsjsonParseError,
+    parseLsjsonEntries,
+    parseLsjsonOutput,
+} from "@/main/parsers/lsjson-parser";
 import { MAX_MESSAGE_LENGTH, normalizeStats, parseLogLine } from "@/main/parsers/log-parser";
 import { fixtureLines, readFixture } from "./fixtures";
 
@@ -153,5 +157,28 @@ describe("normalizeStats", () => {
     it("형식이 다르면 null", () => {
         expect(normalizeStats({ bytes: "x" })).toBeNull();
         expect(normalizeStats(null)).toBeNull();
+    });
+});
+
+describe("parseLsjsonEntries (lsjson --max-depth 1, 실제 출력)", () => {
+    it("폴더와 파일을 함께 돌려주고 Name을 쓴다", () => {
+        const entries = parseLsjsonEntries(readFixture("lsjson-probe-parent", "stdout"));
+        expect(entries.find((e) => e.name === "sub")).toEqual({
+            path: "sub",
+            name: "sub",
+            isDir: true,
+            size: 0,
+        });
+        expect(entries.find((e) => e.name === "한글 파일.txt")?.isDir).toBe(false);
+        expect(entries).toHaveLength(5);
+    });
+
+    it("없는 부모 폴더: exit 3, 비정형 항목·JSON 아님은 실패", () => {
+        expect(readFixture("lsjson-probe-missing-parent", "exit").trim()).toBe("3");
+        expect(() => parseLsjsonEntries("[")).toThrow(clsLsjsonParseError);
+        expect(() => parseLsjsonEntries('[{"Path":"a","Size":1,"IsDir":false}]')).toThrow(
+            clsLsjsonParseError,
+        );
+        expect(() => parseLsjsonEntries("{}")).toThrow(clsLsjsonParseError);
     });
 });

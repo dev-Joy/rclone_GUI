@@ -36,6 +36,26 @@ const api: itfRcloneGuiApi = {
         remove: (id) => ipcRenderer.invoke(C.jobsDelete, { id }),
         duplicate: (id) => ipcRenderer.invoke(C.jobsDuplicate, { id }),
     },
+    rclone: {
+        detect: (force) => ipcRenderer.invoke(C.rcloneDetect, { force: force ?? false }),
+        listRemotes: (configPath) =>
+            ipcRenderer.invoke(C.rcloneListRemotes, configPath === undefined ? {} : { configPath }),
+        testPath: (path, configPath) =>
+            ipcRenderer.invoke(
+                C.rcloneTestPath,
+                configPath === undefined ? { path } : { path, configPath },
+            ),
+    },
+    wsl: {
+        listDistros: () => ipcRenderer.invoke(C.wslListDistros),
+    },
+    dialog: {
+        pickDirectory: (opts) => ipcRenderer.invoke(C.dialogPickDirectory, opts ?? {}),
+        pickFile: (opts) => ipcRenderer.invoke(C.dialogPickFile, opts ?? {}),
+    },
+    system: {
+        openExternal: (url) => ipcRenderer.invoke(C.systemOpenExternal, { url }),
+    },
     events: {
         onJobsChanged: (cb) => f_Subscribe(E.jobsChanged, cb),
     },

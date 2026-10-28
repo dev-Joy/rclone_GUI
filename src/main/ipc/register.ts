@@ -9,14 +9,18 @@ import { app, shell } from "electron";
 
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
-import { handle, type itfIpcContext } from "@/main/ipc/handle";
+import { registerDialogIpc, type itfDialogIpcDeps } from "@/main/ipc/dialog";
+import { handle } from "@/main/ipc/handle";
+import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
+import { registerSystemIpc } from "@/main/ipc/system";
+import { registerWslIpc, type itfWslIpcDeps } from "@/main/ipc/wsl";
 import type { clsJobStore } from "@/main/store/job-store";
 import type { clsSettingsStore } from "@/main/store/settings-store";
 import { IPC_CHANNELS, type itfAppInfo, type itfAppNotice } from "@/shared/ipc-contract";
 import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
-export interface itfIpcServices extends itfIpcContext {
+export interface itfIpcServices extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps {
     settings: clsSettingsStore;
     jobs: clsJobStore;
     paths: { userData: string; logs: string };
@@ -52,4 +56,9 @@ export function registerIpc(s: itfIpcServices): void {
     );
     handle(s, IPC_CHANNELS.jobsDelete, ({ id }) => s.jobs.remove(id), zJobId);
     handle(s, IPC_CHANNELS.jobsDuplicate, ({ id }) => s.jobs.duplicate(id), zJobId);
+
+    registerRcloneIpc(s);
+    registerWslIpc(s);
+    registerDialogIpc(s);
+    registerSystemIpc(s);
 }

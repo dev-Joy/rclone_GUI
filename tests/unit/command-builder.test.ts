@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    ALLOWED_COMMANDS,
     BLOCKED_FLAGS,
+    assertAllowedCommand,
     assertNoBlockedFlags,
+    buildConfigFileArgs,
+    buildListRemotesArgs,
     buildLsjsonArgs,
+    buildProbeListArgs,
     buildTransferArgs,
+    buildVersionArgs,
     clsCommandBlockedError,
     type itfTransferArgsInput,
 } from "@/main/rclone/command-builder";
@@ -213,4 +219,85 @@ describe("차단 목록", () => {
             expect(() => buildTransferArgs(input)).toThrow(clsCommandBlockedError);
         },
     );
+});
+
+describe("환경 감지·경로 확인 빌더", () => {
+    it("version / config file / listremotes 인자 배열", () => {
+        expect(buildVersionArgs()).toEqual(["version"]);
+        expect(buildConfigFileArgs()).toEqual(["config", "file", "--ask-password=false"]);
+        expect(buildListRemotesArgs(null)).toEqual(["listremotes", "--ask-password=false"]);
+        expect(buildListRemotesArgs("C:\\tmp\\rclone.conf")).toEqual([
+            "listremotes",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+        ]);
+    });
+
+    it("probe 목록: --max-depth 1, --files-only 없음, 경로는 -- 뒤", () => {
+        const args = buildProbeListArgs({
+            parent: "--delete-excluded",
+            configPath: "C:\\tmp\\rclone.conf",
+        });
+        expect(args).toEqual([
+            "lsjson",
+            "--max-depth",
+            "1",
+            "--no-mimetype",
+            "--no-modtime",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+            "--",
+            "--delete-excluded",
+        ]);
+        expect(args).not.toContain("--files-only");
+        expect(buildProbeListArgs({ parent: "test-remote:", configPath: null })).toEqual([
+            "lsjson",
+            "--max-depth",
+            "1",
+            "--no-mimetype",
+            "--no-modtime",
+            "--ask-password=false",
+            "--",
+            "test-remote:",
+        ]);
+    });
+
+    it("새 빌더 결과는 모두 허용 명령이다", () => {
+        for (const args of [
+            buildVersionArgs(),
+            buildConfigFileArgs(),
+            buildListRemotesArgs(null),
+            buildProbeListArgs({ parent: "a:", configPath: null }),
+        ]) {
+            expect(() => assertAllowedCommand(args)).not.toThrow();
+        }
+    });
+});
+
+describe("허용 명령 목록", () => {
+    it.each([
+        [["config", "show"]],
+        [["config", "dump"]],
+        [["config"]],
+        [["delete", "--", "a:"]],
+        [["purge", "--", "a:"]],
+        [["move", "--", "a:", "b:"]],
+        [[]],
+    ])("%j 는 거부", (args) => {
+        expect(() => assertAllowedCommand(args)).toThrow(clsCommandBlockedError);
+    });
+
+    it("기존 copy/sync/lsjson 빌더 결과도 허용 목록 안에 있다", () => {
+        expect(() => assertAllowedCommand(buildTransferArgs(f_Input()))).not.toThrow();
+        expect(ALLOWED_COMMANDS.map((c) => c.join(" "))).toEqual([
+            "version",
+            "config file",
+            "listremotes",
+            "lsjson",
+            "copy",
+            "sync",
+        ]);
+    });
 });

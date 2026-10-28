@@ -1,0 +1,83 @@
+/**
+ * RcloneSetupPanel 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .RcloneSetupPanel {
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--panel);
+
+        .title {
+            margin: 0 0 8px;
+            font-size: 15px;
+        }
+
+        .table {
+            display: grid;
+            grid-template-columns: max-content minmax(0, 1fr);
+            gap: 4px 16px;
+            margin: 0;
+
+            dt {
+                color: var(--muted);
+            }
+
+            dd {
+                margin: 0;
+                min-width: 0;
+            }
+
+            dd[data-state="ok"] {
+                color: var(--success);
+            }
+
+            dd[data-state="problem"] {
+                color: var(--danger);
+            }
+        }
+
+        .path {
+            overflow: hidden;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .warnings {
+            margin: 8px 0 0;
+            padding-left: 18px;
+            color: var(--warning);
+            font-size: 13px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .button {
+            padding: 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+
+            &:hover:not(:disabled) {
+                border-color: var(--accent);
+            }
+
+            &:disabled {
+                cursor: default;
+                opacity: 0.6;
+            }
+        }
+    }
+}

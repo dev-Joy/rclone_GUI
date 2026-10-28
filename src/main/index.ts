@@ -11,6 +11,9 @@ import { app, BrowserWindow, session, type IpcMainInvokeEvent } from "electron";
 import { setupAppPaths } from "@/main/app-paths";
 import { registerIpc } from "@/main/ipc/register";
 import { clsLogger } from "@/main/lib/logger";
+import { clsRcloneEnv } from "@/main/rclone/detect";
+import { clsPathService } from "@/main/services/path-service";
+import { clsWslService } from "@/main/services/wsl";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { clsSettingsStore } from "@/main/store/settings-store";
@@ -101,6 +104,11 @@ async function f_Start(): Promise<void> {
         });
     }
 
+    // rclone 감지는 시작을 늦추지 않도록 화면이 rclone:detect를 부를 때 한다
+    const rcloneEnv = new clsRcloneEnv({ getSettings: () => settings.get(), logger });
+    const pathService = new clsPathService({ rcloneEnv });
+    const wsl = new clsWslService();
+
     registerIpc({
         logger,
         isTrustedSender: f_IsTrustedSender,
@@ -108,6 +116,10 @@ async function f_Start(): Promise<void> {
         jobs,
         paths,
         notices: () => [...notices],
+        rcloneEnv,
+        pathService,
+        wsl,
+        getWindow: () => mainWindow,
     });
 
     mainWindow = createMainWindow();

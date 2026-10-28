@@ -4,14 +4,14 @@
 - 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-10-28 (린트/포맷 도구를 oxlint·oxfmt로 확정)
-- 상태: **설계 확정안 — Phase 0~2 구현 완료 (2026-10-28), 아래 "구현 반영" 참고**
+- 상태: **설계 확정안 — Phase 0~3 구현 완료 (2026-10-28), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
 > 이 문서는 구현 계획과 검증의 단일 기준(Single Source of Truth)이다. 구현 단계에서 설계 변경이 필요하면
 > 이 문서를 먼저 갱신한 뒤 코드를 수정한다. `docs/intent/` 구조와 내용은 변경하지 않는다.
 
-### 구현 반영 (2026-10-28, Phase 0~2)
+### 구현 반영 (2026-10-28, Phase 0~3)
 
 `AGENTS.md`(프로젝트 규칙)와 이 문서가 다른 항목은 `AGENTS.md`를 따른다(사용자 결정). 아래 외에는 이 문서 그대로다.
 
@@ -28,6 +28,13 @@
 | 위험 옵션 차단 | 금지 목록(§8.1)만 | `command-builder.ts` 차단 목록: `--delete-excluded`, `--no-check-dest`, `--max-delete` 음수, `--dump*`, **`--backup-dir` 없는 sync `--ignore-errors`**. 실제 sync는 `maxDelete` 없이 인자를 만들 수 없음 |
 | 운영 CSP | 응답 헤더 | 운영은 빌드 시 `index.html` meta, 개발은 main의 응답 헤더(HMR 예외) |
 | 확인 도구 | - | `scripts/probes/rclone-probes.mjs`(fixture 수집), `scripts/dev/drive-app.mjs`(빌드본/개발 서버를 임시 userData로 띄워 CDP로 확인) |
+| Phase 3 파일 | `services/`, `features/onboarding`, `stores/system.ts`, `preload/api.ts` | `main/rclone/{process,detect,config}.ts`, `main/parsers/{rclone-env,wsl}-parser.ts`, `main/services/{path-service,wsl}.ts`, `main/ipc/{rclone,wsl,dialog,system}.ts`, `pages/{OnboardingBanner,RcloneSetupPanel,PathCheckPanel}.tsx`, `stores/rclone-env-store.ts`, preload는 `index.ts` 한 파일 |
+| rclone:detect | 실패 시 오류 | 감지 실패도 성공 envelope + `problem`(코드·문구). 화면이 온보딩 배너를 그림 |
+| PathProbe | kind/exists/isDirectory/displayPath/sampleCount | + normalizedPath, readable, isRoot, message, warnings (sampleCount 없음) |
+| config file 파싱 | `stored at:` | `doesn't exist, but rclone will use this path:` 형태도 파싱(exists:false → `--config` 안 넘김) |
+| 환경 변수 | - | rclone 실행 시 `RCLONE_*` 제거(`RCLONE_CONFIG_PASS`·`RCLONE_PASSWORD_COMMAND`만 유지). `RCLONE_CONFIG`는 감지 때 읽어 `--config`로 명시 |
+| 허용 명령 | - | `version`, `config file`, `listremotes`, `lsjson`, `copy`, `sync`만 (`assertAllowedCommand`, `runRclone`이 실행 직전 재확인) |
+| system 채널 | 없음 | `system:openExternal` (https://rclone.org/ 만) |
 
 **Phase 7 전에 반영할 실측**: 내용이 같고 수정시간만 다른 파일은 diff에서 `modified(mtime)`이지만 rclone은
 복사하지 않고 시간만 갱신한다(dry-run `skipped: update modification time`). §8.4의

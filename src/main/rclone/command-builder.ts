@@ -72,6 +72,68 @@ export function assertNoBlockedFlags(args: readonly string[]): void {
     }
 }
 
+/**
+ * 앱이 실행하는 rclone 하위 명령 허용 목록.
+ * config는 "file"만 허용한다(설정 내용을 출력하는 config show/dump 차단 — 안전 규칙 6).
+ */
+export const ALLOWED_COMMANDS: ReadonlyArray<readonly string[]> = [
+    ["version"],
+    ["config", "file"],
+    ["listremotes"],
+    ["lsjson"],
+    ["copy"],
+    ["sync"],
+];
+
+/** 허용 목록에 없는 하위 명령이면 clsCommandBlockedError를 던진다 */
+export function assertAllowedCommand(args: readonly string[]): void {
+    const allowed = ALLOWED_COMMANDS.some((cmd) => cmd.every((word, i) => args[i] === word));
+    if (!allowed) {
+        const name = args.slice(0, 2).join(" ") || "(없음)";
+        throw new clsCommandBlockedError(name, "앱이 허용하지 않은 rclone 명령");
+    }
+}
+
+function f_Finish(args: string[]): string[] {
+    assertNoBlockedFlags(args);
+    assertAllowedCommand(args);
+    return args;
+}
+
+/** 비밀번호 입력 대기를 막는다(암호화된 rclone.conf) */
+const NO_ASK_PASSWORD = "--ask-password=false";
+
+/** rclone version */
+export function buildVersionArgs(): string[] {
+    return f_Finish(["version"]);
+}
+
+/** rclone config file — 설정 파일 경로만 출력한다(내용은 읽지 않음) */
+export function buildConfigFileArgs(): string[] {
+    return f_Finish(["config", "file", NO_ASK_PASSWORD]);
+}
+
+/** rclone listremotes */
+export function buildListRemotesArgs(configPath: string | null): string[] {
+    const args = ["listremotes", NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+export interface itfProbeListArgsInput {
+    /** 확인할 경로의 부모(remote 루트 포함) */
+    parent: string;
+    configPath: string | null;
+}
+
+/** 경로 확인용 부모 목록: lsjson --max-depth 1 (폴더 포함, --files-only 없음) */
+export function buildProbeListArgs(input: itfProbeListArgsInput): string[] {
+    const args = ["lsjson", "--max-depth", "1", "--no-mimetype", "--no-modtime", NO_ASK_PASSWORD];
+    if (input.configPath) args.push("--config", input.configPath);
+    args.push("--", input.parent);
+    return f_Finish(args);
+}
+
 export interface itfLsjsonArgsInput {
     path: string;
     configPath: string | null;

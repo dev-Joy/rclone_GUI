@@ -1,0 +1,57 @@
+/**
+ * OnboardingBanner 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .OnboardingBanner {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: var(--radius);
+        background: var(--panel);
+
+        &[data-level="error"] {
+            border-left-color: var(--danger);
+        }
+
+        .title {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .detail {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .button {
+            padding: 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+
+            &:hover:not(:disabled) {
+                border-color: var(--accent);
+            }
+
+            &:disabled {
+                cursor: default;
+                opacity: 0.6;
+            }
+        }
+    }
+}

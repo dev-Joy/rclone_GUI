@@ -1,5 +1,6 @@
 /**
- * 첫 화면. 앱·런타임 정보, 시작 알림(저장 파일 복구 등), 저장된 작업 목록을 보여준다.
+ * 첫 화면. 앱·런타임 정보, 시작 알림(저장 파일 복구 등), rclone 온보딩 배너, 저장된 작업 목록,
+ * rclone 설정·경로 접근 확인 도구를 보여준다.
  * 작업 편집·비교·실행 화면은 이후 단계(Phase 4~)에서 붙인다.
  *
  * @author dev-Joy 2026-10-28
@@ -13,9 +14,13 @@ import ZBCToast from "@/components/ZBCToast";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfAppInfo, itfAppNotice } from "@/shared/ipc-contract";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import styles from "./HomePage.module.css";
+import OnboardingBanner from "./OnboardingBanner";
+import PathCheckPanel from "./PathCheckPanel";
+import RcloneSetupPanel from "./RcloneSetupPanel";
 
 // ========== Props & Types ==========
 export interface itfHomePageProps {
@@ -43,6 +48,7 @@ export default function HomePage(props: itfHomePageProps) {
     const toasts = useToastStore((s) => s.toasts);
     const pushToast = useToastStore((s) => s.push);
     const dismissToast = useToastStore((s) => s.dismiss);
+    const detectRclone = useRcloneEnvStore((s) => s.detect);
 
     // ========== Effect (부수 효과) ==========
     useEffect(() => {
@@ -57,6 +63,11 @@ export default function HomePage(props: itfHomePageProps) {
         void loadJobs();
         return subscribeJobs();
     }, [loadJobs, loadSettings, pushToast, subscribeJobs]);
+
+    // rclone 감지는 화면이 뜬 뒤 비동기로 한다(main 시작을 늦추지 않음)
+    useEffect(() => {
+        void detectRclone();
+    }, [detectRclone]);
 
     useEffect(() => {
         const theme = settings?.ui.theme ?? "system";
@@ -89,6 +100,8 @@ export default function HomePage(props: itfHomePageProps) {
                 </p>
             ))}
 
+            <OnboardingBanner />
+
             <section className={styles.panel} aria-labelledby="jobs-title">
                 <h2 id="jobs-title" className={styles.panelTitle}>
                     저장된 작업 {jobs.length}개
@@ -117,6 +130,9 @@ export default function HomePage(props: itfHomePageProps) {
                     </ul>
                 )}
             </section>
+
+            <RcloneSetupPanel />
+            <PathCheckPanel />
 
             <section className={styles.panel} aria-labelledby="data-title">
                 <h2 id="data-title" className={styles.panelTitle}>

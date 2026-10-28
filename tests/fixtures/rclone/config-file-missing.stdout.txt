@@ -1,0 +1,2 @@
+Configuration file doesn't exist, but rclone will use this path:
+<TMP>\none.conf

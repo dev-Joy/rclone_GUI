@@ -22,6 +22,19 @@
 - CRLF였던 AGENTS.md·.gitignore를 LF로 변환하고 `git add --renormalize .` 적용 (추적 파일 전체 LF)
 - AGENTS.md 10장에 줄바꿈 규칙 한 줄 추가
 
+[TASK_004] : (2026-10-28) INT-001 Phase 3 — rclone 환경, WSL, 경로 검증 (관련 Intent: INT-001, T-02 완료 / T-03·T-09 백엔드·검증)
+- 실행: `main/rclone/process.ts` — `runProcess`(shell:false, StringDecoder 줄 분리, stdout 상한·stderr tail 20KB, timeout/AbortSignal → taskkill /T /F, close 대기 상한 5초), `buildRcloneEnv`(RCLONE_* 제거, CONFIG_PASS·PASSWORD_COMMAND 유지), `runRclone`(허용 명령·차단 목록 재확인)
+- 빌더: `buildVersionArgs`/`buildConfigFileArgs`/`buildListRemotesArgs`/`buildProbeListArgs`(새 빌더만 `--ask-password=false`), `ALLOWED_COMMANDS`+`assertAllowedCommand`(config는 file만). 기존 빌더 반환값 그대로
+- 감지: `main/rclone/{config,detect}.ts` — 수동 rclone.exe(fallback 없음) → PATH → WinGet Links/Packages → Program Files → scoop, 1.65.0 미만 거부·1.75.1 초과 경고, 설정 파일 manual → RCLONE_CONFIG → `config file` → %APPDATA% → none, remote 목록, 설정 키 캐시·동시 호출 공유
+- 파서: `rclone-env-parser.ts`(version·config file 두 형태·listremotes·stderr 요약·오류 안내), `wsl-parser.ts`(UTF-16LE/UTF-8 판별), `parseLsjsonEntries`
+- 서비스: `clsPathService`(로컬·UNC stat 15초 제한·opendir 읽기 확인, remote 부모 listing·exit 3·대소문자 차이 안내), `clsWslService`(`wsl.exe -l -q`)
+- IPC: rclone:detect/listRemotes/testPath, wsl:listDistros, dialog:pickDirectory/pickFile, system:openExternal(https://rclone.org/만), `WSL_NOT_AVAILABLE` 코드, preload 확장
+- 화면: `OnboardingBanner`, `RcloneSetupPanel`, `PathCheckPanel`(WSL 도우미), `rclone-env-store`, HomePage 배치
+- 테스트: 단위 6파일 추가·3파일 보강(282), 통합 `rclone-env.test.ts`(alias remote, WSL은 RCLONEGUI_TEST_WSL=1), fixture 6종(probe 스크립트), drive-app 20항목(임시 RCLONE_CONFIG)
+- 문서: rclone-notes 7~9, CHANGELOG, MVP_SPEC 구현 반영, intent T-02 체크
+- 검증: check, format:check, test:int 12(+WSL 1), build, drive-app 20 통과
+- 리뷰 수정: detect·경로 확인에 마지막 요청만 반영(`shared/latest-request.ts`), lsjson·listremotes 출력 잘림 → RCLONE_FAILED(목록이 너무 큼), BOM 없는 UTF-16LE 판정 보강(짝수 길이+끝 0A 00 또는 0 비율), WSL 도우미 버튼 문구 "입력란에 넣기" — check 287, drive-app 21 통과
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

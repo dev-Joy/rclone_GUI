@@ -1,6 +1,7 @@
 /**
  * 빌드본(out/) 스모크 확인. 임시 userData로 앱을 두 번 띄워 원격 디버깅(CDP)으로 화면을 조작한다.
- * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경
+ * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
+ *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf)
  * 2회차: 재시작 후 작업·설정 유지, 콘솔 오류 0건 확인
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
@@ -12,7 +13,7 @@
 
 // ========== External imports ==========
 import { execFile, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -101,7 +102,12 @@ async function f_Launch(userData) {
         : [electronExe, [repoRoot, `--remote-debugging-port=${PORT}`]];
     const child = spawn(cmd, args, {
         cwd: repoRoot,
-        env: { ...process.env, RCLONEGUI_USER_DATA: userData, ELECTRON_RENDERER_URL: "" },
+        env: {
+            ...process.env,
+            RCLONEGUI_USER_DATA: userData,
+            RCLONE_CONFIG: smokeConf,
+            ELECTRON_RENDERER_URL: "",
+        },
         stdio: "ignore",
         shell: false,
         windowsHide: false,
@@ -136,6 +142,10 @@ function f_Check(name, cond, detail = "") {
 }
 
 const userData = mkdtempSync(join(tmpdir(), "rclonegui-smoke-"));
+// 사용자 rclone.conf 대신 임시 폴더의 빈 설정 파일을 쓴다
+const smokeRoot = mkdtempSync(join(tmpdir(), "rclonegui-smoke-conf-"));
+const smokeConf = join(smokeRoot, "rclone.conf");
+writeFileSync(smokeConf, "");
 try {
     const a = await f_Launch(userData);
     f_Check(
@@ -147,7 +157,11 @@ try {
         (await a.evaluate("typeof require + '/' + typeof process")) === "undefined/undefined",
     );
     const keys = await a.evaluate("Object.keys(window.rclonegui).join(',')");
-    f_Check("window.rclonegui API", keys === "app,settings,jobs,events", keys);
+    f_Check(
+        "window.rclonegui API",
+        keys === "app,settings,jobs,rclone,wsl,dialog,system,events",
+        keys,
+    );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
     f_Check(
         "app:getInfo",
@@ -181,6 +195,55 @@ try {
         "목록에 표시",
         (await a.evaluate("document.body.innerText")).includes("저장된 작업 1개"),
     );
+    // Phase 3: rclone 환경·경로 확인 (설정 파일은 임시 폴더의 빈 rclone.conf, RCLONE_CONFIG로 지정)
+    const env = await a.evaluate("window.rclonegui.rclone.detect(true)");
+    f_Check(
+        "rclone:detect envelope",
+        env.ok && typeof env.data.detectedAt === "string",
+        env.ok ? (env.data.problem?.code ?? "") : env.error.code,
+    );
+    f_Check(
+        "rclone:detect 설정 파일은 RCLONE_CONFIG(임시)",
+        env.ok && (env.data.problem !== null || env.data.configSource === "env"),
+        env.ok ? env.data.configSource : "",
+    );
+    const probeDir = await a.evaluate(
+        `window.rclonegui.rclone.testPath(${JSON.stringify(userData)})`,
+    );
+    f_Check(
+        "rclone:testPath 임시 폴더",
+        probeDir.ok && probeDir.data.exists && probeDir.data.isDirectory,
+        probeDir.ok ? probeDir.data.message : probeDir.error.code,
+    );
+    const probeBad = await a.evaluate(`window.rclonegui.rclone.testPath("relative\\path")`);
+    f_Check(
+        "rclone:testPath 상대 경로 거부",
+        !probeBad.ok && probeBad.error.code === "PATH_INVALID",
+    );
+    const ext = await a.evaluate(`window.rclonegui.system.openExternal("https://example.com/")`);
+    f_Check("system:openExternal 허용 목록 밖 거부", !ext.ok && ext.error.code === "VALIDATION");
+    const wsl = await a.evaluate("window.rclonegui.wsl.listDistros()");
+    f_Check(
+        "wsl:listDistros envelope",
+        wsl.ok ? Array.isArray(wsl.data.distros) : wsl.error.code === "WSL_NOT_AVAILABLE",
+    );
+    // WSL 도우미: 배포판을 불러오면 미리보기 경로를 입력란에 넣는 버튼이 보인다
+    await a.evaluate(
+        `[...document.querySelectorAll("button")].find((b) => b.textContent === "WSL 배포판 불러오기")?.click()`,
+    );
+    await f_Sleep(1500);
+    const helperText = await a.evaluate("document.body.innerText");
+    f_Check(
+        "WSL 도우미 버튼 문구(입력란에 넣기)",
+        !wsl.ok ||
+            wsl.data.distros.length === 0 ||
+            helperText.includes("이 UNC 경로를 입력란에 넣기"),
+    );
+    const text = await a.evaluate("document.body.innerText");
+    f_Check(
+        "rclone 설정·경로 확인 패널 표시",
+        text.includes("rclone 설정") && text.includes("경로 접근 확인"),
+    );
     const errors1 = [...a.consoleErrors];
     await f_Close(a);
 
@@ -202,6 +265,7 @@ try {
     await f_Close(b);
 } finally {
     rmSync(userData, { recursive: true, force: true });
+    rmSync(smokeRoot, { recursive: true, force: true });
 }
 
 for (const r of results)

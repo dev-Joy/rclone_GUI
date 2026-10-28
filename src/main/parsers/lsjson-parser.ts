@@ -61,3 +61,32 @@ export function parseLsjsonOutput(stdout: string): itfFileMeta[] {
     }
     return files;
 }
+
+/** probe용 항목(폴더 포함) */
+export interface itfLsjsonEntry {
+    path: string;
+    name: string;
+    isDir: boolean;
+    size: number;
+}
+
+const zLsjsonEntry = zLsjsonItem.extend({ Name: z.string().min(1) });
+
+/** `lsjson --max-depth 1` 결과. 폴더도 돌려준다(경로 확인용). exit 0일 때만 호출한다 */
+export function parseLsjsonEntries(stdout: string): itfLsjsonEntry[] {
+    let data: unknown;
+    try {
+        data = JSON.parse(stdout);
+    } catch {
+        throw new clsLsjsonParseError("lsjson 출력이 올바른 JSON이 아닙니다.");
+    }
+    if (!Array.isArray(data)) throw new clsLsjsonParseError("lsjson 출력이 배열이 아닙니다.");
+    return data.map((raw, index) => {
+        const parsed = zLsjsonEntry.safeParse(raw);
+        if (!parsed.success) {
+            throw new clsLsjsonParseError(`lsjson ${index}번째 항목 형식이 올바르지 않습니다.`);
+        }
+        const item = parsed.data;
+        return { path: item.Path, name: item.Name, isDir: item.IsDir, size: item.Size };
+    });
+}
