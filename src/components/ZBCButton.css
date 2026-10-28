@@ -1,0 +1,59 @@
+/**
+ * ZBCButton 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+        border-color: var(--accent);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+    }
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.55;
+    }
+
+    &[data-variant="primary"] {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-text);
+        font-weight: 600;
+    }
+
+    &[data-variant="danger"] {
+        border-color: var(--danger);
+        color: var(--danger);
+
+        &:hover:not(:disabled) {
+            background: var(--danger-weak);
+        }
+    }
+
+    &[data-variant="ghost"] {
+        border-color: transparent;
+        color: var(--accent);
+
+        &:hover:not(:disabled) {
+            background: var(--accent-weak);
+        }
+    }
+}

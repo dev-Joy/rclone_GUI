@@ -7,4 +7,13 @@
 @layer base, components, layouts, pages;
 
 @import "./themes/default.css" layer(base);
+@import "./ZBCBadge.css" layer(components);
+@import "./ZBCButton.css" layer(components);
+@import "./ZBCCheckbox.css" layer(components);
+@import "./ZBCField.css" layer(components);
+@import "./ZBCInput.css" layer(components);
+@import "./ZBCModal.css" layer(components);
+@import "./ZBCSelect.css" layer(components);
+@import "./ZBCTabs.css" layer(components);
+@import "./ZBCTextarea.css" layer(components);
 @import "./ZBCToast.css" layer(components);

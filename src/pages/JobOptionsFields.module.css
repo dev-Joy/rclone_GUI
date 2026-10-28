@@ -1,0 +1,47 @@
+/**
+ * JobOptionsFields 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .JobOptionsFields {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .group {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+
+            &[data-danger] {
+                border-color: var(--warning);
+            }
+        }
+
+        .summary {
+            padding: 6px 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 4px 12px 12px;
+        }
+
+        .numbers {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px 16px;
+        }
+
+        .warning {
+            margin: 0;
+            color: var(--warning);
+            font-size: 13px;
+        }
+    }
+}

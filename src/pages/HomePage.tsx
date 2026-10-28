@@ -1,7 +1,7 @@
 /**
- * 첫 화면. 앱·런타임 정보, 시작 알림(저장 파일 복구 등), rclone 온보딩 배너, 저장된 작업 목록,
- * rclone 설정·경로 접근 확인 도구를 보여준다.
- * 작업 편집·비교·실행 화면은 이후 단계(Phase 4~)에서 붙인다.
+ * 첫 화면(앱 셸). 앱 정보·시작 알림·설정·작업 목록을 불러오고 rclone을 감지한 뒤
+ * 상단 막대 + 작업 목록 + [작업 화면 | 설정 화면]을 조립한다.
+ * 작업 선택이 바뀌면 편집기를 그 작업으로 열고, 목록이 바뀌면 편집기에 알린다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -10,17 +10,24 @@
 import { useEffect, useState } from "react";
 
 // ========== Internal imports ==========
+import ZBCButton from "@/components/ZBCButton";
 import ZBCToast from "@/components/ZBCToast";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfAppInfo, itfAppNotice } from "@/shared/ipc-contract";
+import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
-import styles from "./HomePage.module.css";
+import { useUiStore } from "@/stores/ui-store";
+import AppLayout from "./AppLayout";
+import DiscardChangesModal from "./DiscardChangesModal";
+import JobSidebar from "./JobSidebar";
+import JobWorkspace from "./JobWorkspace";
 import OnboardingBanner from "./OnboardingBanner";
-import PathCheckPanel from "./PathCheckPanel";
-import RcloneSetupPanel from "./RcloneSetupPanel";
+import SettingsPage from "./SettingsPage";
+import TopBar from "./TopBar";
+import styles from "./HomePage.module.css";
 
 // ========== Props & Types ==========
 export interface itfHomePageProps {
@@ -31,8 +38,6 @@ const propsDefault = {
     title: "rcloneGUI",
 } satisfies Partial<itfHomePageProps>;
 
-const MODE_LABEL = { copy: "복사", sync: "동기화(삭제 포함)" } as const;
-
 export default function HomePage(props: itfHomePageProps) {
     const { title = propsDefault.title } = props;
 
@@ -40,7 +45,8 @@ export default function HomePage(props: itfHomePageProps) {
     const [info, setInfo] = useState<itfAppInfo | null>(null);
     const [notices, setNotices] = useState<itfAppNotice[]>([]);
     const jobs = useJobsStore((s) => s.jobs);
-    const jobsError = useJobsStore((s) => s.error);
+    const jobsLoading = useJobsStore((s) => s.loading);
+    const selectedJobId = useJobsStore((s) => s.selectedJobId);
     const loadJobs = useJobsStore((s) => s.load);
     const subscribeJobs = useJobsStore((s) => s.subscribe);
     const settings = useSettingsStore((s) => s.settings);
@@ -49,6 +55,9 @@ export default function HomePage(props: itfHomePageProps) {
     const pushToast = useToastStore((s) => s.push);
     const dismissToast = useToastStore((s) => s.dismiss);
     const detectRclone = useRcloneEnvStore((s) => s.detect);
+    const editorOpen = useJobEditorStore((s) => s.open);
+    const openNew = useJobEditorStore((s) => s.openNew);
+    const view = useUiStore((s) => s.view);
 
     // ========== Effect (부수 효과) ==========
     useEffect(() => {
@@ -75,76 +84,62 @@ export default function HomePage(props: itfHomePageProps) {
         else document.documentElement.dataset.theme = theme;
     }, [settings?.ui.theme]);
 
-    // ========== 내부 변수 (_V) ==========
-    const metaText = info
-        ? `v${info.appVersion} · Electron ${info.electron} · Node ${info.node} · ${info.platform}`
-        : "불러오는 중…";
+    // 목록이 바뀌면 편집기에 알린다(외부 변경·삭제)
+    useEffect(() => {
+        useJobEditorStore.getState().syncFromJobs(jobs);
+    }, [jobs]);
+
+    // 선택한 작업을 편집기로 연다 (null은 새 작업 편집 또는 빈 상태라 편집기가 직접 처리)
+    useEffect(() => {
+        if (selectedJobId === null) return;
+        const job = jobs.find((j) => j.id === selectedJobId);
+        const editor = useJobEditorStore.getState();
+        if (job && (!editor.open || editor.jobId !== job.id)) editor.openJob(job);
+    }, [selectedJobId, jobs]);
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const h_OpenLogs = () => {
-        unwrap(getApi().app.openLogsFolder()).catch((e: unknown) =>
-            pushToast("error", errorText(e)),
-        );
+    const h_New = () => {
+        if (settings) openNew(settings);
     };
 
-    return (
-        <main className={styles.HomePage}>
-            <header className={styles.header}>
-                <h1 className={styles.title}>{title}</h1>
-                <span className={styles.meta}>{metaText}</span>
-            </header>
-
-            {notices.map((n, i) => (
-                <p key={i} className={styles.notice} data-level={n.level} role="alert">
-                    {n.message}
+    let content;
+    if (view === "settings") content = <SettingsPage info={info} />;
+    else if (editorOpen) content = <JobWorkspace />;
+    else {
+        content = (
+            <div className={styles.empty}>
+                <p>
+                    {jobsLoading
+                        ? "작업 목록을 불러오는 중…"
+                        : "아직 저장된 작업이 없습니다. 원본·대상 폴더를 정해 첫 작업을 만드세요."}
                 </p>
-            ))}
+                <ZBCButton variant="primary" onClick={h_New} disabled={!settings}>
+                    새 작업 만들기
+                </ZBCButton>
+            </div>
+        );
+    }
 
-            <OnboardingBanner />
-
-            <section className={styles.panel} aria-labelledby="jobs-title">
-                <h2 id="jobs-title" className={styles.panelTitle}>
-                    저장된 작업 {jobs.length}개
-                </h2>
-                {jobsError && (
-                    <p className={styles.notice} data-level="error">
-                        {jobsError}
-                    </p>
-                )}
-                {jobs.length === 0 ? (
-                    <p className={styles.empty}>아직 저장된 작업이 없습니다.</p>
-                ) : (
-                    <ul className={styles.jobList}>
-                        {jobs.map((job) => (
-                            <li key={job.id} className={styles.jobItem}>
-                                <strong>{job.name}</strong>
-                                <span
-                                    className={styles.jobPaths}
-                                    title={`${job.source} → ${job.destination}`}
-                                >
-                                    {job.source} → {job.destination}
-                                </span>
-                                <span>{MODE_LABEL[job.mode]}</span>
-                            </li>
+    return (
+        <div className={styles.HomePage}>
+            <AppLayout
+                topBar={<TopBar title={title} />}
+                sidebar={<JobSidebar />}
+                banner={
+                    <>
+                        {notices.map((n, i) => (
+                            <p key={i} className={styles.notice} data-level={n.level} role="alert">
+                                {n.message}
+                            </p>
                         ))}
-                    </ul>
-                )}
-            </section>
-
-            <RcloneSetupPanel />
-            <PathCheckPanel />
-
-            <section className={styles.panel} aria-labelledby="data-title">
-                <h2 id="data-title" className={styles.panelTitle}>
-                    데이터 위치
-                </h2>
-                <p className={styles.meta}>{info?.userDataPath ?? "-"}</p>
-                <button type="button" className={styles.linkButton} onClick={h_OpenLogs}>
-                    로그 폴더 열기
-                </button>
-            </section>
-
+                        <OnboardingBanner />
+                    </>
+                }
+            >
+                {content}
+            </AppLayout>
+            <DiscardChangesModal />
             <ZBCToast toasts={toasts} onDismiss={dismissToast} />
-        </main>
+        </div>
     );
 }

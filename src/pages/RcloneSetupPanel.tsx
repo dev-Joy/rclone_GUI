@@ -7,6 +7,7 @@
 
 // ========== Internal imports ==========
 import type { typBinarySource, typConfigSource } from "@/shared/ipc-contract";
+import { driveLetterRemoteWarning, findDriveLetterRemotes } from "@/shared/remote-name";
 import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import styles from "./RcloneSetupPanel.module.css";
 
@@ -46,6 +47,9 @@ export default function RcloneSetupPanel() {
         : "-";
     const remotesText =
         env && env.remotes.length > 0 ? env.remotes.map((r) => `${r}:`).join(", ") : "없음";
+    const driveLetterWarning = env
+        ? driveLetterRemoteWarning(findDriveLetterRemotes(env.remotes))
+        : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Detect = () => void detect(true);
@@ -78,11 +82,12 @@ export default function RcloneSetupPanel() {
                 <dt>remote</dt>
                 <dd>{remotesText}</dd>
             </dl>
-            {env && env.warnings.length > 0 && (
+            {env && (env.warnings.length > 0 || driveLetterWarning) && (
                 <ul className={styles.warnings}>
                     {env.warnings.map((w) => (
                         <li key={w}>{w}</li>
                     ))}
+                    {driveLetterWarning && <li>{driveLetterWarning}</li>}
                 </ul>
             )}
             <div className={styles.actions}>

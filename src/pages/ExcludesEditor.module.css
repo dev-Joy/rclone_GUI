@@ -1,0 +1,18 @@
+/**
+ * ExcludesEditor 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .ExcludesEditor {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+    }
+}

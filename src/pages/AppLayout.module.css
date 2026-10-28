@@ -1,0 +1,54 @@
+/**
+ * AppLayout 스타일 (레이아웃)
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer layouts {
+    .AppLayout {
+        display: grid;
+        grid-template-areas:
+            "top top"
+            "sidebar main";
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        height: 100%;
+
+        .top {
+            grid-area: top;
+        }
+
+        .sidebar {
+            grid-area: sidebar;
+            overflow-y: auto;
+            border-right: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            grid-area: main;
+            min-width: 0;
+            overflow-y: auto;
+            background: var(--panel);
+        }
+
+        .banner {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px 20px 0;
+
+            &:empty {
+                display: none;
+            }
+        }
+
+        .content {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 12px 20px 0;
+        }
+    }
+}

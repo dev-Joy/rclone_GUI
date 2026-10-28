@@ -1,0 +1,51 @@
+/**
+ * ZBCTabs 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcTabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+}
+
+.zbcTabsTab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: -1px;
+    padding: 6px 14px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &[aria-selected="true"] {
+        border-bottom-color: var(--accent);
+        color: var(--text);
+        font-weight: 600;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: -2px;
+    }
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+}
+
+.zbcTabsBadge {
+    padding: 0 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 400;
+}

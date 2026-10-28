@@ -1,0 +1,99 @@
+/**
+ * SettingsPage 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .SettingsPage {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding-bottom: 0;
+
+        .pageTitle {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sectionTitle {
+            margin: 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 10px 16px;
+        }
+
+        .details {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        .summary {
+            padding: 6px 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .detailsBody {
+            padding: 4px 12px 12px;
+        }
+
+        .about {
+            display: grid;
+            grid-template-columns: max-content minmax(0, 1fr);
+            gap: 4px 16px;
+            margin: 0;
+
+            dt {
+                color: var(--muted);
+            }
+
+            dd {
+                margin: 0;
+                min-width: 0;
+            }
+        }
+
+        .mono {
+            overflow-wrap: anywhere;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .muted {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .footer {
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 10px 0;
+            border-top: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .footerText {
+            flex: 1 1 auto;
+            color: var(--muted);
+            font-size: 13px;
+        }
+    }
+}

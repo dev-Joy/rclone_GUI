@@ -4,14 +4,14 @@
 - 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-10-28 (린트/포맷 도구를 oxlint·oxfmt로 확정)
-- 상태: **설계 확정안 — Phase 0~3 구현 완료 (2026-10-28), 아래 "구현 반영" 참고**
+- 상태: **설계 확정안 — Phase 0~4 구현 완료 (2026-10-28), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
 > 이 문서는 구현 계획과 검증의 단일 기준(Single Source of Truth)이다. 구현 단계에서 설계 변경이 필요하면
 > 이 문서를 먼저 갱신한 뒤 코드를 수정한다. `docs/intent/` 구조와 내용은 변경하지 않는다.
 
-### 구현 반영 (2026-10-28, Phase 0~3)
+### 구현 반영 (2026-10-28, Phase 0~4)
 
 `AGENTS.md`(프로젝트 규칙)와 이 문서가 다른 항목은 `AGENTS.md`를 따른다(사용자 결정). 아래 외에는 이 문서 그대로다.
 
@@ -35,6 +35,12 @@
 | 환경 변수 | - | rclone 실행 시 `RCLONE_*` 제거(`RCLONE_CONFIG_PASS`·`RCLONE_PASSWORD_COMMAND`만 유지). `RCLONE_CONFIG`는 감지 때 읽어 `--config`로 명시 |
 | 허용 명령 | - | `version`, `config file`, `listremotes`, `lsjson`, `copy`, `sync`만 (`assertAllowedCommand`, `runRclone`이 실행 직전 재확인) |
 | system 채널 | 없음 | `system:openExternal` (https://rclone.org/ 만) |
+| Phase 4 파일 | `features/jobs/*`, `features/settings/*` | `pages/{AppLayout,TopBar,JobSidebar,JobWorkspace,JobEditor,PathField,RemotePicker,WslPathHelper,ExcludesEditor,JobOptionsFields,SettingsPage,DiscardChangesModal}.tsx`, 공용 `components/ZBC{Button,Field,Input,Textarea,Select,Checkbox,Badge,Modal,Tabs}`, `stores/{job-editor,ui}-store.ts`, `lib/{job-form,settings-form,form-utils,path-display,use-path-probe}.ts`, `shared/remote-name.ts`. `PathCheckPanel` 삭제(경로 필드·WSL 도우미로 이동) |
+| 작업 선택 (§13.2) | 재시작 시 첫 job | 메모리만. 재시작·선택 작업 삭제 시 **이름순(ko 정렬: 한글이 영문보다 먼저)** 첫/다음 작업. 화면 전환은 라우터 없이 `ui-store`(`job`/`settings`) |
+| 설정 화면 (§13.2) | 스케줄러 일시정지·트레이·로그인 시작·이력 비우기 포함 | 아직 동작하지 않는 스케줄러 일시정지·트레이 최소화·로그인 시 시작·이력 비우기는 **표시하지 않음**(저장 patch에도 넣지 않아 기존 값 유지) |
+| 한 글자 remote | - | Windows rclone은 `x:경로`를 드라이브로 해석 → remote 목록에서 고를 수 없게 하고 편집기·rclone 설정에 경고. 입력란에 `x:폴더`를 직접 쓰면 **저장은 허용하고 경고만**(실제 X 드라이브일 수 있음). `parsePath`는 그대로 |
+| 화면 검증 문구 | zod 메시지 | 스키마 메시지는 그대로 두고 화면(`job-form`/`settings-form`)에서 한국어 문구로 바꿈. 비교·실행 버튼은 Phase 4에서 항상 비활성 |
+| 화면 스토어 테스트 | - | `tests/unit/renderer/*`는 web tsconfig로만 타입 검사(node에서 제외). DOM 무의존 lib 4개는 node tsconfig `include`에 명시 |
 
 **Phase 7 전에 반영할 실측**: 내용이 같고 수정시간만 다른 파일은 diff에서 `modified(mtime)`이지만 rclone은
 복사하지 않고 시간만 갱신한다(dry-run `skipped: update modification time`). §8.4의

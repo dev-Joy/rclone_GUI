@@ -1,0 +1,65 @@
+/**
+ * PathField 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .PathField {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .input {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .result {
+            margin: 0;
+            padding: 6px 10px;
+            border-left: 4px solid var(--success);
+            border-radius: var(--radius);
+            background: var(--bg);
+
+            &[data-state="error"] {
+                border-left-color: var(--danger);
+            }
+
+            p {
+                margin: 0;
+            }
+        }
+
+        .message {
+            font-weight: 600;
+        }
+
+        .mono {
+            overflow: hidden;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .warning {
+            color: var(--warning);
+            font-size: 13px;
+        }
+    }
+}

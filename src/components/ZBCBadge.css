@@ -1,0 +1,39 @@
+/**
+ * ZBCBadge 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcBadge {
+    display: inline-block;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 20px;
+    white-space: nowrap;
+
+    &[data-tone="accent"] {
+        border-color: var(--accent);
+        background: var(--accent-weak);
+        color: var(--accent);
+    }
+
+    &[data-tone="success"] {
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    &[data-tone="warning"] {
+        border-color: var(--warning);
+        background: var(--warning-weak);
+        color: var(--warning);
+    }
+
+    &[data-tone="danger"] {
+        border-color: var(--danger);
+        background: var(--danger-weak);
+        color: var(--danger);
+    }
+}

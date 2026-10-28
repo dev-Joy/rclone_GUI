@@ -24,6 +24,7 @@
         "src/pages/**/*",
         "src/stores/**/*",
         "src/lib/**/*",
-        "src/shared/**/*"
+        "src/shared/**/*",
+        "tests/unit/renderer/**/*"
     ]
 }

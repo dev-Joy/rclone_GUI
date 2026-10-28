@@ -1,0 +1,35 @@
+/**
+ * ZBCCheckbox 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcCheckbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.zbcCheckboxInput {
+    margin: 3px 0 0;
+    accent-color: var(--accent);
+
+    &:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+    }
+}
+
+.zbcCheckboxText {
+    min-width: 0;
+}
+
+.zbcCheckboxLabel {
+    cursor: pointer;
+}
+
+.zbcCheckboxDescription {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+}

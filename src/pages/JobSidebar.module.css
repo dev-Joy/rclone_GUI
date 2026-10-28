@@ -1,0 +1,95 @@
+/**
+ * JobSidebar 스타일 (레이아웃)
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer layouts {
+    .JobSidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 0;
+        padding: 12px;
+
+        .head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 12px;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .item {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 2px 8px;
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid transparent;
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+
+            &:hover {
+                border-color: var(--border);
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: -2px;
+            }
+
+            &[aria-current="true"] {
+                border-color: var(--accent);
+                background: var(--accent-weak);
+            }
+        }
+
+        .name {
+            overflow: hidden;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .badges {
+            display: flex;
+            gap: 4px;
+        }
+
+        .meta {
+            grid-column: 1 / -1;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .empty {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+    }
+}

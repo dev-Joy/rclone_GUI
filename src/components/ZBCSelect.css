@@ -1,0 +1,25 @@
+/**
+ * ZBCSelect 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcSelect {
+    min-width: 0;
+    max-width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+
+    &:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 0;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+    }
+}

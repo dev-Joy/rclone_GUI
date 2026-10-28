@@ -35,6 +35,18 @@
 - 검증: check, format:check, test:int 12(+WSL 1), build, drive-app 20 통과
 - 리뷰 수정: detect·경로 확인에 마지막 요청만 반영(`shared/latest-request.ts`), lsjson·listremotes 출력 잘림 → RCLONE_FAILED(목록이 너무 큼), BOM 없는 UTF-16LE 판정 보강(짝수 길이+끝 0A 00 또는 0 비율), WSL 도우미 버튼 문구 "입력란에 넣기" — check 287, drive-app 21 통과
 
+[TASK_005] : (2026-10-28) INT-001 Phase 4 — Job CRUD UI와 경로 입력 (관련 Intent: INT-001, T-03·T-04·T-09 완료 / T-11 화면 일부)
+- 공용 컴포넌트: `ZBC{Button,Field,Input,Textarea,Select,Checkbox,Badge,Modal,Tabs}` + CSS(`ZBC.css` @import), 테마 토큰 `--accent-weak`·`--danger-weak`·`--warning-weak`·`--focus`
+- 화면: `AppLayout`(layouts)·`TopBar`·`JobSidebar`(이름순, 모드·자동·마지막 실행)·`JobWorkspace`(헤더·탭·복제·삭제 확인, 비교·실행은 비활성+이유)·`JobEditor`·`PathField`(종류 배지·폴더 선택·WSL 도우미·remote 빠른 입력·접근 확인)·`RemotePicker`·`WslPathHelper`(모달)·`ExcludesEditor`·`JobOptionsFields`·`SettingsPage`(기본값·안전·로그·테마·앱 정보)·`DiscardChangesModal`, `HomePage` 셸로 재구성, `PathCheckPanel` 삭제
+- 상태: `jobs-store` CRUD(envelope 반환·선택 보정), `job-editor-store`(draft/baseline/dirty·저장·외부 변경·guard), `ui-store`, `rclone-env-store.loadRemotes`(설정 파일별 캐시·마지막 요청만)
+- 순수 로직: `lib/job-form`(검증·필드 매핑·경고·정렬·삭제 후 선택), `lib/settings-form`(범위·patch), `lib/form-utils`, `lib/path-display`, `lib/use-path-probe`, `shared/remote-name`(한 글자 remote: 목록 비활성·경고, `x:폴더`는 저장 허용+경고)
+- 테스트: 단위 4파일(job-form·settings-form·remote-name·path-display), 화면 스토어 3파일(`tests/unit/renderer`, web tsconfig·가짜 API), drive-app 45항목(임시 alias remote 2개로 remote 선택·한 글자 경고·새 작업·저장 차단·변경 확인·복제·삭제·설정·재시작)
+- 설정: tsconfig.node `exclude: tests/unit/renderer/**` + DOM 무의존 lib 4개 include, tsconfig.web에 renderer 테스트 include
+- 문서: CHANGELOG, MVP_SPEC 구현 반영(Phase 4 행), intent T-03·T-04·T-09 체크
+- 검증: check(unit 360), format:check, test:int 12(+1 skip), build, drive-app 빌드본·dev 각 45 통과
+- 설계와 다름: 모달 첫 포커스는 ZBCModal `initialFocus` prop 대신 ZBCButton `initialFocus`(→ `data-autofocus`)로 지정(jsx-a11y no-autofocus 회피)
+- 검증 피드백 반영: 설정 화면 미저장 변경도 이동 전 확인(`ui-store.leaveSettings`·공용 DiscardChangesModal), `syncFromJobs`는 같거나 오래된 rev 무시, ZBCModal 네이티브 close 동기화·바깥 클릭은 mousedown도 바깥일 때만, rclone.conf 라디오는 선택만(파일은 별도 버튼), 경로 버튼 aria-label에 원본/대상, 탭 id·aria-controls·tabpanel aria-labelledby 연결
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

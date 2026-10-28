@@ -16,6 +16,10 @@
     --danger: #c62828;
     --warning: #a35c00;
     --success: #1b7f3b;
+    --accent-weak: #e8effd;
+    --danger-weak: #fdecec;
+    --warning-weak: #fff4e0;
+    --focus: #2563eb;
     --radius: 6px;
     --gap: 12px;
     --font: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
@@ -34,6 +38,10 @@
     --danger: #ef6b6b;
     --warning: #e0a040;
     --success: #4cc27a;
+    --accent-weak: #1f2b44;
+    --danger-weak: #3a1f22;
+    --warning-weak: #3a2d17;
+    --focus: #8fb2ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,6 +57,10 @@
         --danger: #ef6b6b;
         --warning: #e0a040;
         --success: #4cc27a;
+        --accent-weak: #1f2b44;
+        --danger-weak: #3a1f22;
+        --warning-weak: #3a2d17;
+        --focus: #8fb2ff;
     }
 }
 

@@ -1,0 +1,30 @@
+/**
+ * TopBar 스타일 (레이아웃)
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer layouts {
+    .TopBar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel);
+
+        .title {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .spacer {
+            flex: 1 1 auto;
+        }
+
+        .nav {
+            display: flex;
+            gap: 6px;
+        }
+    }
+}

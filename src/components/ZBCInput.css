@@ -1,0 +1,38 @@
+/**
+ * ZBCInput 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcInput {
+    width: 100%;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+
+    &[data-mono] {
+        font-family: var(--font-mono);
+        font-size: 13px;
+    }
+
+    &[type="number"] {
+        max-width: 160px;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 0;
+    }
+
+    &[aria-invalid="true"] {
+        border-color: var(--danger);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+    }
+}

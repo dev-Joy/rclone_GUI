@@ -1,0 +1,49 @@
+/**
+ * ZBCField 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+.zbcField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.zbcFieldLabel {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.zbcFieldRequired {
+    color: var(--muted);
+    font-weight: 400;
+}
+
+.zbcFieldDesc {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+
+    &:empty {
+        display: none;
+    }
+
+    p {
+        margin: 0;
+    }
+}
+
+.zbcFieldError {
+    color: var(--danger);
+}
+
+.zbcFieldWarning {
+    color: var(--warning);
+}
+
+.zbcFieldHint {
+    color: var(--muted);
+}

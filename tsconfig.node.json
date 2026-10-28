@@ -22,9 +22,14 @@
         "src/main/**/*",
         "src/preload/**/*",
         "src/shared/**/*",
+        "src/lib/form-utils.ts",
+        "src/lib/job-form.ts",
+        "src/lib/path-display.ts",
+        "src/lib/settings-form.ts",
         "tests/**/*",
         "electron.vite.config.mts",
         "vitest.config.mts",
         "vitest.integration.config.mts"
-    ]
+    ],
+    "exclude": ["tests/unit/renderer/**"]
 }
