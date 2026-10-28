@@ -125,7 +125,8 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ## 10. 도구로 강제하는 규칙
 
-- oxfmt(`.oxfmtrc.json`): 공백 4칸, 큰따옴표, 코드 줄바꿈 LF (md 파일은 대상 아님)
+- oxfmt(`.oxfmtrc.json`): 공백 4칸, 큰따옴표, 줄바꿈 LF (md 파일은 포맷 대상 아님)
+- `.gitattributes` · `.editorconfig`: 모든 텍스트 파일 줄바꿈 LF (`*.bat`·`*.cmd`·`*.ps1`만 CRLF, `tests/fixtures/`는 원본 보존)
 - oxlint(`.oxlintrc.json`): `no-explicit-any`, 훅 규칙, 상위 폴더 상대 경로 import 금지(`@/` 사용), 화면 코드의 Node·Electron·main import 금지, shared의 Node import 금지
 - ESLint(`eslint.config.mjs`): oxlint에 없는 두 가지만 — `shell: true` 금지, `typ`/`itf`/`cls` 접두사
 - 단위 테스트: 차단 목록의 옵션이 생성 결과에 나오지 않는다 (`tests/unit/command-builder.test.ts`)
