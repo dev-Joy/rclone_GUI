@@ -16,7 +16,8 @@ import { StringDecoder } from "node:string_decoder";
 import { assertAllowedCommand, assertNoBlockedFlags } from "@/main/rclone/command-builder";
 
 export interface itfRunProcessOptions {
-    timeoutMs: number;
+    /** 시간 제한(ms). null이면 제한 없음(실행은 사용자가 취소할 때까지 기다린다) */
+    timeoutMs: number | null;
     signal?: AbortSignal;
     /** 기본 process.env */
     env?: NodeJS.ProcessEnv;
@@ -31,6 +32,8 @@ export interface itfRunProcessOptions {
     stderrTailBytes?: number;
     onStdoutLine?: (line: string) => void;
     onStderrLine?: (line: string) => void;
+    /** 프로세스가 시작되면 pid와 함께 한 번 부른다 */
+    onSpawn?: (pid: number) => void;
 }
 
 export interface itfProcessResult {
@@ -45,6 +48,11 @@ export interface itfProcessResult {
     timedOut: boolean;
     canceled: boolean;
     durationMs: number;
+    /**
+     * 프로세스가 끝난 것을 확인했는지(close 이벤트 수신, 또는 시작 전에 취소됨).
+     * false면 종료 요청 뒤 대기 상한(5초)이 지나 결과만 먼저 돌려준 것이다(프로세스가 남아 있을 수 있음).
+     */
+    closed: boolean;
 }
 
 export type typRunProcess = (
@@ -153,7 +161,11 @@ export const runProcess: typRunProcess = (file, args, opts) => {
         const outLines = f_LineReader(opts.onStdoutLine);
         const errLines = f_LineReader(opts.onStderrLine);
 
-        const f_Result = (code: number | null, sig: NodeJS.Signals | null): itfProcessResult => {
+        const f_Result = (
+            code: number | null,
+            sig: NodeJS.Signals | null,
+            closed: boolean,
+        ): itfProcessResult => {
             const bytes = Buffer.concat(stdoutChunks);
             return {
                 exitCode: code,
@@ -166,6 +178,7 @@ export const runProcess: typRunProcess = (file, args, opts) => {
                 timedOut,
                 canceled,
                 durationMs: Date.now() - started,
+                closed,
             };
         };
 
@@ -175,19 +188,19 @@ export const runProcess: typRunProcess = (file, args, opts) => {
             opts.signal?.removeEventListener("abort", f_OnAbort);
         };
 
-        const f_Settle = (code: number | null, sig: NodeJS.Signals | null) => {
+        const f_Settle = (code: number | null, sig: NodeJS.Signals | null, closed: boolean) => {
             if (settled) return;
             settled = true;
             f_Cleanup();
             outLines.flush();
             errLines.flush();
-            resolve(f_Result(code, sig));
+            resolve(f_Result(code, sig, closed));
         };
 
         if (opts.signal?.aborted) {
             canceled = true;
             settled = true;
-            resolve(f_Result(null, null));
+            resolve(f_Result(null, null, true));
             return;
         }
 
@@ -201,7 +214,7 @@ export const runProcess: typRunProcess = (file, args, opts) => {
         const f_Stop = () => {
             if (settled || killTimer) return;
             // close가 오지 않아도(손자 프로세스가 파이프를 잡는 등) 상한 뒤에는 끝낸다
-            killTimer = setTimeout(() => f_Settle(null, null), KILL_WAIT_MS);
+            killTimer = setTimeout(() => f_Settle(null, null, false), KILL_WAIT_MS);
             if (child.pid !== undefined) void killProcessTree(child.pid);
         };
 
@@ -210,14 +223,18 @@ export const runProcess: typRunProcess = (file, args, opts) => {
             f_Stop();
         }
 
-        timer = setTimeout(() => {
-            timedOut = true;
-            f_Stop();
-        }, opts.timeoutMs);
+        // setTimeout(fn, Infinity)는 즉시 실행되므로 유한한 값일 때만 건다
+        if (opts.timeoutMs !== null && Number.isFinite(opts.timeoutMs)) {
+            timer = setTimeout(() => {
+                timedOut = true;
+                f_Stop();
+            }, opts.timeoutMs);
+        }
         opts.signal?.addEventListener("abort", f_OnAbort, { once: true });
 
         child.once("spawn", () => {
             spawned = true;
+            if (child.pid !== undefined) opts.onSpawn?.(child.pid);
         });
         child.once("error", (e) => {
             if (spawned || settled) return;
@@ -243,7 +260,7 @@ export const runProcess: typRunProcess = (file, args, opts) => {
             stderrTail =
                 joined.length > tailBytes ? joined.subarray(joined.length - tailBytes) : joined;
         });
-        child.once("close", (code, sig) => f_Settle(code, sig));
+        child.once("close", (code, sig) => f_Settle(code, sig, true));
     });
 };
 

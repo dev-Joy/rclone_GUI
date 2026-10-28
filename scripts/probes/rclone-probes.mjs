@@ -5,7 +5,8 @@
  * - 출력 속 임시 폴더 경로는 <TMP> 로 바꿔 저장한다(fixture에 사용자 이름·경로가 남지 않도록).
  * - rclone을 올릴 때마다 다시 실행하고, 달라진 동작은 docs/knowhow/rclone-notes.md에 기록한다.
  *
- * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로]   (Windows node)
+ * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
+ *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -17,7 +18,10 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const rclone = process.argv[2] ?? "rclone";
+const cliArgs = process.argv.slice(2);
+const rclone = cliArgs.find((a) => !a.startsWith("--")) ?? "rclone";
+const onlyArg = cliArgs.find((a) => a.startsWith("--only="));
+const only = onlyArg ? new Set(onlyArg.slice("--only=".length).split(",")) : null;
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const outDir = join(repoRoot, "tests", "fixtures", "rclone");
 mkdirSync(outDir, { recursive: true });
@@ -45,6 +49,7 @@ function f_Sanitize(text) {
 }
 
 function f_Probe(name, args) {
+    if (only && !only.has(name)) return;
     const r = spawnSync(rclone, args, { shell: false, windowsHide: true, encoding: "utf8" });
     if (r.error) throw r.error;
     writeFileSync(join(outDir, `${name}.stdout.txt`), f_Sanitize(r.stdout ?? ""));
@@ -170,6 +175,42 @@ try {
         ...common,
         "--",
         src,
+    ]);
+
+    // Phase 6: 실제 copy 출력(로그 줄 형식), 진행 중 stats 줄
+    f_MakeDest(dst);
+    f_Probe("copy-real", [
+        "copy",
+        ask,
+        ...common,
+        "--exclude",
+        "*.tmp",
+        ...tx,
+        ...mw,
+        ...log,
+        "--",
+        src,
+        dst,
+    ]);
+    // 약 3 MiB를 1 MiB/s로 제한해 중간 stats 줄(1초 간격)을 받는다. --bwlimit은 이 실험에서만 쓴다
+    const big = join(work, "big");
+    const bigDst = join(work, "big-dst");
+    for (let i = 0; i < 3; i += 1) {
+        mkdirSync(big, { recursive: true });
+        writeFileSync(join(big, `part${i}.bin`), Buffer.alloc(1024 * 1024, i + 1));
+    }
+    f_Probe("copy-progress", [
+        "copy",
+        ask,
+        ...common,
+        "--transfers",
+        "1",
+        "--bwlimit",
+        "1M",
+        ...log,
+        "--",
+        big,
+        bigDst,
     ]);
 } finally {
     rmSync(work, { recursive: true, force: true });

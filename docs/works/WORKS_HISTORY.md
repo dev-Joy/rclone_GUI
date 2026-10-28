@@ -57,6 +57,19 @@
 - 검증: check(unit 491), format:check, test:int 19(+1 skip: WSL 조건부), build, drive-app 빌드본 53 통과
 - 설계와 다름: UNC 조건부 통합 테스트(`compare.unc.test.ts`)는 만들지 않음(기존 조건부 패턴은 WSL 배포판 목록만 있음). `SummaryCards`·`StatusBadge` 파일 대신 `CompareSummary`·표 안 배지
 
+[TASK_007] : (2026-10-28) INT-001 Phase 6 — 실행 코어: dry-run, copy, 로그/stats, 취소 (관련 Intent: INT-001, T-07 copy까지 / sync 실제 실행은 Phase 7)
+- 프로세스: `runProcess`에 `timeoutMs: number | null`(Number.isFinite일 때만 타이머), `onSpawn(pid)`, 결과 `closed`(close 수신·시작 전 취소 true, 종료 대기 상한 초과 false). 기존 fake 결과에 `closed: true`
+- 리팩터(동작 불변): 비교의 경로·rclone·설정 파일 해석을 `services/job-context.ts` `resolveJobContext`로, BUSY 문구를 `activity-lock.ts` `busyMessageFor`로 이동 — 기존 비교 테스트로 회귀 확인
+- shared: `types/run.ts`(itfRunLogLine·itfDryRunSummary·itfRunSnapshot·typRunEvent), `schemas/run.ts`(zStartRunInput strict·zRunIdInput·zActiveRunFile), `run-plan.ts`(planFromCompare: copy 삭제 0, expectedDeletes, matchPlanWithDryRun: 복사+touch == 새+변경)
+- main: `parsers/run-output.ts`(dry-run 집계: touch는 size 유무로 파일만, decideRunOutcome: 취소 > exit3 > exit7 > exit0 오류 수 > 실패, parseTasklistCsv), `services/run-events.ts`(log 200ms·100줄·dropped, stats 1초, flush), `run-log-file.ts`(logs/run-YYYYMMDD-HHmmss-<job8>-<run8>.log, 원본·대상·--config 가림, redactSecrets, 쓰기 실패 무시), `run-recovery.ts`(active-run.json 원자적 기록·순서 보장 삭제, tasklist.exe로 이미지 이름이 같을 때만 kill, 확인 못하면 PID 안내), `run-service.ts`(게이트 → 락 → 이력 → spawnTransfer(buildTransferArgs 유일 호출) → 판정 → 마무리, finished는 락 해제 뒤 마지막 1회)
+- IPC: run:start/cancel/getActive, run:event, jobs update/delete는 실행 중 작업이면 BUSY, index.ts 시작 순서(이력 → active-run 복구 → interrupted), before-quit(실행 취소 후 최대 10초, 재진입 방지), preload `run`·`events.onRunEvent`
+- 화면: `JobWorkspace` 실행 탭 활성·헤더 "미리보기"/"복사 실행"(유효한 비교 결과 있을 때만, 확인 모달)·"동기화 실행" 비활성+이유·실행 중 비교 불가, `RunView`·`RunStatsGrid`·`RunLogTail`·`DryRunSummary`, `stores/run-store`, `lib/run-view`
+- 프로브: `--only=` 필터, `copy-real`·`copy-progress`(약 3 MiB, 프로브에서만 --bwlimit 1M) fixture — normalizeStats 보완 불필요(추가 키 무시)
+- 테스트: 단위 8파일 추가(run-output·run-plan·run-events·run-log-file·run-recovery·run-service 25건·run-view·renderer/run-store) + process(null 타임아웃·onSpawn·closed)·shared-boundary(buildTransferArgs 호출 위치) 보강, 통합 `run.dryrun`(3)·`run.copy`(2, 취소 포함)·공용 `run-harness.ts`, drive-app 64항목(API 키 run, 미리보기 요약·대상 불변, 복사 확인 창·완료·파일 반영, 실행 후 복사 버튼 비활성, sync 버튼 비활성·직접 IPC SAFETY_BLOCKED, 재시작 후 lastRun·active-run 없음)
+- 문서: CHANGELOG, rclone-notes 12~14, MVP_SPEC 구현 반영(Phase 6 행 등), intent T-07 진행 메모(체크 안 함)
+- 검증: check(unit 569), format:check, test:int 24(+1 skip: WSL 조건부), build, drive-app 빌드본 64 통과
+- 설계와 다름: 실행 로그 머리말은 `--config` 경로도 `<설정 파일>`로 가림. active-run 복구는 확인 결과와 관계없이 파일을 지움(확인 못하면 PID 안내만). 실행 문맥 해석은 probe를 하지 않음(rclone exit 3 → PATH_NOT_FOUND). 앱 종료(before-quit) 경로는 자동 검증하지 못함(drive-app은 taskkill로 종료)
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

@@ -23,13 +23,14 @@ import { buildLsjsonArgs, COMPARE_HASH_TYPES } from "@/main/rclone/command-build
 import { RCLONE_TIMEOUTS } from "@/main/rclone/config";
 import type { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclone/process";
-import type { clsActivityLock, typActivity } from "@/main/services/activity-lock";
+import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
+import { remoteNameOf, resolveJobContext } from "@/main/services/job-context";
 import { PROBE_MISSING_MESSAGE, type clsPathService } from "@/main/services/path-service";
 import { computePlanToken } from "@/main/services/plan-token";
 import type { clsJobStore } from "@/main/store/job-store";
 import { diffFileLists } from "@/shared/diff-engine";
 import type { itfPathProbe } from "@/shared/ipc-contract";
-import { checkRunPaths, parsePath, type itfParsedPath } from "@/shared/path-utils";
+import type { itfParsedPath } from "@/shared/path-utils";
 import type { typJob } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 import type {
@@ -88,17 +89,6 @@ function f_SettingsKey(s: typSettings): string {
     return JSON.stringify([s.rclonePath, s.configPath, s.compare.caseInsensitivePaths]);
 }
 
-function f_RemoteName(p: itfParsedPath): string | null {
-    return p.kind === "remote" ? p.root.slice(0, -1) : null;
-}
-
-function f_Parse(raw: string): itfParsedPath {
-    const r = parsePath(raw);
-    // checkRunPaths를 통과했으므로 실패하지 않는다
-    if (!r.ok) throw new clsAppError(r.issue.code, r.issue.message);
-    return r.path;
-}
-
 export class clsCompareService {
     private readonly deps: Required<itfCompareServiceDeps>;
     private readonly cache = new Map<string, itfCacheEntry>();
@@ -121,7 +111,7 @@ export class clsCompareService {
         const job = this.deps.jobs.get(jobId);
         const startedAt = this.deps.now().toISOString();
         const release = this.deps.activity.acquire({ kind: "compare", jobId, startedAt }, (cur) =>
-            this.busyMessage(cur),
+            busyMessageFor(cur, this.deps.jobs),
         );
         const active: itfActiveCompare = {
             jobId,
@@ -234,32 +224,10 @@ export class clsCompareService {
         active: itfActiveCompare,
         t0: number,
     ): Promise<{ result: itfCompareResult; settingsKey: string }> {
-        const settings = this.deps.settings.get();
-        const settingsKey = f_SettingsKey(settings);
-        const caseInsensitive = settings.compare.caseInsensitivePaths;
-
-        // 1) 경로 형식·안전 검사(프로세스 실행 전)
-        const check = checkRunPaths(job.source, job.destination, caseInsensitive);
-        const first = check.errors[0];
-        if (first) {
-            throw new clsAppError(
-                first.code,
-                first.message,
-                check.errors.length > 1 ? check.errors.map((e) => e.message).join("\n") : undefined,
-            );
-        }
-        const src = f_Parse(job.source);
-        const dst = f_Parse(job.destination);
-
-        // 2) rclone·설정 파일
-        const rt = await this.deps.rcloneEnv.require();
-        const configPath = await this.deps.rcloneEnv.resolveConfigFor(job.configPathOverride);
-        if ((src.kind === "remote" || dst.kind === "remote") && configPath === null) {
-            throw new clsAppError(
-                "CONFIG_REQUIRED",
-                "remote 경로를 쓰려면 rclone 설정 파일이 필요합니다.",
-            );
-        }
+        // 1~2) 경로 형식·안전 검사(프로세스 실행 전) → rclone·설정 파일
+        const ctx = await resolveJobContext(job, this.deps);
+        const { src, dst, configPath, caseInsensitive } = ctx;
+        const settingsKey = f_SettingsKey(ctx.settings);
         this.throwIfCanceled(active);
 
         // 3) 폴더 확인
@@ -278,7 +246,7 @@ export class clsCompareService {
         ];
         if (!destMissing)
             sides.push({ label: "대상", path: dst, parser: createLsjsonLineParser() });
-        const lists = await this.listAll(job, sides, configPath, rt.binaryPath, active);
+        const lists = await this.listAll(job, sides, configPath, ctx.binaryPath, active);
         const sourceList = lists[0]!;
         const destList = lists[1] ?? [];
         this.throwIfCanceled(active);
@@ -347,7 +315,7 @@ export class clsCompareService {
                 fastList: job.options.fastList,
             },
             caseInsensitive,
-            binaryPath: rt.binaryPath,
+            binaryPath: ctx.binaryPath,
             configPath,
             summary: diff.summary,
         });
@@ -518,7 +486,7 @@ export class clsCompareService {
             );
         }
         if (r.exitCode !== 0) {
-            const hint = hintForRcloneError(r.stderrTail, f_RemoteName(side.path));
+            const hint = hintForRcloneError(r.stderrTail, remoteNameOf(side.path));
             throw new clsAppError(
                 "RCLONE_FAILED",
                 `${label} 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
@@ -563,19 +531,6 @@ export class clsCompareService {
             if (oldest === undefined) break;
             this.cache.delete(oldest);
         }
-    }
-
-    private busyMessage(cur: typActivity): string {
-        let name: string | null = null;
-        try {
-            name = this.deps.jobs.get(cur.jobId).name;
-        } catch {
-            name = null;
-        }
-        const who = name === null ? "다른 작업을" : `‘${name}’ 작업을`;
-        return cur.kind === "compare"
-            ? `${who} 비교하는 중입니다. 끝나거나 취소한 뒤 다시 시도하세요.`
-            : `${who} 실행하는 중입니다. 끝나거나 취소한 뒤 다시 시도하세요.`;
     }
 }
 

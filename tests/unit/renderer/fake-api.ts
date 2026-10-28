@@ -2,6 +2,7 @@
  * 화면 스토어 테스트용 가짜 window.rclonegui. jobs CRUD와 설정은 메모리에서 처리하고
  * 경로 검사는 main과 같은 checkPathPair로 SAFETY_BLOCKED 등을 돌려준다.
  * 비교(compare.*)는 응답을 테스트가 직접 제어한다(run·get resolver, active, 진행 이벤트).
+ * 실행(run.*)은 start 응답·getActive 값을 테스트가 정하고, run:event를 직접 보낸다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -18,7 +19,9 @@ import type {
 import { checkPathPair } from "@/shared/path-utils";
 import type { typApiResult } from "@/shared/schemas/common";
 import type { typJob, typJobDraft } from "@/shared/schemas/job";
+import type { typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
+import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 
 export interface itfFakeApi {
     api: itfRcloneGuiApi;
@@ -44,6 +47,14 @@ export interface itfFakeApi {
     setCompareActive: (a: itfCompareActive | null) => void;
     /** main의 compare:progress 이벤트를 흉내 낸다 */
     emitCompareProgress: (e: itfCompareProgress) => void;
+    /** run.start에 넘어온 입력 */
+    runStartInputs: typStartRunInput[];
+    /** 다음 run.start 응답(기본: 성공, runId fakeUuid(9001)) */
+    setRunStartResult: (r: typApiResult<{ runId: string }>) => void;
+    /** run.getActive 응답 */
+    setRunActive: (a: itfRunSnapshot | null) => void;
+    /** main의 run:event 이벤트를 흉내 낸다 */
+    emitRunEvent: (e: typRunEvent) => void;
 }
 
 let uuidSeq = 0;
@@ -107,6 +118,13 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     const compareGetResolvers: itfFakeApi["compareGetResolvers"] = [];
     const progressListeners = new Set<(e: itfCompareProgress) => void>();
     let compareActive: itfCompareActive | null = null;
+    const runListeners = new Set<(e: typRunEvent) => void>();
+    const runStartInputs: typStartRunInput[] = [];
+    let runStartResult: typApiResult<{ runId: string }> = {
+        ok: true,
+        data: { runId: fakeUuid(9001) },
+    };
+    let runActive: itfRunSnapshot | null = null;
     // 시드(fakeUuid(1~99))와 겹치지 않게 100부터
     let seq = 100;
 
@@ -217,6 +235,21 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 return f_Ok(compareActive);
             },
         },
+        run: {
+            start: (input) => {
+                calls.push(`run.start:${input.jobId}:${input.dryRun}`);
+                runStartInputs.push(structuredClone(input));
+                return Promise.resolve(structuredClone(runStartResult));
+            },
+            cancel: (runId) => {
+                calls.push(`run.cancel:${runId}`);
+                return f_Ok(null);
+            },
+            getActive: () => {
+                calls.push("run.getActive");
+                return f_Ok(runActive);
+            },
+        },
         rclone: {
             detect: () => notImplemented("rclone.detect"),
             listRemotes: (configPath) => {
@@ -245,6 +278,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 progressListeners.add(cb);
                 return () => progressListeners.delete(cb);
             },
+            onRunEvent: (cb) => {
+                runListeners.add(cb);
+                return () => runListeners.delete(cb);
+            },
         },
     };
 
@@ -264,6 +301,16 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         emitCompareProgress: (e) => {
             for (const l of progressListeners) l(e);
+        },
+        runStartInputs,
+        setRunStartResult: (r) => {
+            runStartResult = r;
+        },
+        setRunActive: (a) => {
+            runActive = a;
+        },
+        emitRunEvent: (e) => {
+            for (const l of runListeners) l(e);
         },
     };
 }

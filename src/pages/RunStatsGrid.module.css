@@ -1,0 +1,58 @@
+/**
+ * RunStatsGrid 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .RunStatsGrid {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 0;
+        color: var(--muted);
+
+        .bar {
+            width: 100%;
+            height: 10px;
+            accent-color: var(--accent);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 6px;
+            margin: 0;
+        }
+
+        .item {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+
+            &[data-error="true"] {
+                border-color: var(--danger);
+                background: var(--danger-weak);
+            }
+        }
+
+        .label {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .value {
+            margin: 0;
+            color: var(--text);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .lastError {
+            margin: 0;
+            color: var(--danger);
+            font-size: 12px;
+        }
+    }
+}

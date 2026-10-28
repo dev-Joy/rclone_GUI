@@ -42,6 +42,11 @@ const api: itfRcloneGuiApi = {
         get: (jobId) => ipcRenderer.invoke(C.compareGet, { jobId }),
         getActive: () => ipcRenderer.invoke(C.compareGetActive),
     },
+    run: {
+        start: (input) => ipcRenderer.invoke(C.runStart, input),
+        cancel: (runId) => ipcRenderer.invoke(C.runCancel, { runId }),
+        getActive: () => ipcRenderer.invoke(C.runGetActive),
+    },
     rclone: {
         detect: (force) => ipcRenderer.invoke(C.rcloneDetect, { force: force ?? false }),
         listRemotes: (configPath) =>
@@ -65,6 +70,7 @@ const api: itfRcloneGuiApi = {
     events: {
         onJobsChanged: (cb) => f_Subscribe(E.jobsChanged, cb),
         onCompareProgress: (cb) => f_Subscribe(E.compareProgress, cb),
+        onRunEvent: (cb) => f_Subscribe(E.runEvent, cb),
     },
 };
 

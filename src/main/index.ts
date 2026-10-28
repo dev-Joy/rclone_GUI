@@ -15,6 +15,8 @@ import { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsActivityLock } from "@/main/services/activity-lock";
 import { clsCompareService } from "@/main/services/compare-service";
 import { clsPathService } from "@/main/services/path-service";
+import { clsActiveRunStore, recoverActiveRun } from "@/main/services/run-recovery";
+import { clsRunService } from "@/main/services/run-service";
 import { clsWslService } from "@/main/services/wsl";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
@@ -37,6 +39,8 @@ const paths = setupAppPaths();
 const logger = new clsLogger(paths.logs);
 const notices: itfAppNotice[] = [];
 let mainWindow: BrowserWindow | null = null;
+/** 실행 중 종료: 취소 후 이 시간까지 기다린다(D2) */
+const QUIT_WAIT_MS = 10_000;
 
 process.on("uncaughtException", (e) => logger.error("uncaughtException", e));
 process.on("unhandledRejection", (e) => logger.error("unhandledRejection", e));
@@ -98,6 +102,13 @@ async function f_Start(): Promise<void> {
         f_AddNotice,
     );
     await history.load();
+    // 지난번 실행 중 비정상 종료로 남은 rclone을 먼저 정리하고, 남은 running 이력을 중단됨으로 바꾼다
+    const activeRun = new clsActiveRunStore(paths.userData);
+    const recovered = await recoverActiveRun({ store: activeRun, logger }).catch((e: unknown) => {
+        logger.error("active-run 복구 실패", e);
+        return null;
+    });
+    if (recovered && "notice" in recovered) f_AddNotice(recovered.notice);
     const interrupted = await history.markInterrupted();
     if (interrupted.length > 0) {
         f_AddNotice({
@@ -125,10 +136,44 @@ async function f_Start(): Promise<void> {
             }
         },
     });
-    // 앱을 닫으면 진행 중인 비교(rclone 프로세스 트리)를 끝낸다. 확인 창은 Phase 6 실행과 함께
-    app.on("before-quit", () => {
+    const runs = new clsRunService({
+        jobs,
+        settings,
+        rcloneEnv,
+        compare,
+        history,
+        activity,
+        activeRun,
+        logsDir: paths.logs,
+        logger,
+        emit: (e) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(IPC_EVENTS.runEvent, e);
+            }
+        },
+    });
+    // 앱을 닫으면 진행 중인 비교·실행(rclone 프로세스 트리)을 끝낸다.
+    // 실행 중이면 종료를 미루고 취소 → 최대 10초 기다린 뒤 종료한다(확인 창 없음).
+    // 끝을 확인하지 못하면 active-run.json이 남아 다음 시작 때 정리된다.
+    let quitting = false;
+    app.on("before-quit", (event) => {
         const active = compare.getActive();
         if (active) compare.cancel(active.jobId);
+        const run = runs.getActive();
+        if (!run || quitting) return;
+        quitting = true;
+        event.preventDefault();
+        logger.info(`종료 전 실행 취소: run=${run.runId}`);
+        runs.cancel(run.runId);
+        void (async () => {
+            const idle = await runs.whenIdle(QUIT_WAIT_MS);
+            if (!idle) {
+                logger.warn(
+                    `실행이 ${QUIT_WAIT_MS / 1000}초 안에 끝나지 않아 그대로 종료: run=${run.runId}`,
+                );
+            }
+            app.quit();
+        })();
     });
 
     registerIpc({
@@ -142,6 +187,7 @@ async function f_Start(): Promise<void> {
         pathService,
         wsl,
         compare,
+        runs,
         getWindow: () => mainWindow,
     });
 

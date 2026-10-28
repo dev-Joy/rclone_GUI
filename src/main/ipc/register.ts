@@ -13,6 +13,7 @@ import { registerCompareIpc, type itfCompareIpcDeps } from "@/main/ipc/compare";
 import { registerDialogIpc, type itfDialogIpcDeps } from "@/main/ipc/dialog";
 import { handle } from "@/main/ipc/handle";
 import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
+import { registerRunIpc, type itfRunIpcDeps } from "@/main/ipc/run";
 import { registerSystemIpc } from "@/main/ipc/system";
 import { registerWslIpc, type itfWslIpcDeps } from "@/main/ipc/wsl";
 import type { clsJobStore } from "@/main/store/job-store";
@@ -22,11 +23,20 @@ import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
 export interface itfIpcServices
-    extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps, itfCompareIpcDeps {
+    extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps, itfCompareIpcDeps, itfRunIpcDeps {
     settings: clsSettingsStore;
     jobs: clsJobStore;
     paths: { userData: string; logs: string };
     notices: () => itfAppNotice[];
+}
+
+/** 실행 중인 작업은 고치거나 지울 수 없다(실행 기록·비교 계획 보호) */
+function f_AssertNotRunning(s: itfIpcServices, jobId: string, action: string): void {
+    if (!s.runs.isRunningJob(jobId)) return;
+    throw new clsAppError(
+        "BUSY",
+        `실행 중인 작업은 ${action} 수 없습니다. 끝나거나 취소한 뒤 다시 시도하세요.`,
+    );
 }
 
 export function registerIpc(s: itfIpcServices): void {
@@ -53,13 +63,25 @@ export function registerIpc(s: itfIpcServices): void {
     handle(
         s,
         IPC_CHANNELS.jobsUpdate,
-        ({ id, patch }) => s.jobs.update(id, patch),
+        ({ id, patch }) => {
+            f_AssertNotRunning(s, id, "고칠");
+            return s.jobs.update(id, patch);
+        },
         zJobUpdateInput,
     );
-    handle(s, IPC_CHANNELS.jobsDelete, ({ id }) => s.jobs.remove(id), zJobId);
+    handle(
+        s,
+        IPC_CHANNELS.jobsDelete,
+        ({ id }) => {
+            f_AssertNotRunning(s, id, "지울");
+            return s.jobs.remove(id);
+        },
+        zJobId,
+    );
     handle(s, IPC_CHANNELS.jobsDuplicate, ({ id }) => s.jobs.duplicate(id), zJobId);
 
     registerCompareIpc(s);
+    registerRunIpc(s);
     registerRcloneIpc(s);
     registerWslIpc(s);
     registerDialogIpc(s);

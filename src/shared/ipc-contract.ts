@@ -10,6 +10,7 @@
 import type { typPathKind } from "@/shared/path-utils";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
+import type { typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings, typSettingsPatch } from "@/shared/schemas/settings";
 import type { typPickDirectoryInput, typPickFileInput } from "@/shared/schemas/system";
 import type {
@@ -17,6 +18,7 @@ import type {
     itfCompareProgress,
     itfCompareResult,
 } from "@/shared/types/compare";
+import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 
 export const IPC_CHANNELS = {
     appGetInfo: "app:getInfo",
@@ -33,6 +35,9 @@ export const IPC_CHANNELS = {
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
     compareGetActive: "compare:getActive",
+    runStart: "run:start",
+    runCancel: "run:cancel",
+    runGetActive: "run:getActive",
     rcloneDetect: "rclone:detect",
     rcloneListRemotes: "rclone:listRemotes",
     rcloneTestPath: "rclone:testPath",
@@ -45,6 +50,7 @@ export const IPC_CHANNELS = {
 export const IPC_EVENTS = {
     jobsChanged: "jobs:changed",
     compareProgress: "compare:progress",
+    runEvent: "run:event",
 } as const;
 
 export type typIpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -144,6 +150,17 @@ export interface itfRcloneGuiApi {
         /** 앱 전역에서 진행 중인 비교 */
         getActive(): Promise<typApiResult<itfCompareActive | null>>;
     };
+    run: {
+        /**
+         * 미리보기(dryRun:true) 또는 실제 실행을 시작하고 runId를 돌려준다(끝날 때까지 기다리지 않음).
+         * 실제 실행은 비교의 planToken과 확인한 삭제 수가 필요하다. 동기화 실제 실행은 아직 SAFETY_BLOCKED.
+         */
+        start(input: typStartRunInput): Promise<typApiResult<{ runId: string }>>;
+        /** 진행 중인 실행을 취소한다. 없으면 아무것도 하지 않는다 */
+        cancel(runId: string): Promise<typApiResult<null>>;
+        /** 앱 전역에서 진행 중인 실행(최근 로그 포함) */
+        getActive(): Promise<typApiResult<itfRunSnapshot | null>>;
+    };
     rclone: {
         /** force면 캐시를 무시하고 다시 감지한다 */
         detect(force?: boolean): Promise<typApiResult<itfRcloneEnvironment>>;
@@ -165,5 +182,6 @@ export interface itfRcloneGuiApi {
     events: {
         onJobsChanged(cb: (e: itfJobsChangedEvent) => void): () => void;
         onCompareProgress(cb: (e: itfCompareProgress) => void): () => void;
+        onRunEvent(cb: (e: typRunEvent) => void): () => void;
     };
 }

@@ -17,6 +17,7 @@ function f_Res(over: Partial<itfProcessResult> = {}): itfProcessResult {
         timedOut: false,
         canceled: false,
         durationMs: 1,
+        closed: true,
         ...over,
     };
 }

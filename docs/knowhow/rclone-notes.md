@@ -68,3 +68,22 @@
 - 명령: 같은 임시 대상 폴더를 로컬 경로와 `<alias>:<하위 경로>`로 각각 `lsjson`(통합 테스트 `compare.local.test.ts`)
 - 결과: 경로·크기·수정시간이 같아 비교 요약·항목 상태가 완전히 같다.
 - 영향: remote 경로도 같은 비교 경로를 탄다. 취소는 프로세스 트리 종료 후 `CANCELED`로 처리하고 그 작업의 이전 비교 결과를 지운다. 목록 직전에 폴더가 사라지면 lsjson exit 3(노트 2)을 `PATH_NOT_FOUND`로 바꾸고 stdout은 쓰지 않는다.
+
+## 2026-10-28 · rclone v1.75.1 · Windows 11 x64 (Phase 6: 실행·취소)
+
+### 12. 실제 copy 출력은 sync와 같은 형식, 삭제 줄만 없다
+- 명령: `copy --ask-password=false --config <conf> --exclude *.tmp --checkers 8 --transfers 4 --fast-list --skip-links --modify-window 2000ms -v --use-json-log --stats 1s -- <src> <dst>` (fixture `copy-real.*`)
+- 결과: `Copied (new)` / `Copied (replaced existing)`(size 있음), `Updated modification time in destination`(size 없음), `Set directory modification time (using DirSetModTime)`, 최종 stats `level:"info"`(transfers 3, bytes 24, errors 0). exit 0, stdout 없음. 대상에만 있는 파일은 건드리지 않는다.
+- 영향: 실제 실행 로그는 `skipped`가 없으므로 dry-run 집계(`createDryRunCollector`)는 dry-run에만 쓴다. 실행 결과는 stats·exit code로 판정한다(`decideRunOutcome`).
+- dry-run의 `skipped:"update modification time"`(파일)과 `"set directory modification time"`(폴더)은 파서에서 둘 다 touch이므로 **size 유무로 파일만 센다**(폴더 줄에는 size가 없다).
+
+### 13. 진행 중 stats는 `--stats 1s` 간격으로 오고, totalBytes는 대기열에 들어온 파일만 센다
+- 명령: 1 MiB 파일 3개를 `copy --transfers 1 --bwlimit 1M -v --use-json-log --stats 1s` (fixture `copy-progress.*`, `--bwlimit`은 이 실험에서만)
+- 결과: 약 1초마다 stats 줄이 와서 bytes 1→2→3 MiB로 늘어난다. 중간 줄의 `totalBytes`는 2 MiB(대기열 기준)라 진행률이 100%를 찍었다가 다시 내려갈 수 있다. 중간 stats에는 `transferring` 배열이 더 있고, 첫 줄은 `Starting bandwidth limiter` info.
+- 영향: `normalizeStats`는 알 수 없는 키를 무시하므로 그대로 쓴다. 진행률은 0~100으로 자르고(`progressPercent`), 화면에는 stats를 1초에 한 번만 보낸다(`clsRunEventBatcher`).
+
+### 14. 실행 중 취소(taskkill /T /F)와 `.partial`
+- 명령: 32 KiB 파일 400개를 `copy --transfers 1 --checkers 1`로 실행하고 첫 `Copied` 로그에서 취소(통합 테스트 `run.copy.test.ts`)
+- 결과: 대상에 13/400개만 복사된 채 끝났고 rclone 프로세스는 남지 않았다. 이 크기에서는 `.partial` 파일이 남지 않았다(쓰는 중이던 파일이 없었음). 이미 복사된 파일은 그대로 남는다.
+- 영향: 취소하면 결과와 관계없이 상태를 `canceled`로 기록하고, 화면·확인 창에 "취소해도 이미 복사된 파일은 대상에 남습니다"를 알린다. 실제 실행은 취소·실패해도 비교 결과를 버리고 lastRun을 갱신한다. 큰 파일 도중 취소 시 `.partial`이 남는지는 아직 확인하지 못했다.
+

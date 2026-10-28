@@ -78,3 +78,32 @@ export const zHistoryFile = z.object({
     records: z.array(zRunRecord),
 });
 export type typHistoryFile = z.infer<typeof zHistoryFile>;
+
+/**
+ * run:start 입력. 실제 실행(dryRun:false)은 비교의 planToken과 확인한 삭제 수가 필요하다
+ * (main이 계획에서 삭제 수를 다시 계산해 맞춰 본다). 알 수 없는 키는 거부한다.
+ */
+export const zStartRunInput = z
+    .object({
+        jobId: z.uuid(),
+        dryRun: z.boolean(),
+        planToken: z.string().min(1).max(200).optional(),
+        confirmedDeletes: zCount.optional(),
+    })
+    .strict();
+export type typStartRunInput = z.infer<typeof zStartRunInput>;
+
+export const zRunIdInput = z.object({ runId: z.uuid() }).strict();
+export type typRunIdInput = z.infer<typeof zRunIdInput>;
+
+/** userData/active-run.json: 실행 중 앱이 비정상 종료됐을 때 남은 rclone을 찾는 기록 */
+export const zActiveRunFile = z.object({
+    version: z.literal(1),
+    runId: z.uuid(),
+    jobId: z.uuid(),
+    pid: z.number().int().positive(),
+    startedAt: zIsoDate,
+    /** 실행 파일 이름(예: rclone.exe). PID 재사용 확인용 */
+    imageName: z.string().min(1).max(260),
+});
+export type typActiveRunFile = z.infer<typeof zActiveRunFile>;

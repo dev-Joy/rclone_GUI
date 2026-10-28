@@ -58,6 +58,7 @@ updated: 2026-10-28
 - [x] T-05 [P1] 메타데이터 기반 폴더 비교 엔진 (`rclone lsjson`/`check`/`--dry-run` 결과 파싱, 원본만·대상만·변경·동일 분류) (depends: T-02, T-03)
 - [x] T-06 [P1] 차이(diff) 2-pane UI (Compare Folders 스타일 목록, 크기·수정시간·해시 표시, 정렬/필터) (depends: T-04, T-05)
 - [ ] T-07 [P1] copy/sync 실행과 진행률·로그 표시 (실행 직전 dry-run 사전점검, `--stats`/`--progress` 파싱, 취소 처리, 전역 단일 활동 락으로 비교·실행·자동 실행 중복 방지) (depends: T-05, T-06)
+  - 진행 (2026-10-28, Phase 6): dry-run 미리보기와 **copy 실제 실행까지 완료**(진행률·stats·로그 tail·취소·이력·실행 로그·active-run 복구·전역 락). **sync 실제 실행은 Phase 7로 남김**(지금은 SAFETY_BLOCKED) — 그래서 체크하지 않는다.
 - [ ] T-08 [P1] dry-run 미리보기 및 삭제 안전확인 (삭제 예정 목록 명시, 확인 후 실행, 위험 옵션 차단) (depends: T-07)
 - [x] T-09 [P2] `.conf` 관리 (설정 파일 선택·검증, remote 목록 조회) (depends: T-02)
 - [ ] T-10 [P2] 자동 동기화 스케줄러 (job별 주기 실행, 중복 실행 방지, 실패 시 로그·알림) (depends: T-04, T-07, T-08)

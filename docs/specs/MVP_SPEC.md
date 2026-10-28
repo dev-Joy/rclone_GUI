@@ -4,7 +4,7 @@
 - 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-10-28 (린트/포맷 도구를 oxlint·oxfmt로 확정)
-- 상태: **설계 확정안 — Phase 0~4 구현 완료 (2026-10-28), 아래 "구현 반영" 참고**
+- 상태: **설계 확정안 — Phase 0~6 구현 완료 (2026-10-28, sync 실제 실행은 Phase 7), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -45,11 +45,20 @@
 | 비교 목록 해시 | `--hash` | `--hash --hash-type md5 --hash-type sha1`(`COMPARE_HASH_TYPES`). `--hash`만이면 local이 13종을 계산 |
 | 비교 결과 보관 | lastCompare | main 메모리에 작업별 최대 3개. 실패·취소·작업 rev·설정(rclone 경로·설정 파일·대소문자) 변경 시 버림. 비교 중 작업이 바뀌면 `PLAN_STALE`. 대상 폴더가 없으면 빈 목록으로 비교하고 경고 |
 | 비교·실행 버튼 | Phase 4 비활성 | 저장된 작업은 비교 버튼·탭 활성(변경 중·경로 오류·비교 중이면 버튼만 비활성+이유). 실행은 Phase 6까지 비활성 |
+| Phase 6 파일 | `services/{run-service,run-recovery,history-service}.ts`, `shared/rclone/log-parser.ts`, `features/run/{RunPanel,StatsGrid,LogTail,DryRunSummary}.tsx`, `stores/run.ts` | `main/services/{run-service,run-recovery,run-events,run-log-file,job-context}.ts`, `main/parsers/run-output.ts`(dry-run 집계·결과 판정·tasklist CSV), `main/ipc/run.ts`, `shared/{run-plan.ts,types/run.ts}`, `shared/schemas/run.ts`(`zStartRunInput`·`zRunIdInput`·`zActiveRunFile`), `pages/{RunView,RunStatsGrid,RunLogTail,DryRunSummary}.tsx`, `stores/run-store.ts`, `lib/run-view.ts`. history-service는 만들지 않고 `clsHistoryStore`(begin/patch/markInterrupted)를 그대로 씀. 비교·실행 공통 문맥 해석은 `resolveJobContext`, BUSY 문구는 `busyMessageFor` |
+| 실행 게이트 (Phase 6) | `confirmDeletes: boolean` | `run:start {jobId, dryRun, planToken?, confirmedDeletes?}`(strict). 실제 실행은 planToken + **확인한 삭제 수**가 필요하고 main이 비교 계획에서 다시 계산해 맞춰 본다(copy는 0). 형식 충돌·대소문자만 다른 항목이 있으면 `SAFETY_BLOCKED`. **sync 실제 실행은 `SAFETY_BLOCKED`(Phase 7)**, 미리보기는 sync도 가능. 게이트·BUSY에 걸리면 이력·프로세스를 만들지 않음. `buildTransferArgs` 호출은 `run-service.ts` 한 곳(단위 테스트로 고정) |
+| 실행 기록 (Phase 6) | dry-run도 lastRun | dry-run은 **이력에만** 남기고 lastRun·비교 결과를 건드리지 않음. 실제 실행은 결과와 관계없이(취소·실패 포함) 비교 결과를 버리고 lastRun 갱신. 실행 로그 머리말의 원본·대상·`--config` 경로는 `<원본>`/`<대상>`/`<설정 파일>`로 가리고 모든 줄에 비밀값 가림. app.log는 id·수·코드만 |
+| 실행 이벤트·스냅샷 | RunSnapshot에 tail 없음, finished `{record}` | `RunSnapshot`에 최근 로그 200줄·dry-run 집계·`cancelRequested` 포함(재접속 시 `run:getActive`로 복구). finished에 `dryRunSummary`. log 200ms·최대 100줄(넘치면 `dropped`), stats 1초 1회 |
+| 앱 종료 (§8.5) | 확인 다이얼로그 | 확인 창 없이 실행을 취소하고 최대 10초 기다린 뒤 종료. 프로세스 종료를 확인하지 못하면 `active-run.json`을 남겨 다음 시작 때 `tasklist`로 이미지 이름을 확인한 뒤에만 종료(확인 못하면 PID 안내만). 시작 순서: 이력 읽기 → active-run 복구 → running → interrupted |
+| 프로세스 래퍼 | timeoutMs 필수 | `timeoutMs: number \| null`(null = 제한 없음, 실행에 사용), `onSpawn(pid)`, 결과 `closed`(종료 확인 여부) |
+| 실행 시간 제한 | - | 실행(copy·dry-run)에는 시간 제한을 두지 않는다. 사용자가 취소한다 |
 
 **Phase 7 전에 반영할 실측**: 내용이 같고 수정시간만 다른 파일은 diff에서 `modified(mtime)`이지만 rclone은
 복사하지 않고 시간만 갱신한다(dry-run `skipped: update modification time`). §8.4의
 `transfers == createFiles + updateFiles` 비교식은 이 경우 PLAN_DRIFT 오탐이 난다. 자세한 내용은
 `docs/knowhow/rclone-notes.md`.
+Phase 6의 `matchPlanWithDryRun`(`src/shared/run-plan.ts`)은 "복사 + 시간만 맞춤 == 새 파일 + 변경"으로 맞춰 보며,
+Phase 7 preflight도 이 함수를 쓴다.
 
 ---
 

@@ -3,8 +3,9 @@
  * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
- *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색)
- * 2회차: 재시작 후 작업·설정 유지, 이름순 첫 작업 자동 선택, 콘솔 오류 0건 확인
+ *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
+ *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영, 동기화 실제 실행 차단)
+ * 2회차: 재시작 후 작업·설정·lastRun 유지, active-run 없음, 이름순 첫 작업 자동 선택, 콘솔 오류 0건 확인
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
  * 실행: pnpm run build 후 node scripts/dev/drive-app.mjs   (Windows node)
@@ -15,7 +16,16 @@
 
 // ========== External imports ==========
 import { execFile, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    utimesSync,
+    writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -235,7 +245,7 @@ try {
     const keys = await a.evaluate("Object.keys(window.rclonegui).join(',')");
     f_Check(
         "window.rclonegui API",
-        keys === "app,settings,jobs,compare,rclone,wsl,dialog,system,events",
+        keys === "app,settings,jobs,compare,run,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -368,11 +378,12 @@ try {
     );
     const compareDisabled = await ui.disabled("비교");
     f_Check(
-        "저장 후 비교(버튼·탭) 활성, 실행은 비활성",
+        "저장 후 비교(버튼·탭)·미리보기 활성, 복사 실행은 비교 전 비활성",
         compareDisabled.length === 2 &&
             compareDisabled.every((d) => !d) &&
+            (await ui.disabled("미리보기")).every((d) => !d) &&
             (await ui.disabled("복사 실행")).every(Boolean) &&
-            (await ui.text()).includes("실행은 다음 단계에서 제공합니다"),
+            (await ui.text()).includes("먼저 비교하세요"),
         JSON.stringify(compareDisabled),
     );
     await ui.click("접근 확인");
@@ -582,6 +593,98 @@ try {
         dstAfter === "changed.txt,extra.txt,same.txt",
         dstAfter,
     );
+
+    // ===== Phase 6: 실행 화면 (미리보기 → 복사 실행) =====
+    await ui.click("미리보기");
+    const dryShown = await ui.until(
+        `document.querySelector("section[aria-label='미리보기 결과']")`,
+        20000,
+    );
+    const dryText = await a.evaluate(
+        `document.querySelector("section[aria-label='미리보기 결과']")?.innerText ?? ""`,
+    );
+    f_Check(
+        "미리보기 → 요약(대상에 2개 복사)·비교 결과와 일치",
+        dryShown &&
+            dryText.includes("실행하면 대상에 2개 복사") &&
+            dryText.includes("비교 결과와 같은 일을 합니다"),
+        dryShown ? dryText.replace(/\s+/g, " ") : (await ui.text()).slice(0, 300),
+    );
+    f_Check(
+        "미리보기는 대상 파일을 바꾸지 않음",
+        readdirSync(smokeDst).toSorted().join(",") === "changed.txt,extra.txt,same.txt" &&
+            readFileSync(join(smokeDst, "changed.txt"), "utf8") === "changed",
+    );
+    f_Check(
+        "미리보기 뒤에도 복사 실행 활성(비교 결과 유지)",
+        (await ui.disabled("복사 실행")).every((d) => !d),
+    );
+    await ui.click("복사 실행");
+    await f_Sleep(200);
+    const confirmText = await ui.dialogText();
+    f_Check(
+        "복사 실행 확인 창(일어날 일·부분 반영 안내)",
+        confirmText.includes("대상에 1개 복사, 1개 덮어씀") &&
+            confirmText.includes("이미 복사된 파일은 대상에 남습니다"),
+        confirmText,
+    );
+    await ui.click("복사 실행", { inDialog: true });
+    const copied = await ui.until(`document.body.innerText.includes("복사 완료")`, 20000);
+    f_Check(
+        "복사 실행 → 완료, 대상에 파일 반영(대상에만 있던 파일 유지)",
+        copied &&
+            readdirSync(smokeDst).toSorted().join(",") ===
+                "changed.txt,extra.txt,new.txt,same.txt" &&
+            readFileSync(join(smokeDst, "changed.txt"), "utf8") === "changed-longer",
+        readdirSync(smokeDst).toSorted().join(","),
+    );
+    f_Check(
+        "실행 후 복사 실행 다시 비활성(비교 결과 버림)",
+        (await ui.until(
+            `[...document.querySelectorAll("button")].filter((b) => b.textContent.trim() === "복사 실행").every((b) => b.disabled)`,
+        )) && (await ui.text()).includes("먼저 비교하세요"),
+    );
+    const uiJob = (await a.evaluate("window.rclonegui.jobs.list()")).data.find(
+        (j) => j.name === "UI 작업",
+    );
+    f_Check(
+        "실제 실행은 lastRun 갱신(rev 그대로)",
+        uiJob?.lastRun?.status === "success" && uiJob.rev === 0,
+        JSON.stringify(uiJob?.lastRun),
+    );
+    f_Check(
+        "실행 끝나면 run:getActive null·active-run.json 없음",
+        (await a.evaluate("window.rclonegui.run.getActive()")).data === null &&
+            !existsSync(join(userData, "active-run.json")),
+    );
+    // 동기화(삭제 포함) 작업: 화면 버튼 비활성, IPC로 직접 불러도 SAFETY_BLOCKED
+    const syncDst = join(smokeRoot, "sync-dst");
+    mkdirSync(syncDst);
+    writeFileSync(join(syncDst, "keep.txt"), "keep");
+    const syncJob = await a.evaluate(
+        `window.rclonegui.jobs.create({ ...${draft}, name: "sync 스모크", mode: "sync", source: ${js(smokeSrc)}, destination: ${js(syncDst)} })`,
+    );
+    await ui.clickJob("sync 스모크");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "sync 스모크"`);
+    f_Check(
+        "동기화 실행 버튼 비활성 + 이유",
+        (await ui.disabled("동기화 실행")).every(Boolean) &&
+            (await ui.text()).includes("동기화(삭제 포함) 실제 실행은 아직 지원하지 않습니다"),
+    );
+    const syncCmp = await a.evaluate(`window.rclonegui.compare.run(${js(syncJob.data?.id)})`);
+    const syncRun = await a.evaluate(
+        `window.rclonegui.run.start({ jobId: ${js(syncJob.data?.id)}, dryRun: false, planToken: ${js(syncCmp.data?.planToken ?? "x")}, confirmedDeletes: ${syncCmp.data?.summary.deleteFiles ?? 0} })`,
+    );
+    f_Check(
+        "동기화 실제 실행 직접 IPC → SAFETY_BLOCKED, 대상 그대로",
+        syncCmp.ok &&
+            !syncRun.ok &&
+            syncRun.error.code === "SAFETY_BLOCKED" &&
+            readdirSync(syncDst).join(",") === "keep.txt",
+        JSON.stringify(syncRun),
+    );
+    await a.evaluate(`window.rclonegui.jobs.remove(${js(syncJob.data?.id)})`);
+    await f_Sleep(300);
     const errors1 = [...a.consoleErrors];
     await f_Close(a);
 
@@ -592,6 +695,14 @@ try {
         "재시작 후 작업 유지",
         names.length === 2 && names.includes("스모크") && names.includes("UI 작업"),
         names.join(","),
+    );
+    const uiJobAfter = jobs.ok ? jobs.data.find((j) => j.name === "UI 작업") : null;
+    f_Check(
+        "재시작 후 lastRun 유지·active-run 없음·실행 없음",
+        uiJobAfter?.lastRun?.status === "success" &&
+            !existsSync(join(userData, "active-run.json")) &&
+            (await b.evaluate("window.rclonegui.run.getActive()")).data === null,
+        JSON.stringify(uiJobAfter?.lastRun),
     );
     const settings = await b.evaluate("window.rclonegui.settings.get()");
     f_Check(

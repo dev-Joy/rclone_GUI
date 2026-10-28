@@ -1,0 +1,88 @@
+/**
+ * RunView 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .RunView {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+        padding-top: 4px;
+
+        .banner {
+            margin: 0;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: var(--radius);
+            background: var(--panel);
+            font-size: 13px;
+        }
+
+        .progress,
+        .result {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--accent);
+            border-radius: var(--radius);
+            background: var(--panel);
+        }
+
+        .result[data-status="success"] {
+            border-left-color: var(--success);
+        }
+
+        .result[data-status="partial"],
+        .result[data-status="canceled"] {
+            border-left-color: var(--warning);
+        }
+
+        .result[data-status="failed"],
+        .result[data-status="blocked"] {
+            border-left-color: var(--danger);
+        }
+
+        .phase,
+        .resultTitle {
+            display: block;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .note,
+        .empty {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .empty {
+            padding: 16px 0;
+        }
+
+        .error {
+            padding: 10px 12px;
+            border: 1px solid var(--danger);
+            border-radius: var(--radius);
+            background: var(--danger-weak);
+        }
+
+        .errorMessage {
+            margin: 0;
+            color: var(--danger);
+        }
+
+        .detail {
+            margin: 4px 0 0;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+    }
+}

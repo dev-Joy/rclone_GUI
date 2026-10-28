@@ -106,11 +106,46 @@ describe("runProcess", () => {
         expect(r).toMatchObject({ canceled: true, timedOut: false });
     });
 
-    it("이미 취소된 signal이면 실행하지 않는다", async () => {
+    it("이미 취소된 signal이면 실행하지 않는다(closed: true, onSpawn 없음)", async () => {
         const ac = new AbortController();
         ac.abort();
-        const r = await f_Node("process.exit(0)", { signal: ac.signal });
-        expect(r).toMatchObject({ canceled: true, exitCode: null });
+        let spawned = 0;
+        const r = await f_Node("process.exit(0)", {
+            signal: ac.signal,
+            onSpawn: () => {
+                spawned += 1;
+            },
+        });
+        expect(r).toMatchObject({ canceled: true, exitCode: null, closed: true });
+        expect(spawned).toBe(0);
+    });
+
+    it("timeoutMs null이면 시간 제한 없이 끝날 때까지 기다린다(Infinity 즉시 실행 방지)", async () => {
+        const r = await f_Node("setTimeout(() => process.exit(0), 300)", { timeoutMs: null });
+        expect(r).toMatchObject({ exitCode: 0, timedOut: false, closed: true });
+        expect(r.durationMs).toBeGreaterThanOrEqual(250);
+        const inf = await f_Node("setTimeout(() => process.exit(0), 100)", {
+            timeoutMs: Number.POSITIVE_INFINITY,
+        });
+        expect(inf).toMatchObject({ exitCode: 0, timedOut: false });
+    });
+
+    it("onSpawn은 pid와 함께 한 번 부르고, 정상 종료는 closed: true", async () => {
+        const pids: number[] = [];
+        const r = await f_Node("console.log(process.pid)", {
+            onSpawn: (pid) => pids.push(pid),
+            onStdoutLine: () => undefined,
+        });
+        expect(pids).toHaveLength(1);
+        expect(r.stdout.trim()).toBe(String(pids[0]));
+        expect(r.closed).toBe(true);
+        const ac = new AbortController();
+        const pending = f_Node("setInterval(() => {}, 1000)", {
+            signal: ac.signal,
+            timeoutMs: null,
+        });
+        setTimeout(() => ac.abort(), 300);
+        expect((await pending).closed).toBe(true);
     });
 
     it("없는 실행 파일 → clsProcessSpawnError(ENOENT)", async () => {

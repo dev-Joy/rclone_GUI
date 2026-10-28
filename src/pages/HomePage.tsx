@@ -18,6 +18,7 @@ import { useCompareStore } from "@/stores/compare-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRcloneEnvStore } from "@/stores/rclone-env-store";
+import { useRunStore } from "@/stores/run-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore } from "@/stores/ui-store";
@@ -61,6 +62,7 @@ export default function HomePage(props: itfHomePageProps) {
     const view = useUiStore((s) => s.view);
     const subscribeCompare = useCompareStore((s) => s.subscribe);
     const showCompare = useCompareStore((s) => s.show);
+    const subscribeRun = useRunStore((s) => s.subscribe);
 
     // ========== Effect (부수 효과) ==========
     useEffect(() => {
@@ -78,6 +80,9 @@ export default function HomePage(props: itfHomePageProps) {
 
     // 비교 진행 이벤트 구독(진행 중인 비교는 getActive로 복구)
     useEffect(() => subscribeCompare(), [subscribeCompare]);
+
+    // 실행 이벤트 구독(진행 중인 실행은 getActive로 복구)
+    useEffect(() => subscribeRun(), [subscribeRun]);
 
     // 선택한 작업의 마지막 비교 결과를 main에서 받는다(화면에는 작업 1개 결과만 둔다)
     useEffect(() => {

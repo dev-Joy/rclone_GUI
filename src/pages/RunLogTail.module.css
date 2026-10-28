@@ -1,0 +1,71 @@
+/**
+ * RunLogTail 스타일
+ *
+ * @author dev-Joy 2026-10-28
+ */
+
+@layer pages {
+    .RunLogTail {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+
+        .head {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .file {
+            overflow: hidden;
+            font-family: var(--font-mono);
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .lines {
+            max-height: 280px;
+            margin: 0;
+            padding: 6px 8px;
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            list-style: none;
+        }
+
+        .line {
+            display: flex;
+            gap: 8px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+
+            &[data-level="warning"] {
+                color: var(--warning);
+            }
+
+            &[data-level="error"] {
+                color: var(--danger);
+            }
+        }
+
+        .time {
+            flex: 0 0 auto;
+            color: var(--muted);
+        }
+
+        .message {
+            min-width: 0;
+        }
+    }
+}

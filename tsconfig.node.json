@@ -26,6 +26,7 @@
         "src/lib/form-utils.ts",
         "src/lib/job-form.ts",
         "src/lib/path-display.ts",
+        "src/lib/run-view.ts",
         "src/lib/settings-form.ts",
         "src/lib/virtual-rows.ts",
         "tests/**/*",
