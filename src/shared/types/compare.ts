@@ -5,7 +5,7 @@
  */
 
 // ========== Internal imports ==========
-import type { typIsoDateString } from "@/shared/schemas/common";
+import type { typIsoDateString, typRunMode } from "@/shared/schemas/common";
 
 export type typCompareStatus = "onlySource" | "onlyDest" | "modified" | "equal" | "typeConflict";
 export type typModifiedReason = "size" | "mtime" | "hash" | "type" | "mtimeUnknown";
@@ -58,14 +58,49 @@ export interface itfCompareSummary {
     hashUnavailableFiles: number;
 }
 
+/** 결과에 비교 방식을 남긴다(화면 표시·Phase 7 게이트) */
+export interface itfCompareMethod {
+    checkHashes: boolean;
+    modtimeToleranceMs: number;
+    caseInsensitive: boolean;
+}
+
 export interface itfCompareResult {
     jobId: string;
     jobRev: number;
     createdAt: typIsoDateString;
     durationMs: number;
+    /** 비교할 때의 작업 모드(onlyDest 표시: copy 유지 / sync 삭제 예정) */
+    mode: typRunMode;
+    method: itfCompareMethod;
+    /** 대상 폴더가 없어 빈 목록으로 비교했다(실행하면 새로 만든다) */
+    destMissing: boolean;
     summary: itfCompareSummary;
     /** 경로 키 오름차순 */
     entries: itfDiffEntry[];
     warnings: string[];
     planToken: string;
+}
+
+/** 비교 진행 단계: 경로 확인 → 목록 읽기 → 차이 계산 */
+export type typComparePhase = "check" | "list" | "diff";
+/** 진행 이벤트 단계(종료 3종 포함) */
+export type typCompareEventPhase = typComparePhase | "done" | "failed" | "canceled";
+
+/** 진행 중인 비교(앱 전역 하나) */
+export interface itfCompareActive {
+    jobId: string;
+    phase: typComparePhase;
+    startedAt: typIsoDateString;
+    sourceFiles: number;
+    destFiles: number;
+}
+
+/** compare:progress 이벤트 */
+export interface itfCompareProgress {
+    jobId: string;
+    phase: typCompareEventPhase;
+    sourceFiles: number;
+    destFiles: number;
+    at: typIsoDateString;
 }

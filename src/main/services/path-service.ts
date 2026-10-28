@@ -22,6 +22,7 @@ import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclon
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import {
     canonicalLocation,
+    isRemoteAbsolute,
     LONG_PATH_WARN_LENGTH,
     parsePath,
     type itfParsedPath,
@@ -36,19 +37,27 @@ export interface itfPathServiceDeps {
     openDir: (p: string) => Promise<{ close(): Promise<void> }>;
     /** 로컬·UNC 응답 대기 상한. 기본 15초(중지된 WSL 배포판·끊긴 공유 대비) */
     localTimeoutMs?: number;
+    /** 응답 없는 fs 호출 수 제한. 기본 새 인스턴스 */
+    fsGate?: clsFsGate;
 }
 
 export type typPathServiceInit = Pick<itfPathServiceDeps, "rcloneEnv"> &
     Partial<Omit<itfPathServiceDeps, "rcloneEnv">>;
 
 const DEFAULT_LOCAL_TIMEOUT_MS = 15_000;
-const TIMEOUT = Symbol("timeout");
+/** fs 호출이 시간 안에 끝나지 않음 */
+export const FS_TIMEOUT = Symbol("timeout");
 const NETWORK_ERRORS = new Set(["ENOTFOUND", "EHOSTUNREACH", "ENETUNREACH", "EBADNETPATH"]);
+
+/** probe가 "없음"을 알릴 때의 문구 앞부분(네트워크·시간 초과와 구분용) */
+export const PROBE_MISSING_MESSAGE = "경로가 없습니다.";
 
 const MSG = {
     dir: "폴더가 있습니다.",
     file: "파일입니다. 폴더를 지정하세요.",
-    missing: "경로가 없습니다.",
+    missing: PROBE_MISSING_MESSAGE,
+    gateBusy:
+        "이전 확인이 아직 끝나지 않았습니다(응답 없는 경로). 네트워크·WSL 상태를 확인한 뒤 잠시 후 다시 시도하세요.",
 } as const;
 
 function f_Code(e: unknown): string {
@@ -56,19 +65,66 @@ function f_Code(e: unknown): string {
     return "UNKNOWN";
 }
 
-/** 시간 안에 끝나지 않으면 TIMEOUT. 늦게 끝난 쪽의 오류는 버린다 */
-async function f_WithTimeout<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMEOUT> {
-    let timer: NodeJS.Timeout | undefined;
-    p.catch(() => undefined);
-    try {
-        return await Promise.race([
-            p,
-            new Promise<typeof TIMEOUT>((r) => {
-                timer = setTimeout(() => r(TIMEOUT), ms);
-            }),
-        ]);
-    } finally {
-        if (timer) clearTimeout(timer);
+export interface itfFsGateOptions {
+    /** 동시에 끝나지 않은 fs 호출 상한. 기본 2(libuv 스레드 4개 중 2개는 저장·로그용으로 남긴다) */
+    maxPending: number;
+}
+
+/**
+ * 응답 없는 fs 호출 제한.
+ * 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를
+ * 반복 확인하면 스레드가 모두 묶여 설정 저장·로그 쓰기까지 멈추므로, 실제 호출이 끝날 때까지 수를 센다.
+ * - 같은 root(예: `\\wsl.localhost\distro`, `e:`)에서 시간 초과 후 아직 안 끝난 호출이 있으면 거부
+ * - 끝나지 않은 호출이 maxPending 이상이면 거부
+ */
+export class clsFsGate {
+    private readonly maxPending: number;
+    private pending = 0;
+    private readonly hungRoots = new Map<string, number>();
+
+    constructor(opts: Partial<itfFsGateOptions> = {}) {
+        this.maxPending = opts.maxPending ?? 2;
+    }
+
+    /** 실제로 끝나지 않은 fs 호출 수(시간 초과 포함) */
+    get pendingCount(): number {
+        return this.pending;
+    }
+
+    /** 막혔으면 null. 통과하면 task 결과(시간 초과면 FS_TIMEOUT)를 돌려준다. 늦게 끝난 쪽의 오류는 버린다 */
+    run<T>(
+        root: string,
+        task: () => Promise<T>,
+        timeoutMs: number,
+    ): Promise<T | typeof FS_TIMEOUT> | null {
+        if ((this.hungRoots.get(root) ?? 0) > 0 || this.pending >= this.maxPending) return null;
+        this.pending += 1;
+        let hung = false;
+        let p: Promise<T>;
+        try {
+            p = task();
+        } catch (e) {
+            p = Promise.reject(e);
+        }
+        const settled = p.finally(() => {
+            this.pending -= 1;
+            if (!hung) return;
+            const n = (this.hungRoots.get(root) ?? 1) - 1;
+            if (n > 0) this.hungRoots.set(root, n);
+            else this.hungRoots.delete(root);
+        });
+        settled.catch(() => undefined);
+        let timer: NodeJS.Timeout | undefined;
+        const timeout = new Promise<typeof FS_TIMEOUT>((r) => {
+            timer = setTimeout(() => {
+                hung = true;
+                this.hungRoots.set(root, (this.hungRoots.get(root) ?? 0) + 1);
+                r(FS_TIMEOUT);
+            }, timeoutMs);
+        });
+        return Promise.race([p, timeout]).finally(() => {
+            if (timer) clearTimeout(timer);
+        });
     }
 }
 
@@ -92,11 +148,14 @@ function f_CommonWarnings(p: itfParsedPath): string[] {
     return warnings;
 }
 
-/** remote 경로의 부모와 이름. "rr:a/b" → { parent: "rr:a", name: "b" }, "rr:" → null */
+/**
+ * remote 경로의 부모와 이름. 맨 앞 / 는 보존한다.
+ * "rr:a/b" → { parent: "rr:a", name: "b" }, "rr:/a" → { parent: "rr:/", name: "a" }, "rr:" → null
+ */
 export function remoteParentOf(p: itfParsedPath): { parent: string; name: string } | null {
     if (p.kind !== "remote" || p.segments.length === 0) return null;
     return {
-        parent: p.root + p.segments.slice(0, -1).join("/"),
+        parent: p.root + (isRemoteAbsolute(p) ? "/" : "") + p.segments.slice(0, -1).join("/"),
         name: p.segments.at(-1)!,
     };
 }
@@ -110,6 +169,7 @@ export class clsPathService {
             stat: (p) => stat(p),
             openDir: (p) => opendir(p),
             localTimeoutMs: DEFAULT_LOCAL_TIMEOUT_MS,
+            fsGate: new clsFsGate(),
             ...init,
         };
     }
@@ -141,9 +201,14 @@ export class clsPathService {
         const target =
             p.kind === "unc" && p.segments.length === 0 ? `${p.normalized}\\` : p.normalized;
         const isWsl = /^\\\\wsl(\.localhost|\$)\\/i.test(p.root);
-        let st: { isDirectory(): boolean } | typeof TIMEOUT;
+        const gate = this.deps.fsGate;
+        const gateRoot = canonicalLocation(p, true).root;
+        const gateBusy: itfPathProbe = { ...base, message: MSG.gateBusy };
+        let st: { isDirectory(): boolean } | typeof FS_TIMEOUT;
         try {
-            st = await f_WithTimeout(this.deps.stat(target), ms);
+            const pending = gate.run(gateRoot, () => this.deps.stat(target), ms);
+            if (pending === null) return gateBusy;
+            st = await pending;
         } catch (e) {
             const code = f_Code(e);
             if (code === "EACCES" || code === "EPERM") {
@@ -160,12 +225,16 @@ export class clsPathService {
             if (code === "ENOENT" || code === "ENOTDIR") return { ...base, message: MSG.missing };
             return { ...base, message: `경로를 확인하지 못했습니다(${code}).` };
         }
-        if (st === TIMEOUT) return { ...base, message: timeoutMsg };
+        if (st === FS_TIMEOUT) return { ...base, message: timeoutMsg };
         if (!st.isDirectory()) return { ...base, exists: true, message: MSG.file };
 
         try {
-            const dir = await f_WithTimeout(this.deps.openDir(target), ms);
-            if (dir === TIMEOUT) {
+            const pending = gate.run(gateRoot, () => this.deps.openDir(target), ms);
+            if (pending === null) {
+                return { ...gateBusy, exists: true, isDirectory: true };
+            }
+            const dir = await pending;
+            if (dir === FS_TIMEOUT) {
                 return { ...base, exists: true, isDirectory: true, message: timeoutMsg };
             }
             await dir.close();

@@ -51,6 +51,22 @@ describe("runProcess", () => {
         expect(lines).toEqual(["한글 줄"]);
     });
 
+    it("collectStdout:false → 줄 콜백은 모두 오고 stdout은 모으지 않는다", async () => {
+        const lines: string[] = [];
+        const r = await f_Node(
+            "for (let i = 0; i < 3000; i++) process.stdout.write('line' + i + '\\n')",
+            {
+                collectStdout: false,
+                maxStdoutBytes: 100,
+                onStdoutLine: (l) => lines.push(l),
+            },
+        );
+        expect(lines).toHaveLength(3000);
+        expect(lines.at(-1)).toBe("line2999");
+        expect(r).toMatchObject({ stdout: "", stdoutTruncated: false, exitCode: 0 });
+        expect(r.stdoutBytes).toHaveLength(0);
+    });
+
     it("stderr는 뒤쪽만 남기고, stdout 상한을 넘으면 truncated", async () => {
         const r = await f_Node(
             "process.stderr.write('x'.repeat(30000) + 'END'); process.stdout.write('y'.repeat(5000))",

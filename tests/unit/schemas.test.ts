@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
+import { zCompareJobInput } from "@/shared/schemas/compare";
 import { zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
 import { zSettings, zSettingsPatch } from "@/shared/schemas/settings";
@@ -128,5 +129,15 @@ describe("rclone·dialog·system IPC 입력 스키마", () => {
         );
         expect(zOpenExternalInput.safeParse({ url: "not a url" }).success).toBe(false);
         expect(zOpenExternalInput.safeParse({ url: "https://a.b", x: 1 }).success).toBe(false);
+    });
+});
+
+describe("비교 IPC 입력", () => {
+    it("zCompareJobInput: uuid만, 알 수 없는 키 거부", () => {
+        const jobId = "00000000-0000-4000-8000-000000000001";
+        expect(zCompareJobInput.safeParse({ jobId }).success).toBe(true);
+        expect(zCompareJobInput.safeParse({ jobId: "x" }).success).toBe(false);
+        expect(zCompareJobInput.safeParse({ jobId, force: true }).success).toBe(false);
+        expect(zCompareJobInput.safeParse({}).success).toBe(false);
     });
 });

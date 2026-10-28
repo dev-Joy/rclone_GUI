@@ -47,6 +47,16 @@
 - 설계와 다름: 모달 첫 포커스는 ZBCModal `initialFocus` prop 대신 ZBCButton `initialFocus`(→ `data-autofocus`)로 지정(jsx-a11y no-autofocus 회피)
 - 검증 피드백 반영: 설정 화면 미저장 변경도 이동 전 확인(`ui-store.leaveSettings`·공용 DiscardChangesModal), `syncFromJobs`는 같거나 오래된 rev 무시, ZBCModal 네이티브 close 동기화·바깥 클릭은 mousedown도 바깥일 때만, rclone.conf 라디오는 선택만(파일은 별도 버튼), 경로 버튼 aria-label에 원본/대상, 탭 id·aria-controls·tabpanel aria-labelledby 연결
 
+[TASK_006] : (2026-10-28) INT-001 Phase 5 — 비교 서비스와 비교 UI (관련 Intent: INT-001, T-05·T-06 완료 / T-07 활동 락 선행)
+- main: `services/compare-service`(경로 안전 검사 → rclone·설정 파일 → probe(대상 없음=빈 목록) → 원본·대상 lsjson 병렬 줄 단위 읽기 → diff → 경고·plan token, 한쪽 실패 시 다른 쪽 종료, exit 3 → `PATH_NOT_FOUND`, 취소 → `CANCELED`, 실패·취소 시 그 작업 캐시 삭제, rev·설정 지문 변경 시 무효화, 작업별 최대 3개 보관, `requirePlan` 게이트), `services/plan-token`, `services/activity-lock`(비교·실행 전역 단일 락), `ipc/compare`(run·cancel·get·getActive·진행 이벤트)
+- 파서·빌더: `createLsjsonLineParser`(stdout을 모으지 않고 줄 단위), `buildLsjsonArgs`에 `--ask-password=false`·`--hash-type md5/sha1`(`COMPARE_HASH_TYPES`)·`--fast-list`, probe fixture `lsjson-src-hashtype.*` 추가
+- 화면: `CompareView`(진행·취소·오류·stale/충돌/경고 배너·비교 방식), `CompareSummary`(모드별 카드: 복사·덮어씀·삭제/대상에만 있음(유지)·동일, 카드로 필터), `CompareToolbar`(상태·경로 검색 디바운스·동일 숨기기·표시 수), `CompareTable`(가상화·정렬·좌우 크기/수정시간), `JobWorkspace` 비교 버튼·탭 활성(실행은 비활성), `stores/compare-store`, `lib/{compare-view,virtual-rows,use-virtual-rows,use-debounced-value}`
+- 테스트: 단위 7파일(compare-service·plan-token·activity-lock·lsjson-line-parser·compare-view·virtual-rows·renderer/compare-store), 통합 `compare.local.test.ts` 7건(상태별 수·바이트, md5/sha1 해시 비교, alias remote 대상 = 로컬 결과, 대상 없음, 원본 없음, 목록 직전 원본 삭제(exit 3), 목록 중 취소 → CANCELED·캐시 미보존·락 해제), drive-app 53항목(Phase 4 "저장 후 비교 비활성" 검사를 "비교 활성·실행 비활성"으로, 변경 중 검사는 헤더 비교 버튼만, API 키에 compare 추가, 비교 실행 → 요약·행·동일 숨기기·상태 필터·경로 검색·대상 파일 무변경)
+- 린트 수정: `CompareTable` 스크롤 영역 `div role=region` → `section`, 가상화 spacer `tr`/`td`에 `aria-hidden` 포함
+- 문서: CHANGELOG, rclone-notes 10·11, MVP_SPEC 구현 반영(Phase 5 행·해시·결과 보관·버튼), intent T-05·T-06 체크, INDEX 7/15
+- 검증: check(unit 491), format:check, test:int 19(+1 skip: WSL 조건부), build, drive-app 빌드본 53 통과
+- 설계와 다름: UNC 조건부 통합 테스트(`compare.unc.test.ts`)는 만들지 않음(기존 조건부 패턴은 WSL 배포판 목록만 있음). `SummaryCards`·`StatusBadge` 파일 대신 `CompareSummary`·표 안 배지
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

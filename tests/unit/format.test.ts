@@ -2,7 +2,13 @@
 import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
-import { formatBytes, formatDuration, formatLocalDateTime, formatPercent } from "@/shared/format";
+import {
+    formatBytes,
+    formatDuration,
+    formatLocalDateTime,
+    formatModTime,
+    formatPercent,
+} from "@/shared/format";
 
 describe("format", () => {
     it.each([
@@ -33,5 +39,12 @@ describe("format", () => {
         expect(formatLocalDateTime("2026-10-28T00:00:00.000Z")).toMatch(
             /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
         );
+    });
+
+    it("formatModTime", () => {
+        expect(formatModTime(null)).toBe("—");
+        expect(formatModTime(Number.NaN)).toBe("—");
+        const ms = Date.UTC(2026, 0, 1, 0, 0, 0);
+        expect(formatModTime(ms)).toBe(formatLocalDateTime(new Date(ms).toISOString()));
     });
 });

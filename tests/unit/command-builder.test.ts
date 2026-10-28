@@ -14,6 +14,8 @@ import {
     buildTransferArgs,
     buildVersionArgs,
     clsCommandBlockedError,
+    COMPARE_HASH_TYPES,
+    type itfLsjsonArgsInput,
     type itfTransferArgsInput,
 } from "@/main/rclone/command-builder";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -42,6 +44,7 @@ describe("buildTransferArgs", () => {
     it("copy 기본 인자 배열이 정확한 순서로 나온다", () => {
         expect(buildTransferArgs(f_Input())).toEqual([
             "copy",
+            "--ask-password=false",
             "--config",
             "C:\\tmp\\rclone.conf",
             "--exclude",
@@ -124,20 +127,23 @@ describe("buildTransferArgs", () => {
 });
 
 describe("buildLsjsonArgs", () => {
+    const base: itfLsjsonArgsInput = {
+        path: "r:a",
+        configPath: "C:\\c.conf",
+        excludes: ["x/**"],
+        withHash: true,
+        hashTypes: [],
+        skipLinks: true,
+        fastList: false,
+    };
+
     it("비교용 lsjson 인자", () => {
-        expect(
-            buildLsjsonArgs({
-                path: "r:a",
-                configPath: "C:\\c.conf",
-                excludes: ["x/**"],
-                withHash: true,
-                skipLinks: true,
-            }),
-        ).toEqual([
+        expect(buildLsjsonArgs(base)).toEqual([
             "lsjson",
             "--recursive",
             "--files-only",
             "--no-mimetype",
+            "--ask-password=false",
             "--hash",
             "--skip-links",
             "--config",
@@ -147,6 +153,35 @@ describe("buildLsjsonArgs", () => {
             "--",
             "r:a",
         ]);
+    });
+
+    it("hashTypes는 --hash 뒤에 --hash-type으로 하나씩 넣는다", () => {
+        const args = buildLsjsonArgs({ ...base, hashTypes: COMPARE_HASH_TYPES });
+        const i = args.indexOf("--hash");
+        expect(args.slice(i, i + 5)).toEqual([
+            "--hash",
+            "--hash-type",
+            "md5",
+            "--hash-type",
+            "sha1",
+        ]);
+    });
+
+    it("withHash가 꺼져 있으면 hashTypes를 무시한다", () => {
+        const args = buildLsjsonArgs({ ...base, withHash: false, hashTypes: ["md5"] });
+        expect(args).not.toContain("--hash");
+        expect(args).not.toContain("--hash-type");
+    });
+
+    it("fastList를 켜면 --fast-list를 넣는다", () => {
+        expect(buildLsjsonArgs({ ...base, fastList: true })).toContain("--fast-list");
+        expect(buildLsjsonArgs(base)).not.toContain("--fast-list");
+    });
+
+    it("허용 명령 검사를 통과하고, 플래그처럼 보이는 경로는 -- 뒤에 둔다", () => {
+        const args = buildLsjsonArgs({ ...base, path: "--delete-excluded" });
+        expect(() => assertAllowedCommand(args)).not.toThrow();
+        expect(args.slice(-2)).toEqual(["--", "--delete-excluded"]);
     });
 });
 

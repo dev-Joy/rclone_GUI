@@ -12,6 +12,11 @@ import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
 import type { typSettings, typSettingsPatch } from "@/shared/schemas/settings";
 import type { typPickDirectoryInput, typPickFileInput } from "@/shared/schemas/system";
+import type {
+    itfCompareActive,
+    itfCompareProgress,
+    itfCompareResult,
+} from "@/shared/types/compare";
 
 export const IPC_CHANNELS = {
     appGetInfo: "app:getInfo",
@@ -24,6 +29,10 @@ export const IPC_CHANNELS = {
     jobsUpdate: "jobs:update",
     jobsDelete: "jobs:delete",
     jobsDuplicate: "jobs:duplicate",
+    compareRun: "compare:run",
+    compareCancel: "compare:cancel",
+    compareGet: "compare:get",
+    compareGetActive: "compare:getActive",
     rcloneDetect: "rclone:detect",
     rcloneListRemotes: "rclone:listRemotes",
     rcloneTestPath: "rclone:testPath",
@@ -35,6 +44,7 @@ export const IPC_CHANNELS = {
 
 export const IPC_EVENTS = {
     jobsChanged: "jobs:changed",
+    compareProgress: "compare:progress",
 } as const;
 
 export type typIpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -124,6 +134,16 @@ export interface itfRcloneGuiApi {
         remove(id: string): Promise<typApiResult<null>>;
         duplicate(id: string): Promise<typApiResult<typJob>>;
     };
+    compare: {
+        /** 원본·대상 목록을 읽어 비교한다(파일은 바꾸지 않음). 다른 비교·실행 중이면 BUSY */
+        run(jobId: string): Promise<typApiResult<itfCompareResult>>;
+        /** 진행 중인 비교를 취소한다. 없으면 아무것도 하지 않는다 */
+        cancel(jobId: string): Promise<typApiResult<null>>;
+        /** 유효한 마지막 비교 결과(작업·설정이 바뀌었으면 null) */
+        get(jobId: string): Promise<typApiResult<itfCompareResult | null>>;
+        /** 앱 전역에서 진행 중인 비교 */
+        getActive(): Promise<typApiResult<itfCompareActive | null>>;
+    };
     rclone: {
         /** force면 캐시를 무시하고 다시 감지한다 */
         detect(force?: boolean): Promise<typApiResult<itfRcloneEnvironment>>;
@@ -144,5 +164,6 @@ export interface itfRcloneGuiApi {
     };
     events: {
         onJobsChanged(cb: (e: itfJobsChangedEvent) => void): () => void;
+        onCompareProgress(cb: (e: itfCompareProgress) => void): () => void;
     };
 }

@@ -139,18 +139,35 @@ export interface itfLsjsonArgsInput {
     configPath: string | null;
     excludes: readonly string[];
     withHash: boolean;
+    /** withHash일 때만. 예: ["md5", "sha1"] → --hash-type md5 --hash-type sha1 */
+    hashTypes: readonly string[];
     skipLinks: boolean;
+    /** 지원 remote(Drive 등)에서 목록 호출 수를 줄인다. local에서는 무시됨 */
+    fastList: boolean;
 }
 
-/** 비교용 전체 목록: lsjson --recursive --files-only --no-mimetype */
+/**
+ * 비교에 쓰는 해시 종류. --hash만 주면 local은 지원 해시를 모두(13종) 계산·출력한다.
+ * md5·sha1은 local·Drive·S3(md5)·B2(sha1)에 공통이다.
+ */
+export const COMPARE_HASH_TYPES: readonly string[] = ["md5", "sha1"];
+
+/**
+ * 비교용 전체 목록:
+ * lsjson --recursive --files-only --no-mimetype --ask-password=false
+ *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--exclude P]... -- <path>
+ */
 export function buildLsjsonArgs(input: itfLsjsonArgsInput): string[] {
-    const args = ["lsjson", "--recursive", "--files-only", "--no-mimetype"];
-    if (input.withHash) args.push("--hash");
+    const args = ["lsjson", "--recursive", "--files-only", "--no-mimetype", NO_ASK_PASSWORD];
+    if (input.withHash) {
+        args.push("--hash");
+        for (const t of input.hashTypes) args.push("--hash-type", t);
+    }
     if (input.skipLinks) args.push("--skip-links");
+    if (input.fastList) args.push("--fast-list");
     f_PushCommon(args, input.configPath, input.excludes);
     args.push("--", input.path);
-    assertNoBlockedFlags(args);
-    return args;
+    return f_Finish(args);
 }
 
 export interface itfTransferArgsInput {
@@ -171,7 +188,7 @@ export interface itfTransferArgsInput {
 /** copy/sync 인자. 실제 sync는 maxDelete 없이 만들 수 없다 */
 export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     const { options: o } = input;
-    const args: string[] = [input.mode];
+    const args: string[] = [input.mode, NO_ASK_PASSWORD];
     f_PushCommon(args, input.configPath, input.excludes);
     args.push("--checkers", String(o.checkers), "--transfers", String(o.transfers));
     if (o.fastList) args.push("--fast-list");
@@ -192,8 +209,7 @@ export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     }
     args.push("-v", "--use-json-log", "--stats", "1s");
     args.push("--", input.source, input.destination);
-    assertNoBlockedFlags(args);
-    return args;
+    return f_Finish(args);
 }
 
 function f_PushCommon(

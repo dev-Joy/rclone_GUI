@@ -10,6 +10,7 @@
 
 // ========== Internal imports ==========
 import type { typErrorCode } from "@/shared/errors";
+import { looksLikeDriveLetterRemotePath } from "@/shared/remote-name";
 
 export type typPathKind = "local" | "unc" | "remote";
 
@@ -115,24 +116,29 @@ function f_ParseRemote(display: string, colon: number): typParseResult {
             "rclone remote 이름 형식이 올바르지 않습니다. 예: remote:폴더",
         );
     }
-    const parts = display
-        .slice(colon + 1)
-        .split(/[\\/]+/)
-        .filter((p) => p !== "");
+    const rest = display.slice(colon + 1);
+    const parts = rest.split(/[\\/]+/).filter((p) => p !== "");
     if (parts.some((p) => p === "." || p === "..")) {
         return f_Issue("VALIDATION", "remote 경로에는 . 또는 .. 를 쓸 수 없습니다.");
     }
     const root = `${name}:`;
+    // sftp·ftp·smb 등에서 "name:/abs"(절대)와 "name:rel"(홈 기준)은 다른 위치라 맨 앞 / 를 보존한다
+    const absolute = /^[\\/]/.test(rest);
     return {
         ok: true,
         path: {
             kind: "remote",
             display,
-            normalized: root + parts.join("/"),
+            normalized: root + (absolute ? "/" : "") + parts.join("/"),
             root,
             segments: parts,
         },
     };
+}
+
+/** remote 경로가 맨 앞 / 로 시작하는지(절대 경로). local·UNC는 false */
+export function isRemoteAbsolute(p: itfParsedPath): boolean {
+    return p.kind === "remote" && p.normalized.startsWith(`${p.root}/`);
 }
 
 /** 경로 원문을 분류하고 정규화한다. 지원하지 않는 형태는 이유와 함께 거부한다. */
@@ -165,6 +171,8 @@ function f_KeyPart(part: string, caseInsensitive: boolean): string {
  * - UNC host `wsl$` → `wsl.localhost`
  * - `\\wsl.localhost\<distro>\mnt\<letter>\...` → `<letter>:\...` (WSL automount 가정)
  * 드라이브 문자·host·share는 항상 대소문자를 무시한다(Windows 규칙).
+ * remote의 절대(`name:/a`)·상대(`name:a`)는 구분하지 않는다. Drive·S3 등에서는 같은 위치이므로
+ * 보수적으로 같게 보고 동일·중첩을 막는다(sftp에서는 다른 폴더여도 막힐 수 있음 — 안전 쪽 오탐).
  */
 export function canonicalLocation(
     p: itfParsedPath,
@@ -261,6 +269,35 @@ export function checkPathPair(
         }
     }
     return { errors, warnings };
+}
+
+/**
+ * 비교·실행 시작 전 검사. checkPathPair(S1~S4a)에 더해 드라이브 상대 경로(`x:folder`, `C:foo`)를 거부한다.
+ * Windows의 rclone은 이 형태를 드라이브의 현재 폴더 기준 경로로 해석해 위치가 정해지지 않는다.
+ * 저장(job-store)은 checkPathPair만 써서 경고로 남기고, 비교(compare-service)·실행(Phase 6 run-service)은
+ * 이 함수를 쓴다. 드라이브 상대 오류를 먼저 둔다.
+ */
+export function checkRunPaths(
+    sourceRaw: string,
+    destRaw: string,
+    caseInsensitive: boolean,
+): itfPathPairCheck {
+    const pair = checkPathPair(sourceRaw, destRaw, caseInsensitive);
+    const driveErrors: itfPathIssue[] = [];
+    for (const [label, raw] of [
+        ["원본", sourceRaw],
+        ["대상", destRaw],
+    ] as const) {
+        if (!looksLikeDriveLetterRemotePath(raw)) continue;
+        const shown = raw.trim();
+        const letter = shown.charAt(0).toUpperCase();
+        const fixed = `${letter}:\\${shown.slice(2)}`;
+        driveErrors.push({
+            code: "PATH_INVALID",
+            message: `${label}: ‘${shown}’는 Windows에서 ${letter} 드라이브의 현재 폴더 기준 경로로 해석되어 위치가 정해지지 않습니다. ${fixed}처럼 ‘:’ 뒤에 \\를 넣으세요. rclone remote라면 이름을 두 글자 이상으로 바꾸세요.`,
+        });
+    }
+    return { errors: [...driveErrors, ...pair.errors], warnings: pair.warnings };
 }
 
 /** WSL 리눅스 절대 경로를 UNC로 바꾼다. 예: ("Distro", "/home/a") → \\wsl.localhost\Distro\home\a */

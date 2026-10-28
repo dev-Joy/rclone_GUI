@@ -1,6 +1,7 @@
 /**
  * 선택한 작업 화면: 헤더(이름·경로·모드, 복제·삭제·비교·실행)와 탭(비교·실행·이력·작업 설정).
- * 이번 단계에서는 "작업 설정" 탭만 동작하고 비교·실행 버튼은 항상 비활성이다(이유를 함께 표시).
+ * "비교" 버튼은 저장된 작업에서 비교를 시작하고 비교 탭으로 옮긴다(안 되면 이유를 표시).
+ * 실행(복사·동기화) 버튼은 다음 단계까지 항상 비활성이다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -13,22 +14,31 @@ import ZBCBadge from "@/components/ZBCBadge";
 import ZBCButton from "@/components/ZBCButton";
 import ZBCModal from "@/components/ZBCModal";
 import ZBCTabs, { type itfZBCTab } from "@/components/ZBCTabs";
+import { canStartCompare } from "@/lib/compare-view";
 import { sortJobs } from "@/lib/job-form";
+import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore, type typJobTab } from "@/stores/ui-store";
+import CompareView from "./CompareView";
 import JobEditor from "./JobEditor";
 import styles from "./JobWorkspace.module.css";
 
 const MODE_LABEL = { copy: "복사", sync: "동기화(삭제 포함)" } as const;
 
-const TABS: readonly itfZBCTab<typJobTab>[] = [
-    { id: "compare", label: "비교", disabled: true, badge: "준비 중" },
-    { id: "run", label: "실행", disabled: true, badge: "준비 중" },
-    { id: "history", label: "이력", disabled: true, badge: "준비 중" },
-    { id: "edit", label: "작업 설정" },
-];
+const RUN_REASON = "실행은 다음 단계에서 제공합니다.";
+
+/** 비교 탭은 저장된 작업에서만 연다 */
+function f_Tabs(isNew: boolean): readonly itfZBCTab<typJobTab>[] {
+    return [
+        { id: "compare", label: "비교", disabled: isNew },
+        { id: "run", label: "실행", disabled: true, badge: "준비 중" },
+        { id: "history", label: "이력", disabled: true, badge: "준비 중" },
+        { id: "edit", label: "작업 설정" },
+    ];
+}
 
 export default function JobWorkspace() {
     // ========== hook & state 변수 선언 ==========
@@ -46,16 +56,26 @@ export default function JobWorkspace() {
     const tab = useUiStore((s) => s.tab);
     const setTab = useUiStore((s) => s.setTab);
     const pushToast = useToastStore((s) => s.push);
+    const compareActive = useCompareStore((s) => s.active);
+    const compareRunningJobId = useCompareStore((s) => s.runningJobId);
+    const runCompare = useCompareStore((s) => s.run);
+    const caseInsensitive = useSettingsStore(
+        (s) => s.settings?.compare.caseInsensitivePaths ?? true,
+    );
 
     // ========== 내부 변수 (_V) ==========
     const job = jobId === null ? null : (jobs.find((j) => j.id === jobId) ?? null);
     const isNew = jobId === null;
     const title = job?.name ?? (draft?.name.trim() || "새 작업");
+    // 새 작업에서는 비교 탭을 열 수 없으므로 작업 설정으로 보인다
+    const activeTab: typJobTab = isNew && tab === "compare" ? "edit" : tab;
+    const running = runningCompare(compareActive, compareRunningJobId);
+    const comparing = job !== null && running?.jobId === job.id;
+    const compareCheck = canStartCompare({ job, dirty, running, caseInsensitive });
+    const compareReason = compareCheck.ok ? null : compareCheck.reason;
     const runReason = isNew
         ? "먼저 작업을 저장하세요."
-        : dirty
-          ? "저장하지 않은 변경이 있습니다. 저장한 뒤 비교·실행할 수 있습니다."
-          : "비교·실행은 다음 단계에서 제공합니다.";
+        : [compareReason, RUN_REASON].filter(Boolean).join(" ");
     const duplicateReason = dirty ? "저장하지 않은 변경이 있어 복제할 수 없습니다." : undefined;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
@@ -75,6 +95,11 @@ export default function JobWorkspace() {
         setConfirmDelete(false);
         if (r.ok) pushToast("success", `‘${job.name}’ 작업을 지웠습니다.`);
         else pushToast("error", r.error.message);
+    };
+    const h_Compare = () => {
+        if (!job) return;
+        setTab("compare");
+        void runCompare(job.id);
     };
     const h_Duplicate = () => void f_Duplicate();
     const h_AskDelete = () => setConfirmDelete(true);
@@ -128,10 +153,17 @@ export default function JobWorkspace() {
                         </>
                     )}
                     <span className={styles.spacer} />
-                    <ZBCButton disabled title={runReason}>
-                        비교
+                    <ZBCButton
+                        onClick={h_Compare}
+                        disabled={!compareCheck.ok}
+                        title={
+                            compareReason ??
+                            "원본·대상 목록을 읽어 차이를 봅니다(파일은 바꾸지 않음)."
+                        }
+                    >
+                        {comparing ? "비교 중…" : "비교"}
                     </ZBCButton>
-                    <ZBCButton variant="primary" disabled title={runReason}>
+                    <ZBCButton variant="primary" disabled title={RUN_REASON}>
                         {job?.mode === "sync" ? "동기화 실행" : "복사 실행"}
                     </ZBCButton>
                 </div>
@@ -140,19 +172,30 @@ export default function JobWorkspace() {
 
             <ZBCTabs
                 id="job-tabs"
-                tabs={TABS}
-                active={tab}
+                tabs={f_Tabs(isNew)}
+                active={activeTab === "compare" ? "compare" : "edit"}
                 onChange={setTab}
                 aria-label="작업 화면"
             />
-            <div
-                className={styles.panel}
-                role="tabpanel"
-                id="job-tabs-panel-edit"
-                aria-labelledby="job-tabs-tab-edit"
-            >
-                <JobEditor />
-            </div>
+            {activeTab === "compare" && job ? (
+                <div
+                    className={styles.panel}
+                    role="tabpanel"
+                    id="job-tabs-panel-compare"
+                    aria-labelledby="job-tabs-tab-compare"
+                >
+                    <CompareView job={job} />
+                </div>
+            ) : (
+                <div
+                    className={styles.panel}
+                    role="tabpanel"
+                    id="job-tabs-panel-edit"
+                    aria-labelledby="job-tabs-tab-edit"
+                >
+                    <JobEditor />
+                </div>
+            )}
 
             <ZBCModal
                 open={confirmDelete}

@@ -8,7 +8,12 @@ import { afterAll, describe, expect, it } from "vitest";
 import { clsAppError } from "@/main/lib/app-error";
 import { assertAllowedCommand } from "@/main/rclone/command-builder";
 import type { itfProcessResult, typRunRclone } from "@/main/rclone/process";
-import { clsPathService, remoteParentOf } from "@/main/services/path-service";
+import {
+    clsFsGate,
+    clsPathService,
+    FS_TIMEOUT,
+    remoteParentOf,
+} from "@/main/services/path-service";
 import { parsePath } from "@/shared/path-utils";
 import { readFixture } from "./fixtures";
 
@@ -214,6 +219,12 @@ describe("remote probe (가짜 rclone)", () => {
         expect(calls[0]!.at(-1)).toBe("test-remote:");
     });
 
+    it("맨 앞 / remote는 부모도 절대 경로(rr:/)로 나열한다", async () => {
+        const { svc, calls } = f_Remote({ stdout: "[]" });
+        await svc.probe({ path: "test-remote:/a" });
+        expect(calls[0]!.slice(-2)).toEqual(["--", "test-remote:/"]);
+    });
+
     it("configPath override를 그대로 넘긴다", async () => {
         const { svc, calls, overrides } = f_Remote(parent);
         await svc.probe({ path: "test-remote:base/sub", configPath: "C:\\fake\\other.conf" });
@@ -253,8 +264,94 @@ describe("remoteParentOf", () => {
     it("경계값", () => {
         expect(remoteParentOf(f_P("rr:a/b"))).toEqual({ parent: "rr:a", name: "b" });
         expect(remoteParentOf(f_P("rr:a"))).toEqual({ parent: "rr:", name: "a" });
-        expect(remoteParentOf(f_P("rr:/a//b/"))).toEqual({ parent: "rr:a", name: "b" });
+        expect(remoteParentOf(f_P("rr:/a//b/"))).toEqual({ parent: "rr:/a", name: "b" });
+        expect(remoteParentOf(f_P("rr:/a/b"))).toEqual({ parent: "rr:/a", name: "b" });
+        expect(remoteParentOf(f_P("rr:/a"))).toEqual({ parent: "rr:/", name: "a" });
         expect(remoteParentOf(f_P("rr:"))).toBeNull();
         expect(remoteParentOf(f_P("C:\\a"))).toBeNull();
+    });
+});
+
+function f_Never(): Promise<never> {
+    return new Promise<never>(() => undefined);
+}
+
+describe("clsFsGate (응답 없는 fs 호출 제한)", () => {
+    const never = f_Never;
+
+    it("시간 초과 후 같은 root는 fs 호출 없이 거부, 다른 root는 통과", async () => {
+        const gate = new clsFsGate();
+        expect(await gate.run("e:", never, 10)).toBe(FS_TIMEOUT);
+        let called = false;
+        expect(
+            gate.run(
+                "e:",
+                async () => {
+                    called = true;
+                    return 1;
+                },
+                10,
+            ),
+        ).toBeNull();
+        expect(called).toBe(false);
+        expect(await gate.run("f:", async () => 2, 10)).toBe(2);
+        expect(gate.pendingCount).toBe(1);
+    });
+
+    it("끝나지 않은 호출이 maxPending(2)이면 세 번째는 거부", () => {
+        const gate = new clsFsGate();
+        void gate.run("a:", never, 60_000);
+        void gate.run("b:", never, 60_000);
+        expect(gate.run("c:", async () => 1, 10)).toBeNull();
+        expect(gate.pendingCount).toBe(2);
+    });
+
+    it("늦게라도 끝나면 다시 허용, 늦은 오류는 버린다", async () => {
+        const gate = new clsFsGate();
+        const ctl: { fail?: (e: Error) => void } = {};
+        const late = new Promise<number>((_r, j) => {
+            ctl.fail = j;
+        });
+        expect(await gate.run("e:", () => late, 10)).toBe(FS_TIMEOUT);
+        expect(gate.run("e:", async () => 1, 10)).toBeNull();
+        ctl.fail?.(new Error("late"));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(gate.pendingCount).toBe(0);
+        expect(await gate.run("e:", async () => 3, 10)).toBe(3);
+    });
+
+    it("동기 예외도 오류로 돌려주고 수를 되돌린다", async () => {
+        const gate = new clsFsGate();
+        await expect(
+            gate.run(
+                "e:",
+                () => {
+                    throw new Error("sync");
+                },
+                10,
+            ),
+        ).rejects.toThrow("sync");
+        expect(gate.pendingCount).toBe(0);
+    });
+
+    it("probe: 응답 없는 UNC를 다시 확인하면 stat을 부르지 않고 안내한다", async () => {
+        let stats = 0;
+        const svc = new clsPathService({
+            rcloneEnv: {
+                require: async () => ({ binaryPath: BIN, configPath: null }),
+                resolveConfigFor: async () => null,
+            },
+            stat: () => {
+                stats += 1;
+                return never();
+            },
+            localTimeoutMs: 20,
+        });
+        const first = await svc.probe({ path: "\\\\wsl.localhost\\Distro\\home\\x" });
+        expect(first.message).toContain("응답이 없습니다");
+        const second = await svc.probe({ path: "\\\\wsl.localhost\\Distro\\home\\y" });
+        expect(second.exists).toBe(false);
+        expect(second.message).toContain("이전 확인이 아직 끝나지 않았습니다");
+        expect(stats).toBe(1);
     });
 });

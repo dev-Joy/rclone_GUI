@@ -156,6 +156,21 @@ try {
         "--",
         join(work, "missing", "deep"),
     ]);
+
+    // Phase 5: 비교 목록 (해시 종류 제한, 암호 입력 대기 금지)
+    f_Probe("lsjson-src-hashtype", [
+        ...ls,
+        ask,
+        "--hash",
+        "--hash-type",
+        "md5",
+        "--hash-type",
+        "sha1",
+        "--skip-links",
+        ...common,
+        "--",
+        src,
+    ]);
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

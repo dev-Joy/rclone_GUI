@@ -27,6 +27,8 @@ export const RCLONE_TIMEOUTS = {
     configFile: 10_000,
     listRemotes: 20_000,
     probe: 60_000,
+    /** 비교용 전체 목록(lsjson --recursive) 한 쪽 */
+    compare: 30 * 60_000,
 } as const;
 
 export const NO_CONFIG_WARNING = "rclone 설정 파일이 없습니다. 로컬·UNC 경로만 쓸 수 있습니다.";

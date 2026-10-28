@@ -9,6 +9,7 @@ import { app, shell } from "electron";
 
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
+import { registerCompareIpc, type itfCompareIpcDeps } from "@/main/ipc/compare";
 import { registerDialogIpc, type itfDialogIpcDeps } from "@/main/ipc/dialog";
 import { handle } from "@/main/ipc/handle";
 import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
@@ -20,7 +21,8 @@ import { IPC_CHANNELS, type itfAppInfo, type itfAppNotice } from "@/shared/ipc-c
 import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
-export interface itfIpcServices extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps {
+export interface itfIpcServices
+    extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps, itfCompareIpcDeps {
     settings: clsSettingsStore;
     jobs: clsJobStore;
     paths: { userData: string; logs: string };
@@ -57,6 +59,7 @@ export function registerIpc(s: itfIpcServices): void {
     handle(s, IPC_CHANNELS.jobsDelete, ({ id }) => s.jobs.remove(id), zJobId);
     handle(s, IPC_CHANNELS.jobsDuplicate, ({ id }) => s.jobs.duplicate(id), zJobId);
 
+    registerCompareIpc(s);
     registerRcloneIpc(s);
     registerWslIpc(s);
     registerDialogIpc(s);

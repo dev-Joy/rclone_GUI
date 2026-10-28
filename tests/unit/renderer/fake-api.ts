@@ -1,6 +1,7 @@
 /**
  * 화면 스토어 테스트용 가짜 window.rclonegui. jobs CRUD와 설정은 메모리에서 처리하고
  * 경로 검사는 main과 같은 checkPathPair로 SAFETY_BLOCKED 등을 돌려준다.
+ * 비교(compare.*)는 응답을 테스트가 직접 제어한다(run·get resolver, active, 진행 이벤트).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -9,6 +10,11 @@
 import { createDefaultSettings } from "@/shared/defaults";
 import { ERROR_MESSAGES, type typErrorCode } from "@/shared/errors";
 import type { itfJobsChangedEvent, itfRcloneGuiApi } from "@/shared/ipc-contract";
+import type {
+    itfCompareActive,
+    itfCompareProgress,
+    itfCompareResult,
+} from "@/shared/types/compare";
 import { checkPathPair } from "@/shared/path-utils";
 import type { typApiResult } from "@/shared/schemas/common";
 import type { typJob, typJobDraft } from "@/shared/schemas/job";
@@ -24,6 +30,20 @@ export interface itfFakeApi {
     jobs: () => typJob[];
     /** 다음 listRemotes 응답을 직접 제어 (configPath별 resolve 함수) */
     remotesResolvers: Array<{ configPath: string | null; resolve: (v: string[]) => void }>;
+    /** compare.run 응답 제어 */
+    compareRunResolvers: Array<{
+        jobId: string;
+        resolve: (r: typApiResult<itfCompareResult>) => void;
+    }>;
+    /** compare.get 응답 제어 */
+    compareGetResolvers: Array<{
+        jobId: string;
+        resolve: (r: itfCompareResult | null) => void;
+    }>;
+    /** compare.getActive 응답 */
+    setCompareActive: (a: itfCompareActive | null) => void;
+    /** main의 compare:progress 이벤트를 흉내 낸다 */
+    emitCompareProgress: (e: itfCompareProgress) => void;
 }
 
 let uuidSeq = 0;
@@ -83,6 +103,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     const calls: string[] = [];
     const listeners = new Set<(e: itfJobsChangedEvent) => void>();
     const remotesResolvers: itfFakeApi["remotesResolvers"] = [];
+    const compareRunResolvers: itfFakeApi["compareRunResolvers"] = [];
+    const compareGetResolvers: itfFakeApi["compareGetResolvers"] = [];
+    const progressListeners = new Set<(e: itfCompareProgress) => void>();
+    let compareActive: itfCompareActive | null = null;
     // 시드(fakeUuid(1~99))와 겹치지 않게 100부터
     let seq = 100;
 
@@ -170,6 +194,29 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 return f_Ok(structuredClone(copy));
             },
         },
+        compare: {
+            run: (jobId) => {
+                calls.push(`compare.run:${jobId}`);
+                return new Promise((resolve) => compareRunResolvers.push({ jobId, resolve }));
+            },
+            cancel: (jobId) => {
+                calls.push(`compare.cancel:${jobId}`);
+                return f_Ok(null);
+            },
+            get: (jobId) => {
+                calls.push(`compare.get:${jobId}`);
+                return new Promise((resolve) =>
+                    compareGetResolvers.push({
+                        jobId,
+                        resolve: (r) => resolve({ ok: true, data: r }),
+                    }),
+                );
+            },
+            getActive: () => {
+                calls.push("compare.getActive");
+                return f_Ok(compareActive);
+            },
+        },
         rclone: {
             detect: () => notImplemented("rclone.detect"),
             listRemotes: (configPath) => {
@@ -194,6 +241,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 listeners.add(cb);
                 return () => listeners.delete(cb);
             },
+            onCompareProgress: (cb) => {
+                progressListeners.add(cb);
+                return () => progressListeners.delete(cb);
+            },
         },
     };
 
@@ -206,5 +257,13 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         jobs: () => structuredClone(jobs),
         remotesResolvers,
+        compareRunResolvers,
+        compareGetResolvers,
+        setCompareActive: (a) => {
+            compareActive = a;
+        },
+        emitCompareProgress: (e) => {
+            for (const l of progressListeners) l(e);
+        },
     };
 }

@@ -22,6 +22,11 @@ export interface itfRunProcessOptions {
     env?: NodeJS.ProcessEnv;
     /** 기본 16 MiB. 넘으면 그 뒤는 모으지 않고 stdoutTruncated = true */
     maxStdoutBytes?: number;
+    /**
+     * 기본 true. false면 stdout을 모으지 않고 onStdoutLine만 부른다
+     * (stdout "", stdoutBytes 빈 버퍼, stdoutTruncated false). 큰 목록을 줄 단위로 읽을 때 쓴다.
+     */
+    collectStdout?: boolean;
     /** 기본 20 KiB. stderr는 뒤쪽만 남긴다 */
     stderrTailBytes?: number;
     onStdoutLine?: (line: string) => void;
@@ -132,6 +137,7 @@ export const runProcess: typRunProcess = (file, args, opts) => {
     const started = Date.now();
     const maxStdout = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
     const tailBytes = opts.stderrTailBytes ?? DEFAULT_STDERR_TAIL_BYTES;
+    const collect = opts.collectStdout ?? true;
 
     return new Promise<itfProcessResult>((resolve, reject) => {
         const stdoutChunks: Buffer[] = [];
@@ -221,7 +227,7 @@ export const runProcess: typRunProcess = (file, args, opts) => {
         });
         child.stdout.on("data", (chunk: Buffer) => {
             outLines.push(chunk);
-            if (stdoutTruncated) return;
+            if (!collect || stdoutTruncated) return;
             if (stdoutSize + chunk.length > maxStdout) {
                 stdoutChunks.push(chunk.subarray(0, maxStdout - stdoutSize));
                 stdoutSize = maxStdout;

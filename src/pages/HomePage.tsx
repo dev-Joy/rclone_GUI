@@ -14,6 +14,7 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCToast from "@/components/ZBCToast";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfAppInfo, itfAppNotice } from "@/shared/ipc-contract";
+import { useCompareStore } from "@/stores/compare-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRcloneEnvStore } from "@/stores/rclone-env-store";
@@ -58,6 +59,8 @@ export default function HomePage(props: itfHomePageProps) {
     const editorOpen = useJobEditorStore((s) => s.open);
     const openNew = useJobEditorStore((s) => s.openNew);
     const view = useUiStore((s) => s.view);
+    const subscribeCompare = useCompareStore((s) => s.subscribe);
+    const showCompare = useCompareStore((s) => s.show);
 
     // ========== Effect (부수 효과) ==========
     useEffect(() => {
@@ -72,6 +75,14 @@ export default function HomePage(props: itfHomePageProps) {
         void loadJobs();
         return subscribeJobs();
     }, [loadJobs, loadSettings, pushToast, subscribeJobs]);
+
+    // 비교 진행 이벤트 구독(진행 중인 비교는 getActive로 복구)
+    useEffect(() => subscribeCompare(), [subscribeCompare]);
+
+    // 선택한 작업의 마지막 비교 결과를 main에서 받는다(화면에는 작업 1개 결과만 둔다)
+    useEffect(() => {
+        void showCompare(selectedJobId);
+    }, [selectedJobId, showCompare]);
 
     // rclone 감지는 화면이 뜬 뒤 비동기로 한다(main 시작을 늦추지 않음)
     useEffect(() => {

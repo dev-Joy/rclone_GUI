@@ -55,3 +55,16 @@
 - 결과: 폴더(`IsDir:true`, `Size:0`)와 파일이 함께 나오고 `Name` 필드가 있다. `--no-modtime`이면 `ModTime:""`. 부모가 없으면 stdout `[`, stderr `directory not found`, exit 3. 대상이 파일이면 `lsjson -- <파일>`은 그 파일 1건을 exit 0으로 돌려준다.
 - 영향: remote 경로 확인은 대상 자체가 아니라 **부모를 나열해 이름이 정확히 같은 항목**을 찾는다(`clsPathService`). exit 3은 "경로가 없습니다", 그 밖의 exit≠0은 `RCLONE_FAILED` + 안내(토큰 만료 → `rclone config reconnect <name>:`).
 - `--ask-password=false`는 `config file`·`listremotes`·`lsjson`에서 오류 없이 받아진다(통합 테스트로 확인). 새 빌더에만 붙였고 기존 `buildLsjsonArgs`/`buildTransferArgs`는 Phase 5 전에 따로 검토한다.
+
+## 2026-10-28 · rclone v1.75.1 · Windows 11 x64 (Phase 5: 비교 목록)
+
+### 10. `lsjson --hash`만 주면 local은 해시 13종을 모두 계산한다 → `--hash-type`으로 제한
+- 명령: `lsjson --recursive --files-only --no-mimetype --ask-password=false --hash [--hash-type md5 --hash-type sha1] --skip-links -- <임시 원본>` (fixture `lsjson-src-hash.*`, `lsjson-src-hashtype.*`)
+- 결과: `--hash`만이면 `Hashes`에 blake3·crc32·dropbox·hidrive·mailru·md5·quickxor·sha1·sha256·sha512·whirlpool·xxh128·xxh3 13종이 들어간다(같은 5개 파일 stdout 4,882바이트). `--hash-type md5 --hash-type sha1`이면 `Hashes`에 `md5`·`sha1`만 남는다(1,082바이트). exit 0, stderr 없음. `--hash-type`은 여러 번 줄 수 있다.
+- 결과: stdout은 `[` / 항목 한 줄씩(마지막 줄 빼고 끝에 `,`) / `]` 형태로 한 줄에 한 항목이다.
+- 영향: 비교 목록은 `COMPARE_HASH_TYPES`(md5·sha1, local·Drive·S3·B2 공통)만 요청해 해시 계산·출력량을 줄인다. stdout을 모으지 않고 줄 단위 파서(`createLsjsonLineParser`)로 읽는다. 해시 비교는 양쪽에 같은 알고리즘이 있을 때만 하고, 없으면 크기만 비교했다고 경고한다.
+
+### 11. 대상을 alias remote로 지정해도 로컬과 같은 목록·같은 비교 결과
+- 명령: 같은 임시 대상 폴더를 로컬 경로와 `<alias>:<하위 경로>`로 각각 `lsjson`(통합 테스트 `compare.local.test.ts`)
+- 결과: 경로·크기·수정시간이 같아 비교 요약·항목 상태가 완전히 같다.
+- 영향: remote 경로도 같은 비교 경로를 탄다. 취소는 프로세스 트리 종료 후 `CANCELED`로 처리하고 그 작업의 이전 비교 결과를 지운다. 목록 직전에 폴더가 사라지면 lsjson exit 3(노트 2)을 `PATH_NOT_FOUND`로 바꾸고 stdout은 쓰지 않는다.

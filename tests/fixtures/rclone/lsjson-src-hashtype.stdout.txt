@@ -1,0 +1,7 @@
+[
+{"Path":"changed.txt","Name":"changed.txt","Size":14,"ModTime":"2026-01-01T09:10:00.0000000+09:00","IsDir":false,"Hashes":{"md5":"acc3a7446ff430e1874917c59041418f","sha1":"0c35158d0f1d528200a8a205caa13d24641b2a35"}},
+{"Path":"same.txt","Name":"same.txt","Size":4,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false,"Hashes":{"md5":"51037a4a37730f52c8732586d3aaa316","sha1":"ff3390557335ba88d37755e41514beb03bc499ec"}},
+{"Path":"touch.txt","Name":"touch.txt","Size":5,"ModTime":"2026-01-01T09:10:00.0000000+09:00","IsDir":false,"Hashes":{"md5":"b96ba508e3690f5168e4b0e68b15b178","sha1":"f4d1f0193879cba82d65c5752c4ba5cbb43a7188"}},
+{"Path":"한글 파일.txt","Name":"한글 파일.txt","Size":7,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false,"Hashes":{"md5":"8ab3b19e134f01fbaf94b8e15f3df090","sha1":"1d1e8914a3d46b4097dec7a7370a1cc102848137"}},
+{"Path":"sub/new.txt","Name":"new.txt","Size":3,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false,"Hashes":{"md5":"22af645d1859cb5ca6da0c484f1f37ea","sha1":"c2a6b03f190dfb2b4aa91f8af8d477a9bc3401dc"}}
+]

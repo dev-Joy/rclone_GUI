@@ -12,6 +12,8 @@ import { setupAppPaths } from "@/main/app-paths";
 import { registerIpc } from "@/main/ipc/register";
 import { clsLogger } from "@/main/lib/logger";
 import { clsRcloneEnv } from "@/main/rclone/detect";
+import { clsActivityLock } from "@/main/services/activity-lock";
+import { clsCompareService } from "@/main/services/compare-service";
 import { clsPathService } from "@/main/services/path-service";
 import { clsWslService } from "@/main/services/wsl";
 import { clsHistoryStore } from "@/main/store/history-store";
@@ -108,6 +110,26 @@ async function f_Start(): Promise<void> {
     const rcloneEnv = new clsRcloneEnv({ getSettings: () => settings.get(), logger });
     const pathService = new clsPathService({ rcloneEnv });
     const wsl = new clsWslService();
+    // 비교·실행·자동 실행이 함께 쓰는 전역 활동 락 (Phase 6 실행 서비스도 이것을 받는다)
+    const activity = new clsActivityLock();
+    const compare = new clsCompareService({
+        jobs,
+        settings,
+        rcloneEnv,
+        pathService,
+        activity,
+        logger,
+        emit: (e) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(IPC_EVENTS.compareProgress, e);
+            }
+        },
+    });
+    // 앱을 닫으면 진행 중인 비교(rclone 프로세스 트리)를 끝낸다. 확인 창은 Phase 6 실행과 함께
+    app.on("before-quit", () => {
+        const active = compare.getActive();
+        if (active) compare.cancel(active.jobId);
+    });
 
     registerIpc({
         logger,
@@ -119,6 +141,7 @@ async function f_Start(): Promise<void> {
         rcloneEnv,
         pathService,
         wsl,
+        compare,
         getWindow: () => mainWindow,
     });
 

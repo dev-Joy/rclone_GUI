@@ -2,7 +2,8 @@
  * 빌드본(out/) 스모크 확인. 임시 userData로 앱을 두 번 띄워 원격 디버깅(CDP)으로 화면을 조작한다.
  * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
- *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면
+ *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
+ *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색)
  * 2회차: 재시작 후 작업·설정 유지, 이름순 첫 작업 자동 선택, 콘솔 오류 0건 확인
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
@@ -14,7 +15,7 @@
 
 // ========== External imports ==========
 import { execFile, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -203,6 +204,19 @@ const smokeSrc = join(smokeRoot, "src");
 const smokeDst = join(smokeRoot, "dst");
 mkdirSync(smokeSrc);
 mkdirSync(smokeDst);
+// 비교 시나리오용 파일: 원본만 1, 변경 1(크기 다름), 동일 1, 대상만 1
+const SMOKE_MTIME = new Date("2026-01-01T00:00:00Z");
+for (const [dir, name, text] of [
+    [smokeSrc, "new.txt", "new"],
+    [smokeSrc, "changed.txt", "changed-longer"],
+    [smokeSrc, "same.txt", "same"],
+    [smokeDst, "changed.txt", "changed"],
+    [smokeDst, "same.txt", "same"],
+    [smokeDst, "extra.txt", "extra"],
+]) {
+    writeFileSync(join(dir, name), text);
+    utimesSync(join(dir, name), SMOKE_MTIME, SMOKE_MTIME);
+}
 // alias remote 2개: 한 글자 이름(x, Windows에서 드라이브 문자로 해석됨)과 일반 이름. 둘 다 임시 폴더를 가리킨다
 writeFileSync(
     smokeConf,
@@ -221,7 +235,7 @@ try {
     const keys = await a.evaluate("Object.keys(window.rclonegui).join(',')");
     f_Check(
         "window.rclonegui API",
-        keys === "app,settings,jobs,rclone,wsl,dialog,system,events",
+        keys === "app,settings,jobs,compare,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -352,11 +366,14 @@ try {
                 `document.querySelector("nav [aria-current=true]")?.textContent.includes("UI 작업")`,
             )),
     );
+    const compareDisabled = await ui.disabled("비교");
     f_Check(
-        "저장 후에도 비교·실행 비활성(Phase 4)",
-        (await ui.disabled("비교")).every(Boolean) &&
+        "저장 후 비교(버튼·탭) 활성, 실행은 비활성",
+        compareDisabled.length === 2 &&
+            compareDisabled.every((d) => !d) &&
             (await ui.disabled("복사 실행")).every(Boolean) &&
-            (await ui.text()).includes("비교·실행은 다음 단계에서 제공합니다"),
+            (await ui.text()).includes("실행은 다음 단계에서 제공합니다"),
+        JSON.stringify(compareDisabled),
     );
     await ui.click("접근 확인");
     f_Check(
@@ -367,8 +384,11 @@ try {
     // 저장하지 않은 변경
     await ui.fill("input[name=name]", "UI 작업 수정");
     f_Check(
-        "변경 중: 비교·실행·복제 비활성 + 안내",
-        (await ui.disabled("비교")).every(Boolean) &&
+        "변경 중: 비교 버튼·실행·복제 비활성 + 안내(비교 탭은 저장된 결과 보기용)",
+        (await a.evaluate(
+            `[...document.querySelectorAll("header button")].filter((b) => b.textContent.trim() === "비교").map((b) => b.disabled).join()`,
+        )) === "true" &&
+            (await ui.disabled("복사 실행")).every(Boolean) &&
             (await ui.disabled("복제")).every(Boolean) &&
             (await ui.text()).includes("저장하지 않은 변경이 있습니다"),
     );
@@ -501,6 +521,67 @@ try {
     );
     await ui.click("작성 취소");
     await f_Sleep(200);
+
+    // ===== Phase 5: 비교 화면 (임시 원본·대상, 읽기 전용) =====
+    await ui.clickJob("UI 작업");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`);
+    await ui.click("비교");
+    const compared = await ui.until(`document.querySelector("ul[aria-label='비교 요약']")`, 20000);
+    const summaryText = await a.evaluate(
+        `document.querySelector("ul[aria-label='비교 요약']")?.innerText ?? ""`,
+    );
+    f_Check(
+        "비교 실행 → 요약(복사 1·덮어씀 1·대상만 1·동일 1)",
+        compared &&
+            summaryText.includes("대상에 1개 복사") &&
+            summaryText.includes("1개 덮어씀") &&
+            summaryText.includes("1개 대상에만 있음(유지)") &&
+            summaryText.includes("동일 1개"),
+        compared ? summaryText.replace(/\s+/g, " ") : (await ui.text()).slice(0, 300),
+    );
+    const f_Rows = () =>
+        a.evaluate(
+            `[...document.querySelectorAll("tr[data-status]")].map((r) => r.dataset.status).toSorted().join(",")`,
+        );
+    const f_Count = () =>
+        a.evaluate(`document.querySelector("output[aria-live]")?.textContent ?? ""`);
+    f_Check(
+        "기본(동일 숨기기) → 동일 행 제외 3행",
+        (await f_Rows()) === "modified,onlyDest,onlySource" &&
+            (await a.evaluate(`document.querySelector("#compare-hide-equal")?.checked`)) === true,
+        await f_Rows(),
+    );
+    await a.evaluate(`document.querySelector("#compare-hide-equal").click()`);
+    await f_Sleep(200);
+    f_Check(
+        "동일 숨기기 해제 → 4행",
+        (await f_Rows()) === "equal,modified,onlyDest,onlySource",
+        `${await f_Rows()} / ${await f_Count()}`,
+    );
+    await ui.fill("#compare-status", "modified");
+    await f_Sleep(200);
+    f_Check("상태 필터(변경) → 1행", (await f_Rows()) === "modified", await f_Rows());
+    await ui.fill("#compare-status", "all");
+    await ui.fill("#compare-query", "EXTRA");
+    f_Check(
+        "경로 검색(대소문자 무시) → 대상만 1행",
+        await ui.until(
+            `[...document.querySelectorAll("tr[data-status]")].map((r) => r.dataset.status).join(",") === "onlyDest"`,
+        ),
+        await f_Rows(),
+    );
+    await ui.fill("#compare-query", "");
+    await ui.click("작업 설정");
+    f_Check(
+        "작업 설정 탭으로 돌아가기",
+        await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`),
+    );
+    const dstAfter = readdirSync(smokeDst).toSorted().join(",");
+    f_Check(
+        "비교는 대상 파일을 바꾸지 않음",
+        dstAfter === "changed.txt,extra.txt,same.txt",
+        dstAfter,
+    );
     const errors1 = [...a.consoleErrors];
     await f_Close(a);
 

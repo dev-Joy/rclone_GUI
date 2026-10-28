@@ -1,5 +1,5 @@
 /**
- * 화면 표시용 포맷 함수 (bytes / duration / percent / 로컬 시각).
+ * 화면 표시용 포맷 함수 (bytes / duration / percent / 로컬 시각 / 파일 수정시간).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -44,10 +44,20 @@ function p(n: number): string {
     return String(n).padStart(2, "0");
 }
 
+function f_Local(d: Date): string {
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 /** UTC ISO 문자열을 로컬 시각 "YYYY-MM-DD HH:mm:ss"로. 잘못된 값이면 "-" */
 export function formatLocalDateTime(iso: string | null): string {
     if (!iso) return "-";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "-";
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    return f_Local(d);
+}
+
+/** 파일 수정시간(ms)을 로컬 "YYYY-MM-DD HH:mm:ss"로. 모르면(null·잘못된 값) "—" */
+export function formatModTime(ms: number | null): string {
+    if (ms === null || !Number.isFinite(ms)) return "—";
+    return f_Local(new Date(ms));
 }

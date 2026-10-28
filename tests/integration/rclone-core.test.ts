@@ -60,7 +60,9 @@ function f_List(path: string) {
             configPath: conf,
             excludes: ["*.tmp"],
             withHash: false,
+            hashTypes: [],
             skipLinks: true,
+            fastList: false,
         }),
     );
     expect(r.exit).toBe(0);
@@ -189,7 +191,9 @@ describe.skipIf(!HAS_RCLONE)("rclone 실제 동작 (임시 폴더)", () => {
                 configPath: conf,
                 excludes: [],
                 withHash: false,
+                hashTypes: [],
                 skipLinks: true,
+                fastList: false,
             }),
         );
         expect(r.exit).toBe(3);

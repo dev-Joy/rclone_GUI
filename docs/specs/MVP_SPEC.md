@@ -41,6 +41,10 @@
 | 한 글자 remote | - | Windows rclone은 `x:경로`를 드라이브로 해석 → remote 목록에서 고를 수 없게 하고 편집기·rclone 설정에 경고. 입력란에 `x:폴더`를 직접 쓰면 **저장은 허용하고 경고만**(실제 X 드라이브일 수 있음). `parsePath`는 그대로 |
 | 화면 검증 문구 | zod 메시지 | 스키마 메시지는 그대로 두고 화면(`job-form`/`settings-form`)에서 한국어 문구로 바꿈. 비교·실행 버튼은 Phase 4에서 항상 비활성 |
 | 화면 스토어 테스트 | - | `tests/unit/renderer/*`는 web tsconfig로만 타입 검사(node에서 제외). DOM 무의존 lib 4개는 node tsconfig `include`에 명시 |
+| Phase 5 파일 | `rclone/lsjson.ts`, `features/compare/{CompareView,SummaryCards,CompareToolbar,CompareTable,StatusBadge}.tsx`, `stores/compare.ts` | `main/parsers/lsjson-parser.ts`(`createLsjsonLineParser` 줄 단위), `main/services/{compare-service,plan-token,activity-lock}.ts`, `main/ipc/compare.ts`, `shared/schemas/compare.ts`, `pages/{CompareView,CompareSummary,CompareToolbar,CompareTable}.tsx`(상태 배지는 표 안), `stores/compare-store.ts`, `lib/{compare-view,virtual-rows,use-virtual-rows,use-debounced-value}.ts`. 통합 `compare.local.test.ts`만(UNC 조건부 테스트는 없음) |
+| 비교 목록 해시 | `--hash` | `--hash --hash-type md5 --hash-type sha1`(`COMPARE_HASH_TYPES`). `--hash`만이면 local이 13종을 계산 |
+| 비교 결과 보관 | lastCompare | main 메모리에 작업별 최대 3개. 실패·취소·작업 rev·설정(rclone 경로·설정 파일·대소문자) 변경 시 버림. 비교 중 작업이 바뀌면 `PLAN_STALE`. 대상 폴더가 없으면 빈 목록으로 비교하고 경고 |
+| 비교·실행 버튼 | Phase 4 비활성 | 저장된 작업은 비교 버튼·탭 활성(변경 중·경로 오류·비교 중이면 버튼만 비활성+이유). 실행은 Phase 6까지 비활성 |
 
 **Phase 7 전에 반영할 실측**: 내용이 같고 수정시간만 다른 파일은 diff에서 `modified(mtime)`이지만 rclone은
 복사하지 않고 시간만 갱신한다(dry-run `skipped: update modification time`). §8.4의
