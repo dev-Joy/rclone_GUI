@@ -1,7 +1,7 @@
 /**
  * oxlint에 없는 규칙 두 가지만 검사한다.
  * 1) child_process 옵션 `shell: true` 금지 (AGENTS.md 안전 규칙 1)
- * 2) type/interface/class 이름 접두사 typ/itf/cls (AGENTS.md 개발 규칙)
+ * 2) type/interface/class 이름 접두사 typ/itf/cls (AGENTS.md §4.2 이름 접두사)
  *
  * @author dev-Joy 2026-10-28
  */

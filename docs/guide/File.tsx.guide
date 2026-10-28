@@ -1,0 +1,235 @@
+/**
+ *  TypeScript/React File Guide (Electron)
+ *
+ *  @author dev-Joy    YYYY-MM-DD  **<- 필수**
+ *  @description
+ *      - 신규 .ts / .tsx 파일의 구조와 작성 스타일 규격
+ *      - rcloneGUI는 Electron 앱이라 파일이 속한 프로세스에 따라 쓸 수 있는 것이 다르다
+ *      - 1~2장은 공통, 3장은 화면(renderer) 컴포넌트, 4장은 main/preload/shared 모듈
+ */
+
+/* ------------------------------------------------------------------
+ *  1. 프로세스 경계 (Electron)
+ * ------------------------------------------------------------------
+ *  - src/main      : Node + Electron main API 사용 가능. rclone 실행, 파일 저장, IPC 핸들러
+ *  - src/preload   : contextBridge로 window.rclonegui 함수만 노출. 로직을 두지 않는다
+ *  - src/shared    : 타입 · IPC 계약 · zod 스키마. Node · DOM · electron import 금지
+ *  - 화면(renderer): src/renderer(진입점), src/components(공용), src/pages(페이지/레이아웃),
+ *                    src/stores, src/lib
+ *      - Node API(fs, path, child_process …)와 electron, "@/main/**", "@/preload/**" import 금지
+ *      - main과는 window.rclonegui.* 으로만 통신한다 (계약: src/shared/ipc-contract.ts)
+ *      - window.rclonegui 응답은 typResult<T> 이므로 unwrap()으로 풀고, 실패는 notify로 알린다
+ *  - 라우팅: 화면은 file:// 로 열리므로 BrowserRouter(createBrowserRouter)를 쓰지 않는다.
+ *            라우터가 필요해지면 HashRouter(createHashRouter)를 쓴다.
+ *            (웹 프로젝트 가이드의 RouterProvider / HydrateFallback 항목은 해당 없음)
+ *  - 보안: contextIsolation · sandbox 를 끄지 않는다. CSP 때문에 인라인 <script> 를 쓰지 않는다
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+ *  2. 공통 규칙
+ * ------------------------------------------------------------------
+ *  - 들여쓰기 공백 4칸, 문자열은 "" 기본
+ *  - 접두사: type -> typ, interface -> itf, class -> cls, 내부 함수 -> f_, handle 함수 -> h_
+ *  - import: 상위 폴더는 "@/" (= src), 같은 폴더와 하위 폴더는 "./"
+ *  - 파일 최상단 JSDoc: 제목 / @author dev-Joy YYYY-MM-DD (필수) / @description
+ *  - import 는 External imports, Internal imports 두 블록으로 나눈다
+ *  - any 금지. 외부 입력은 unknown 으로 받아 zod 로 파싱한다
+ * ------------------------------------------------------------------ */
+
+/* ==================================================================
+ *  3. 화면 컴포넌트 (.tsx) 템플릿
+ *      - 공용 컴포넌트 : src/components/ZBCXxx.tsx  (+ ZBCXxx.css, ZBC.css 에서 @import)
+ *      - 페이지/레이아웃: src/pages/Xxx.tsx          (+ Xxx.module.css, File.module.css.guide 참고)
+ * ================================================================== */
+
+/**
+ *  Job page
+ *
+ *  @author dev-Joy    YYYY-MM-DD  **<- 필수**
+ *  @description
+ *      - 작업 하나의 비교 결과와 실행 버튼을 보여주는 페이지
+ *
+ */
+
+/**
+ *  External imports
+ */
+import React, { useState, useEffect } from "react";
+
+/**
+ *  Internal imports
+ */
+import { ZBCButton } from "@/components/ZBCButton";
+import { unwrap, useApp } from "@/stores/app-store";
+import type { typJob } from "@/shared/types";
+import styles from "./JobPage.module.css";
+
+
+
+
+
+/**
+ *  Props & Types 정의
+ */
+interface itfJobPageProps1 {
+    title?: string;
+}
+export interface itfJobPageProps2 {
+    title?: string;
+}
+type typJobPageProps1 = {
+    title?: string;
+};
+export type typJobPageProps2 = {
+    title?: string;
+};
+
+const propsDefault: itfJobPageProps1 = {
+    title: "rcloneGUI",
+};
+
+
+
+
+/**
+ *  내부 함수
+ *      - 컴포넌트 상태에 기대지 않는 순수 함수만 둔다 (f_ 접두사)
+ */
+
+
+
+
+
+/**
+ *  메인 컴포넌트
+ */
+export default function JobPage(iProps: itfJobPageProps1 = propsDefault) {
+    // 넘어온 값이 없는 항목만 기본값으로 채운다. (React 는 props 객체를 항상 넘기므로
+    // 매개변수 기본값만으로는 빠진 항목이 채워지지 않는다)
+    // 필수 props 가 있는 컴포넌트는 "= propsDefault" 를 빼고 propsDefault 를
+    // "satisfies Partial<itfXxxProps>" 로 선언한다.
+    const { title } = { ...propsDefault, ...iProps };
+
+    //
+    // hook & state 변수 선언
+    //
+
+    /** state 용도 주석 */
+    const [state1, setState1] = useState<unknown>(null);
+
+    /** 전역 상태는 필요한 조각만 고른다 */
+    const notify = useApp((s) => s.notify);
+
+    //
+    // Effect (부수 효과)
+    //
+    useEffect(() => {
+        // 마운트 시 실행할 로직
+        // main 이 보내는 이벤트를 구독했다면 반드시 해제 함수를 돌려준다
+        return window.rclonegui.run.onEvent((event) => {
+            // ...
+        });
+    }, []);
+
+    //
+    // 내부 변수
+    //
+    const _V = {
+        /** 변수 용도 주석 */
+        key1: "value",
+        key2: 12345,
+    };
+
+    //
+    // 이벤트 핸들러 및 내부 함수
+    //
+
+    /** 내부 함수 용도 주석 */
+    function f_Func1() {
+        // ...
+    }
+
+    /** handle 함수 용도 주석 - main 호출은 window.rclonegui 으로만, 실패는 notify 로 */
+    async function h_Change() {
+        try {
+            const jobs: typJob[] = await unwrap(window.rclonegui.jobs.list());
+            // ...
+        } catch (error) {
+            notify("error", error instanceof Error ? error.message : String(error));
+        }
+    }
+
+    return (
+        <>
+            {/* 컴포넌트 JSX 랜더링 */}
+            {/* 페이지/레이아웃: 최상단 className 은 컴포넌트명 (styles.JobPage), 내부는 prefix 없이 */}
+            {/* 공용 컴포넌트: className="zbc zbcXxx", 내부 dom 은 zbcXxx 접두사 */}
+        </>
+    );
+}
+
+/* ==================================================================
+ *  4. main / preload / shared 모듈 (.ts) 템플릿
+ *      - 컴포넌트가 아니므로 Props · hook · Effect 섹션은 없다
+ *      - 머리말, import 구분, 접두사 규칙은 3장과 같다
+ * ================================================================== */
+
+/**
+ *  Run store
+ *
+ *  @author dev-Joy    YYYY-MM-DD  **<- 필수**
+ *  @description
+ *      - 실행 기록을 runs/<jobId>/<runId> 폴더에 저장
+ *
+ */
+
+/**
+ *  External imports
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+/**
+ *  Internal imports
+ */
+import type { itfRunMeta } from "@/shared/types";
+import { readJson } from "./json-file";
+
+
+
+
+
+/**
+ *  Types 정의
+ */
+export interface itfRunStoreOptions {
+    baseDir: string;
+}
+
+
+
+
+/**
+ *  내부 함수
+ */
+
+/** 내부 함수 용도 주석 */
+function f_Func1() {
+    // ...
+}
+
+
+
+
+
+/**
+ *  메인 클래스 / export 함수
+ *      - rclone 은 spawn/execFile(exe, args[], { shell: false }) 로만 실행한다
+ *      - IPC 핸들러는 src/main/ipc 에서만 등록하고, 입력은 zod 스키마로 검증한다
+ *      - IPC 응답은 { ok: true, data } | { ok: false, error: { code, message } }
+ */
+export class clsRunStore {
+    // ...
+}
+
+/** HydrateFallback, RouterProvider 는 Electron 화면에 없으므로 구현하지 말 것 */

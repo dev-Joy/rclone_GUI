@@ -1,5 +1,5 @@
 /**
- * IPC 채널과 타입의 단일 정의 (AGENTS.md §4, MVP_SPEC §12).
+ * IPC 채널과 타입의 단일 정의 (AGENTS.md §4.6, MVP_SPEC §12).
  * preload 번들에 들어가므로 런타임 import는 두지 않는다(타입만 import).
  * 채널은 기능이 구현될 때 추가한다.
  *
