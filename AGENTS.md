@@ -12,7 +12,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 ## 1. 안전 규칙 (예외 없음)
 
 1. rclone은 `spawn`/`execFile(rcloneExe, args[], { shell: false })`로만 실행한다. 명령 문자열 조립과 `shell: true` 금지.
-2. 실제 동기화(`--dry-run` 없는 sync/copy)는 한 곳에서만 시작하고, 미리보기 실행 ID와 확인한 삭제 수 없이는 부를 수 없게 유지한다.
+2. 실제 동기화(`--dry-run` 없는 sync/copy)는 한 곳에서만 시작하고, 비교 계획 토큰과 확인한 삭제 수 없이는 부를 수 없게 유지한다. 삭제가 있는 sync는 직전에 자동 사전 확인 dry-run을 거친다(작업 옵션으로 끄면 `--max-delete`가 백스톱).
 3. 위험 옵션(`--delete-excluded`, `--no-check-dest`, `--max-delete -1`, `--dump*`, 백업 없는 `--ignore-errors`)은 `command-builder.ts`의 차단 목록을 거친다.
 4. 테스트·예제·로그에 실제 사용자 경로(`E:\…`, `\\wsl.localhost\…`, `GDRIVE-…`)와 rclone.conf 내용을 넣지 않는다. 테스트는 임시 폴더만 쓴다.
 5. renderer에서 Node API를 쓰지 않는다. `contextIsolation`과 `sandbox`를 끄지 않는다.

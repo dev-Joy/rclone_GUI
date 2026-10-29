@@ -1,0 +1,8 @@
+[
+{"Path":"changed.txt","Name":"changed.txt","Size":14,"ModTime":"2026-01-01T09:10:00.0000000+09:00","IsDir":false},
+{"Path":"extra.txt","Name":"extra.txt","Size":5,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"same.txt","Name":"same.txt","Size":4,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"touch.txt","Name":"touch.txt","Size":5,"ModTime":"2026-01-01T09:10:00.0000000+09:00","IsDir":false},
+{"Path":"한글 파일.txt","Name":"한글 파일.txt","Size":7,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"sub/new.txt","Name":"new.txt","Size":3,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false}
+]

@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
     appendTail,
     canStartRun,
+    deleteConfirmInfo,
+    deleteSamples,
     dryRunHeadline,
     progressPercent,
     realRunConfirmText,
@@ -14,7 +16,7 @@ import {
 import { normalizeStats } from "@/main/parsers/log-parser";
 import { createDefaultSettings } from "@/shared/defaults";
 import type { typJob } from "@/shared/schemas/job";
-import type { itfCompareResult, itfCompareSummary } from "@/shared/types/compare";
+import type { itfCompareResult, itfCompareSummary, itfDiffEntry } from "@/shared/types/compare";
 import type { itfRunLogLine } from "@/shared/types/run";
 
 const JOB_ID = "00000000-0000-4000-8000-000000000001";
@@ -85,6 +87,27 @@ function f_Result(over: Partial<itfCompareResult> = {}): itfCompareResult {
     };
 }
 
+function f_SyncResult(over: Partial<itfCompareSummary> = {}): itfCompareResult {
+    return f_Result({ mode: "sync", summary: f_Summary(over) });
+}
+
+function f_Side(path: string, size: number) {
+    return { path, size, modTimeMs: 0 };
+}
+
+function f_Entry(path: string, status: "onlyDest" | "onlySource" | "equal"): itfDiffEntry {
+    return {
+        path,
+        status,
+        reasons: [],
+        source: status === "onlyDest" ? null : f_Side(path, 1),
+        dest: status === "onlySource" ? null : f_Side(path, 7),
+        caseOnly: false,
+        hashAlgo: null,
+        hashUnavailable: false,
+    };
+}
+
 function f_Input(over: Partial<itfCanStartRunInput> = {}): itfCanStartRunInput {
     return {
         job: f_Job(),
@@ -137,17 +160,14 @@ describe("canStartRun", () => {
         expect(canStartRun(f_Input({ dryRun: true, job: f_Job({ mode: "sync" }) })).ok).toBe(true);
     });
 
-    it("실제 실행 차단: sync → 비교 없음/다른 작업 → 낡음·rev 변경 → 충돌 → 바꿀 파일 없음", () => {
-        expect(f_Reason(f_Input({ job: f_Job({ mode: "sync" }) }))).toContain(
-            "아직 지원하지 않습니다",
-        );
+    it("실제 실행 차단: 비교 없음/다른 작업 → 낡음·rev 변경 → 충돌 → 바꿀 파일 없음", () => {
         expect(f_Reason(f_Input({ compare: null }))).toBe("먼저 비교하세요.");
         expect(f_Reason(f_Input({ compare: f_Result({ jobId: "x" }) }))).toBe("먼저 비교하세요.");
         expect(f_Reason(f_Input({ nowMs: T0 + 11 * 60_000 }))).toContain("11분");
         expect(f_Reason(f_Input({ job: f_Job({ rev: 1 }) }))).toContain("작업 설정이 바뀌었습니다");
         expect(
             f_Reason(f_Input({ compare: f_Result({ summary: f_Summary({ conflictFiles: 1 }) }) })),
-        ).toContain("겹치거나");
+        ).toContain("겹치는");
         expect(
             f_Reason(f_Input({ compare: f_Result({ summary: f_Summary({ caseOnlyFiles: 1 }) }) })),
         ).toContain("대소문자");
@@ -158,6 +178,82 @@ describe("canStartRun", () => {
                 }),
             ),
         ).toContain("복사할 파일이 없습니다");
+    });
+
+    it("sync 실제 실행: 유효한 비교면 가능, 빈 원본·오류 무시는 main과 같은 문구로 차단, 바꿀 것 없으면 차단", () => {
+        const sync = f_Job({ mode: "sync" });
+        expect(canStartRun(f_Input({ job: sync, compare: f_SyncResult() }))).toEqual({ ok: true });
+        // 삭제만 있어도 실행 가능
+        expect(
+            canStartRun(
+                f_Input({ job: sync, compare: f_SyncResult({ createFiles: 0, updateFiles: 0 }) }),
+            ).ok,
+        ).toBe(true);
+        expect(
+            f_Reason(
+                f_Input({
+                    job: sync,
+                    compare: f_SyncResult({ sourceFiles: 0, createFiles: 0, updateFiles: 0 }),
+                }),
+            ),
+        ).toContain("원본에 파일이 없어");
+        expect(
+            f_Reason(
+                f_Input({
+                    job: f_Job({ mode: "sync", options: { ...sync.options, ignoreErrors: true } }),
+                    compare: f_SyncResult(),
+                }),
+            ),
+        ).toContain("--ignore-errors");
+        expect(
+            f_Reason(
+                f_Input({
+                    job: sync,
+                    compare: f_SyncResult({ createFiles: 0, updateFiles: 0, deleteFiles: 0 }),
+                }),
+            ),
+        ).toContain("바꿀 파일이 없습니다");
+    });
+});
+
+describe("삭제 확인 정보", () => {
+    const SAFETY = { deleteConfirmFiles: 50, deleteConfirmPercent: 10 };
+
+    it("deleteSamples: 대상에만 있는 항목만, 최대 limit개, 크기 포함", () => {
+        const r = f_Result({
+            entries: [
+                f_Entry("a.txt", "onlyDest"),
+                f_Entry("b.txt", "onlySource"),
+                f_Entry("c.txt", "equal"),
+                f_Entry("d.txt", "onlyDest"),
+                f_Entry("e.txt", "onlyDest"),
+            ],
+        });
+        expect(deleteSamples(r, 2)).toEqual([
+            { path: "a.txt", size: 7 },
+            { path: "d.txt", size: 7 },
+        ]);
+        expect(deleteSamples(r)).toHaveLength(3);
+    });
+
+    it("deleteConfirmInfo: 수·바이트·비율·대량 여부(copy는 삭제 0)", () => {
+        const s = f_Summary({ destFiles: 8, deleteFiles: 1, deleteBytes: 5 });
+        expect(deleteConfirmInfo(s, "sync", SAFETY)).toEqual({
+            deleteFiles: 1,
+            deleteBytes: 5,
+            destFiles: 8,
+            percentText: "12.5%",
+            large: true,
+        });
+        expect(deleteConfirmInfo(f_Summary({ destFiles: 100 }), "sync", SAFETY).large).toBe(false);
+        expect(deleteConfirmInfo(s, "copy", SAFETY)).toMatchObject({
+            deleteFiles: 0,
+            large: false,
+        });
+        expect(
+            deleteConfirmInfo(f_Summary({ destFiles: 0, deleteFiles: 0 }), "sync", SAFETY)
+                .percentText,
+        ).toBeNull();
     });
 });
 

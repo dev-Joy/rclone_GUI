@@ -47,6 +47,8 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
     const id = (name: string) => `${idPrefix}-${name}`;
     // 접힌 영역 안에 오류가 있으면 펼쳐서 보여 준다
     const hasErrors = Object.values(errors).some(Boolean);
+    // 동기화에서 사전 확인을 끄면 경고가 보이도록 펼친다
+    const preflightOff = mode === "sync" && !value.preflightBeforeDestructive;
     const dangerActive = value.ignoreErrors;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
@@ -72,7 +74,7 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
         <div className={styles.JobOptionsFields}>
             <details
                 className={styles.group}
-                open={advancedOpen || hasErrors}
+                open={advancedOpen || hasErrors || preflightOff}
                 onToggle={h_ToggleAdvanced}
             >
                 <summary className={styles.summary}>고급 옵션</summary>
@@ -160,9 +162,15 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
                         id={id("preflight")}
                         checked={value.preflightBeforeDestructive}
                         onChange={h_Bool("preflightBeforeDestructive")}
-                        label="삭제·덮어쓰기 전에 미리보기로 다시 확인"
-                        description="비교한 뒤 바뀐 파일이 있으면 실행을 멈춥니다. 끄지 않는 것을 권장합니다."
+                        label="동기화 삭제 전에 미리보기로 다시 확인"
+                        description="삭제가 있는 동기화를 실행하기 직전에 다시 확인하고, 비교한 뒤 바뀐 파일이 있으면 실행을 멈춥니다. 끄지 않는 것을 권장합니다."
                     />
+                    {mode === "sync" && !value.preflightBeforeDestructive && (
+                        <p className={styles.warning}>
+                            주의: 사전 확인을 끄면 비교 뒤 바뀐 삭제는 삭제 한도(--max-delete)로만
+                            막습니다. 한도를 넘으면 일부만 지운 채 중단될 수 있습니다.
+                        </p>
+                    )}
                 </div>
             </details>
             <details

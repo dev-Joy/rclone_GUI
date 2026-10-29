@@ -1,0 +1,32 @@
+/**
+ * PlanDriftModal 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .PlanDriftModal {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 560px;
+
+        p {
+            margin: 0;
+        }
+
+        .diff {
+            margin: 0;
+            padding: 6px 10px 6px 26px;
+            border-left: 4px solid var(--warning);
+            border-radius: var(--radius);
+            background: var(--warning-weak);
+            font-size: 13px;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 13px;
+        }
+    }
+}

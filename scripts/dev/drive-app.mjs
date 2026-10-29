@@ -4,7 +4,8 @@
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
  *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
- *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영, 동기화 실제 실행 차단)
+ *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영),
+ *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변 → 다시 비교 → 대상 반영)
  * 2회차: 재시작 후 작업·설정·lastRun 유지, active-run 없음, 이름순 첫 작업 자동 선택, 콘솔 오류 0건 확인
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
@@ -657,7 +658,7 @@ try {
         (await a.evaluate("window.rclonegui.run.getActive()")).data === null &&
             !existsSync(join(userData, "active-run.json")),
     );
-    // 동기화(삭제 포함) 작업: 화면 버튼 비활성, IPC로 직접 불러도 SAFETY_BLOCKED
+    // ===== Phase 7: 동기화(삭제 포함) 실제 실행 =====
     const syncDst = join(smokeRoot, "sync-dst");
     mkdirSync(syncDst);
     writeFileSync(join(syncDst, "keep.txt"), "keep");
@@ -666,22 +667,80 @@ try {
     );
     await ui.clickJob("sync 스모크");
     await ui.until(`document.querySelector("input[name=name]")?.value === "sync 스모크"`);
+    const syncReady = `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "동기화 실행" && !b.disabled)`;
+    await ui.click("비교");
+    f_Check("sync 비교 → 동기화 실행 활성", await ui.until(syncReady, 20000));
+    await ui.click("동기화 실행");
+    await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
+    const delText = await ui.dialogText();
     f_Check(
-        "동기화 실행 버튼 비활성 + 이유",
-        (await ui.disabled("동기화 실행")).every(Boolean) &&
-            (await ui.text()).includes("동기화(삭제 포함) 실제 실행은 아직 지원하지 않습니다"),
-    );
-    const syncCmp = await a.evaluate(`window.rclonegui.compare.run(${js(syncJob.data?.id)})`);
-    const syncRun = await a.evaluate(
-        `window.rclonegui.run.start({ jobId: ${js(syncJob.data?.id)}, dryRun: false, planToken: ${js(syncCmp.data?.planToken ?? "x")}, confirmedDeletes: ${syncCmp.data?.summary.deleteFiles ?? 0} })`,
+        "삭제 확인 모달(삭제 수·샘플·대량 경고·빈 폴더 안내)",
+        delText.includes("대상 파일 1개 중 1개 삭제") &&
+            delText.includes("keep.txt") &&
+            delText.includes("대량 삭제") &&
+            delText.includes("빈 폴더"),
+        delText.replace(/\s+/g, " "),
     );
     f_Check(
-        "동기화 실제 실행 직접 IPC → SAFETY_BLOCKED, 대상 그대로",
-        syncCmp.ok &&
-            !syncRun.ok &&
-            syncRun.error.code === "SAFETY_BLOCKED" &&
-            readdirSync(syncDst).join(",") === "keep.txt",
-        JSON.stringify(syncRun),
+        "체크 전 실행 버튼 비활성, 체크 1개만으로도 비활성(대량)",
+        (await ui.disabled("1개 삭제 포함 실행")).every(Boolean) &&
+            (await a.evaluate(`(document.querySelector("#delete-confirm-ack").click(), true)`)) &&
+            (await ui.disabled("1개 삭제 포함 실행")).every(Boolean),
+    );
+    await a.evaluate(`document.querySelector("#delete-confirm-large").click()`);
+    f_Check(
+        "두 체크 후 실행 버튼 활성",
+        await ui.until(
+            `[...document.querySelectorAll("dialog[open] button")].some((b) => b.textContent.trim() === "1개 삭제 포함 실행" && !b.disabled)`,
+        ),
+    );
+    // 비교 뒤 대상에 파일을 더한다 → 사전 확인이 계획과 달라 실행하지 않아야 한다
+    writeFileSync(join(syncDst, "late.txt"), "late");
+    await ui.click("1개 삭제 포함 실행", { inDialog: true });
+    const drifted = await ui.until(
+        `document.querySelector("dialog[open]")?.innerText.includes("비교 뒤 바뀐 파일이 있습니다")`,
+        20000,
+    );
+    const driftText = await ui.dialogText();
+    f_Check(
+        "사전 확인 불일치 → PLAN_DRIFT 모달(차이 표시), 대상 불변",
+        drifted &&
+            driftText.includes("삭제: 계획 1개") &&
+            readdirSync(syncDst).toSorted().join(",") === "keep.txt,late.txt",
+        driftText.replace(/\s+/g, " "),
+    );
+    await ui.click("다시 비교", { inDialog: true });
+    f_Check(
+        "다시 비교 → 동기화 실행 활성",
+        (await ui.until(`!document.querySelector("dialog[open]")`)) &&
+            (await ui.until(syncReady, 20000)),
+    );
+    await ui.click("동기화 실행");
+    await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
+    await a.evaluate(`document.querySelector("#delete-confirm-ack").click()`);
+    await a.evaluate(`document.querySelector("#delete-confirm-large")?.click()`);
+    await f_Sleep(100);
+    f_Check(
+        "다시 연 모달은 새 삭제 수(2개)",
+        await ui.click("2개 삭제 포함 실행", { inDialog: true }),
+        await ui.dialogText(),
+    );
+    const synced = await ui.until(`document.body.innerText.includes("동기화 완료")`, 20000);
+    f_Check(
+        "동기화 실행 → 완료, 대상이 원본과 같음",
+        synced &&
+            readdirSync(syncDst).toSorted().join(",") ===
+                readdirSync(smokeSrc).toSorted().join(",") &&
+            readFileSync(join(syncDst, "changed.txt"), "utf8") === "changed-longer",
+        readdirSync(syncDst).toSorted().join(","),
+    );
+    const syncHist = (await a.evaluate("window.rclonegui.jobs.list()")).data.find(
+        (j) => j.name === "sync 스모크",
+    );
+    f_Check(
+        "sync lastRun success·active-run 없음",
+        syncHist?.lastRun?.status === "success" && !existsSync(join(userData, "active-run.json")),
+        JSON.stringify(syncHist?.lastRun),
     );
     await a.evaluate(`window.rclonegui.jobs.remove(${js(syncJob.data?.id)})`);
     await f_Sleep(300);

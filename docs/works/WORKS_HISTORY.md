@@ -70,6 +70,17 @@
 - 검증: check(unit 569), format:check, test:int 24(+1 skip: WSL 조건부), build, drive-app 빌드본 64 통과
 - 설계와 다름: 실행 로그 머리말은 `--config` 경로도 `<설정 파일>`로 가림. active-run 복구는 확인 결과와 관계없이 파일을 지움(확인 못하면 PID 안내만). 실행 문맥 해석은 probe를 하지 않음(rclone exit 3 → PATH_NOT_FOUND). 앱 종료(before-quit) 경로는 자동 검증하지 못함(drive-app은 taskkill로 종료)
 
+[TASK_008] : (2026-10-29) INT-001 Phase 7 — 파괴적 실행과 안전 게이트 (관련 Intent: INT-001, T-07·T-08 완료)
+- 결정(사용자 승인 D1~D7): 실제 실행 = 비교 planToken + 확인한 삭제 수(+대량이면 confirmLargeDeletes), 사전 확인은 같은 runId 안에서 main이 자동, 사전 확인 끄면 --max-delete만 백스톱, 일치 = 복사+touch==새+변경·삭제 수(수집기·stats)·오류 0(바이트 제외), sync+ignoreErrors 계속 차단, 대량 = 엄격한 초과(기준 0이면 1개도), 락 전 차단은 이력 없음·PLAN_DRIFT는 blocked 이력, 삭제 0 sync는 사전 확인 없이 --max-delete 0
+- shared: `run-gates.ts`(itfGateBlock·isLargeDelete·checkPlanSafety S5·S6·S7·S15·needsPreflight), `run-plan.ts` checkPreflight, `schemas/run.ts` confirmLargeDeletes
+- main: run-service 게이트 순서(토큰 → requirePlan → checkPlanSafety → 삭제 수 → 대량), typRealGate.preflight, spawnTransfer(step dryRun|preflight|real, buildTransferArgs 1곳 유지), runPreflight(취소 canceled·exit≠0 failed·불일치 blocked PLAN_DRIFT, record.preflight), onSpawn 단계 인자(사전 확인 PID도 active-run), 로그 파일 머리말 1회 + 단계 구획(`run-log-file.ts` section·stage)
+- 화면: `run-view` canStartRun의 sync 차단 제거·checkPlanSafety 재사용·바꿀 것 없으면 막음, deleteSamples·deleteConfirmInfo, `DeleteConfirmModal`·`PlanDriftModal`(+module.css), run-store start(confirm)·driftNotice·dismissDrift·sync 취소 토스트, JobWorkspace 동기화 실행 활성·모달 분기·삭제 0 문구, RunView 사전 확인 단계·PLAN_DRIFT 차이 목록, JobOptionsFields·job-form 사전 확인 끔 경고, DryRunSummary 문구
+- 프로브: `sync-maxdelete1`·`lsjson-dst-after-maxdelete1` fixture (rclone-notes 15·16)
+- 테스트: 단위 run-gates(11)·run-plan checkPreflight·schemas·run-service(차단 매트릭스 6건 추가, Phase 7 묶음 8건)·run-view·renderer run-store(대량 확인·drift·sync 취소), 통합 `run.sync`(3)·`run.gates`(4)·run.dryrun 차단 케이스 갱신, drive-app sync 시나리오 교체(삭제 확인 모달·체크 전 비활성·drift 모달·대상 불변·다시 비교·반영)
+- 문서: AGENTS.md 안전 규칙 2, CHANGELOG, MVP_SPEC 구현 반영(Phase 7 파일·D1~D7·로그·화면), rclone-notes 15·16, intent T-07·T-08 체크, INDEX 9/15
+- 검증: check(unit 603), format:check, test:int 31(+1 skip: WSL 조건부), build, drive-app 빌드본 71 통과
+- 설계와 다름: SafetyBanner는 만들지 않음(버튼 이유·모달로 대신). 락 전 차단은 비교 결과를 무효화하지 않음. 사전 확인 통과 뒤에도 취소 요청을 다시 확인해 실제 실행을 시작하지 않음(canceled). finished의 dryRunSummary는 실제 실행이면 사전 확인을 했어도 null
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

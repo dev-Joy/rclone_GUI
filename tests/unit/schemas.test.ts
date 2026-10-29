@@ -6,6 +6,7 @@ import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
 import { zCompareJobInput } from "@/shared/schemas/compare";
 import { zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
+import { zStartRunInput } from "@/shared/schemas/run";
 import { zSettings, zSettingsPatch } from "@/shared/schemas/settings";
 import { zOpenExternalInput, zPickDirectoryInput, zPickFileInput } from "@/shared/schemas/system";
 
@@ -139,5 +140,25 @@ describe("비교 IPC 입력", () => {
         expect(zCompareJobInput.safeParse({ jobId: "x" }).success).toBe(false);
         expect(zCompareJobInput.safeParse({ jobId, force: true }).success).toBe(false);
         expect(zCompareJobInput.safeParse({}).success).toBe(false);
+    });
+});
+
+describe("실행 IPC 입력", () => {
+    it("zStartRunInput: confirmLargeDeletes는 boolean만, confirmIgnoreErrors 등 알 수 없는 키 거부", () => {
+        const base = {
+            jobId: "00000000-0000-4000-8000-000000000001",
+            dryRun: false,
+            planToken: "a".repeat(32),
+            confirmedDeletes: 3,
+        };
+        expect(zStartRunInput.safeParse(base).success).toBe(true);
+        expect(zStartRunInput.safeParse({ ...base, confirmLargeDeletes: true }).success).toBe(true);
+        expect(zStartRunInput.safeParse({ ...base, confirmLargeDeletes: "yes" }).success).toBe(
+            false,
+        );
+        expect(zStartRunInput.safeParse({ ...base, confirmIgnoreErrors: true }).success).toBe(
+            false,
+        );
+        expect(zStartRunInput.safeParse({ ...base, confirmedDeletes: -1 }).success).toBe(false);
     });
 });

@@ -87,3 +87,16 @@
 - 결과: 대상에 13/400개만 복사된 채 끝났고 rclone 프로세스는 남지 않았다. 이 크기에서는 `.partial` 파일이 남지 않았다(쓰는 중이던 파일이 없었음). 이미 복사된 파일은 그대로 남는다.
 - 영향: 취소하면 결과와 관계없이 상태를 `canceled`로 기록하고, 화면·확인 창에 "취소해도 이미 복사된 파일은 대상에 남습니다"를 알린다. 실제 실행은 취소·실패해도 비교 결과를 버리고 lastRun을 갱신한다. 큰 파일 도중 취소 시 `.partial`이 남는지는 아직 확인하지 못했다.
 
+## 2026-10-29 · rclone v1.75.1 · Windows 11 x64 (Phase 7: 실제 sync·삭제 한도)
+
+### 15. `--max-delete N`을 넘으면 N개까지는 지우고 멈춘다(exit 7), 빈 폴더는 지우지 않는다
+- 명령: 삭제 대상 2개(`extra.txt`, `gone/old.txt`)인 대상에 `sync --ask-password=false --config <conf> --checkers 8 --transfers 4 --fast-list --skip-links --modify-window 2000ms --max-delete 1 -v --use-json-log --stats 1s -- <src> <dst>` (fixture `sync-maxdelete1.*`, 실행 뒤 대상 목록 `lsjson-dst-after-maxdelete1.*`)
+- 결과: 복사 3개·시간 맞춤 1개는 모두 끝났고, `Deleted` 1개(`gone/old.txt`) 뒤 다음 삭제에서 `Got fatal error on delete: --max-delete threshold reached` → `Cancelling sync due to fatal error` → `not deleting directories as there were IO errors`(빈 폴더 `gone`은 남음) → exit 7. 최종 stats `deletes:1, errors:2, fatalError:true, lastError:"failed to delete 1 files"`. 대상에는 `extra.txt`가 남았다.
+- 결과: 통합 테스트(`run.sync.test.ts`)에서 사전 확인을 끄고 비교 뒤 삭제 대상을 2개 더 만들어(계획 2, 실제 4) `--max-delete 2`로 실행하면 정확히 2개를 지우고 exit 7.
+- 영향: 사전 확인을 끈 작업은 비교 뒤 삭제 대상이 늘면 **한도까지 일부 삭제된 채** `failed`/`MAX_DELETE_EXCEEDED`로 끝날 수 있다(복사도 이미 반영됨). 그래서 사전 확인을 기본으로 켜 두고, 끄면 편집기·삭제 확인 창에 경고한다. 한도는 계획 삭제 수와 같게 주므로 계획보다 많이 지우지는 않는다.
+
+### 16. sync dry-run의 최종 stats `deletes`는 건너뛴 삭제 수와 같다
+- 명령: `sync ... --dry-run`(fixture `sync-dryrun.*`, 통합 테스트 `run.sync.test.ts`의 사전 확인)
+- 결과: `Skipped delete` 줄 2개와 최종 stats `deletes:2`, `deletedDirs:1`이 일치한다. 비교 뒤 대상에 파일을 하나 더하면 사전 확인 stats `deletes:3`.
+- 영향: 사전 확인 일치 검사(`checkPreflight`)는 로그 집계 삭제 수와 stats `deletes`를 둘 다 계획과 맞춰 보고, stats `errors > 0`도 불일치로 본다. 바이트는 비교하지 않는다(노트 #1의 시간만 맞춤 파일 때문).
+

@@ -1,0 +1,92 @@
+/**
+ * DeleteConfirmModal 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .DeleteConfirmModal {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        max-width: 640px;
+
+        p {
+            margin: 0;
+        }
+
+        .job,
+        .headline {
+            font-weight: 600;
+        }
+
+        .path {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .pathLabel {
+            flex: none;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .pathText {
+            overflow: hidden;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .deletes {
+            color: var(--danger);
+        }
+
+        .warning {
+            padding: 6px 10px;
+            border-left: 4px solid var(--warning);
+            border-radius: var(--radius);
+            background: var(--warning-weak);
+            font-size: 13px;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .samples {
+            font-size: 13px;
+
+            ul {
+                overflow-y: auto;
+                max-height: 180px;
+                margin: 4px 0 0;
+                padding-left: 18px;
+                font-family: var(--font-mono);
+                font-size: 12px;
+            }
+
+            li {
+                display: flex;
+                gap: 8px;
+            }
+        }
+
+        .samplePath {
+            overflow: hidden;
+            flex: 1 1 auto;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sampleSize {
+            flex: none;
+            color: var(--muted);
+        }
+    }
+}

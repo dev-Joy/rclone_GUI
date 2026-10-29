@@ -119,6 +119,22 @@ describe("run-store start", () => {
         expect(fake.runStartInputs.at(-1)?.confirmedDeletes).toBe(3);
     });
 
+    it("대량 삭제 확인은 confirmLargeDeletes:true로만 보낸다(false·없음은 키 없음)", async () => {
+        useCompareStore.setState({ jobId: J1, result: f_Compare(J1, "sync") });
+        await f_S().start(J1, false, { largeDeletes: true });
+        expect(fake.runStartInputs.at(-1)).toEqual({
+            jobId: J1,
+            dryRun: false,
+            planToken: TOKEN,
+            confirmedDeletes: 3,
+            confirmLargeDeletes: true,
+        });
+        await f_S().start(J1, false, { largeDeletes: false });
+        expect(fake.runStartInputs.at(-1)).not.toHaveProperty("confirmLargeDeletes");
+        await f_S().start(J1, true, { largeDeletes: true });
+        expect(fake.runStartInputs.at(-1)).toEqual({ jobId: J1, dryRun: true });
+    });
+
     it("다른 작업의 비교 결과는 쓰지 않는다", async () => {
         useCompareStore.setState({ jobId: J2, result: f_Compare(J2) });
         await f_S().start(J1, false);
@@ -189,6 +205,59 @@ describe("run-store 이벤트", () => {
         });
         expect(fake.calls.filter((c) => c === `compare.get:${J1}`)).toHaveLength(1);
         expect(useCompareStore.getState().result).toBeNull();
+        off();
+    });
+
+    it("PLAN_DRIFT로 막히면 driftNotice, dismissDrift로 닫는다. 다른 차단은 알리지 않는다", () => {
+        const off = f_S().subscribe();
+        fake.emitRunEvent({
+            type: "finished",
+            runId: RUN,
+            record: f_Record({
+                mode: "sync",
+                status: "blocked",
+                error: { code: "SAFETY_BLOCKED", message: "x" },
+            }),
+            dryRunSummary: null,
+        });
+        expect(f_S().driftNotice).toBeNull();
+        const drift = f_Record({
+            mode: "sync",
+            status: "blocked",
+            error: { code: "PLAN_DRIFT", message: "바뀜", detail: "삭제: 계획 1개, 미리보기 2개" },
+        });
+        fake.emitRunEvent({ type: "finished", runId: RUN, record: drift, dryRunSummary: null });
+        expect(f_S().driftNotice).toEqual(drift);
+        expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ level: "error" });
+        f_S().dismissDrift();
+        expect(f_S().driftNotice).toBeNull();
+        off();
+    });
+
+    it("sync 취소 토스트는 복사·삭제를 되돌리지 않는다고 알리고, 사전 확인 중 취소는 덧붙이지 않는다", () => {
+        const off = f_S().subscribe();
+        fake.emitRunEvent({
+            type: "finished",
+            runId: RUN,
+            record: f_Record({
+                mode: "sync",
+                status: "canceled",
+                error: { code: "CANCELED", message: "실행을 취소했습니다." },
+            }),
+            dryRunSummary: null,
+        });
+        expect(useToastStore.getState().toasts.at(-1)?.message).toContain("되돌리지 않습니다");
+        fake.emitRunEvent({
+            type: "finished",
+            runId: RUN,
+            record: f_Record({
+                mode: "sync",
+                status: "canceled",
+                error: { code: "CANCELED", message: "사전 확인 중 취소했습니다." },
+            }),
+            dryRunSummary: null,
+        });
+        expect(useToastStore.getState().toasts.at(-1)?.message).toBe("동기화 취소됨");
         off();
     });
 

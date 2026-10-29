@@ -52,6 +52,8 @@ export interface itfRunLogHeader {
     jobId: string;
     mode: string;
     dryRun: boolean;
+    /** 첫 단계 이름(예: 사전 확인). 있으면 인자 줄 앞에 쓴다 */
+    stage?: string;
     /** maskArgsForLog를 거친 인자 */
     args: readonly string[];
 }
@@ -92,9 +94,15 @@ export class clsRunLogFile {
             [
                 `# rcloneGUI 실행 로그`,
                 `# run=${header.runId} job=${header.jobId} mode=${header.mode} dryRun=${header.dryRun}`,
+                ...(header.stage ? [`# 단계: ${header.stage}`] : []),
                 `# args: ${header.args.join(" ")}`,
             ].join("\n"),
         );
+    }
+
+    /** 같은 실행의 다음 단계(예: 사전 확인 뒤 실제 실행)를 이어 쓴다. args는 maskArgsForLog를 거친 것 */
+    section(stage: string, args: readonly string[]): void {
+        this.write([`# 단계: ${stage}`, `# args: ${args.join(" ")}`].join("\n"));
     }
 
     /** 한 줄 쓰기(비밀값 가림). 줄바꿈은 붙여 준다 */

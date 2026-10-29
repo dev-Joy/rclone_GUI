@@ -111,7 +111,7 @@ describe.skipIf(!HAS_RCLONE)("미리보기 (실제 rclone, 임시 폴더)", () =
         expect(log.split("\n")[2]).toContain("--config <설정 파일>");
     });
 
-    it("실제 실행 경로는 sync에서 막힌다(SAFETY_BLOCKED, 이력 없음)", async () => {
+    it("대량 삭제 확인 없이 실제 sync를 부르면 막힌다(SAFETY_BLOCKED, 이력 없음)", async () => {
         const env = await makeEnv({ root, conf, source: src, destination: dst, mode: "sync" });
         const cmp = await env.compare.run(env.job.id);
         await expect(
@@ -121,7 +121,10 @@ describe.skipIf(!HAS_RCLONE)("미리보기 (실제 rclone, 임시 폴더)", () =
                 planToken: cmp.planToken,
                 confirmedDeletes: cmp.summary.deleteFiles,
             }),
-        ).rejects.toMatchObject({ code: "SAFETY_BLOCKED" });
+        ).rejects.toMatchObject({
+            code: "SAFETY_BLOCKED",
+            message: expect.stringContaining("대량"),
+        });
         expect(env.history.list()).toEqual([]);
         expect(snapshotTree(dst)).toMatchObject({ "extra.txt": expect.any(String) });
     });

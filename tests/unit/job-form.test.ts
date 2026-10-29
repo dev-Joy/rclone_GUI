@@ -134,7 +134,7 @@ describe("validateJobDraft 경고", () => {
         const r = validateJobDraft(d, true);
         expect(r.ok).toBe(true);
         expect(r.formWarnings.some((w) => w.includes("오류 무시"))).toBe(true);
-        expect(r.formWarnings.some((w) => w.includes("사전점검"))).toBe(true);
+        expect(r.formWarnings.some((w) => w.includes("사전 확인"))).toBe(true);
     });
 
     it("복사 + 자동 삭제 허용 / 동기화 + 자동 실행 삭제", () => {

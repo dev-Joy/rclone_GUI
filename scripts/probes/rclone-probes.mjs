@@ -212,6 +212,23 @@ try {
         big,
         bigDst,
     ]);
+
+    // Phase 7: 삭제 대상 2개(extra.txt, gone/old.txt)에 한도 1 → exit 7 전에 몇 개를 지우는지
+    f_MakeDest(dst);
+    f_Probe("sync-maxdelete1", [
+        "sync",
+        ask,
+        ...common,
+        ...tx,
+        ...mw,
+        "--max-delete",
+        "1",
+        ...log,
+        "--",
+        src,
+        dst,
+    ]);
+    f_Probe("lsjson-dst-after-maxdelete1", [...ls, ...common, "--", dst]);
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

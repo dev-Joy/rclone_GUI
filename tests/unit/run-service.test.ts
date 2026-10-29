@@ -99,6 +99,11 @@ function f_Compare(over: Partial<itfCompareResult> = {}): itfCompareResult {
     };
 }
 
+/** sync 비교 결과. 대상 100개 중 2개 삭제(대량 아님), sync-dryrun fixture와 같은 계획 */
+function f_SyncCompare(over: Partial<itfCompareSummary> = {}): itfCompareResult {
+    return f_Compare({ mode: "sync", summary: f_Summary({ destFiles: 100, ...over }) });
+}
+
 function f_Res(over: Partial<itfProcessResult> = {}): itfProcessResult {
     return {
         exitCode: 0,
@@ -134,6 +139,9 @@ interface itfHarnessOptions {
     compare?: itfCompareResult | null;
     /** null이면 프로세스를 직접 끝낸다(procs[i].finish) */
     script?: { lines: string[]; over?: Partial<itfProcessResult> } | null;
+    /** 프로세스 순서별 스크립트(사전 확인 → 실제 실행). 있으면 script 대신 쓴다 */
+    scripts?: Array<{ lines: string[]; over?: Partial<itfProcessResult> } | null>;
+    safety?: Partial<ReturnType<typeof createDefaultSettings>["safety"]>;
     spawnError?: string;
     /** 취소했을 때 프로세스 결과 */
     cancelResult?: Partial<itfProcessResult>;
@@ -178,9 +186,10 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 proc.aborts += 1;
                 resolve(f_Res({ canceled: true, exitCode: null, ...o.cancelResult }));
             });
+            const mine = o.scripts ? (o.scripts[procs.length] ?? null) : script;
             procs.push(proc);
-            opts.onSpawn?.(PID);
-            if (script) setTimeout(() => proc.finish(script.lines, script.over), 0);
+            opts.onSpawn?.(PID + procs.length - 1);
+            if (mine) setTimeout(() => proc.finish(mine.lines, mine.over), 0);
         });
 
     const activity = new clsActivityLock();
@@ -195,7 +204,12 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 return job;
             },
         },
-        settings: { get: () => createDefaultSettings() },
+        settings: {
+            get: () => {
+                const st = createDefaultSettings();
+                return { ...st, safety: { ...st.safety, ...o.safety } };
+            },
+        },
         rcloneEnv: {
             require: async () => ({ binaryPath: BIN, configPath: CONF }),
             resolveConfigFor: async () => CONF,
@@ -396,9 +410,57 @@ describe("clsRunService 실제 실행 게이트", () => {
         input: Record<string, unknown>;
     }> = [
         {
-            name: "sync 실제 실행 → SAFETY_BLOCKED",
+            name: "sync 확인한 삭제 수 불일치 → SAFETY_BLOCKED",
             code: "SAFETY_BLOCKED",
-            opts: { job: f_Job({ mode: "sync" }), compare: f_Compare({ mode: "sync" }) },
+            opts: { job: f_Job({ mode: "sync" }), compare: f_SyncCompare() },
+            input: { planToken: TOKEN, confirmedDeletes: 1 },
+        },
+        {
+            name: "sync 빈 원본(S7) → EMPTY_SOURCE_BLOCKED",
+            code: "EMPTY_SOURCE_BLOCKED",
+            opts: {
+                job: f_Job({ mode: "sync" }),
+                compare: f_SyncCompare({
+                    sourceFiles: 0,
+                    createFiles: 0,
+                    updateFiles: 0,
+                    deleteFiles: 100,
+                }),
+            },
+            input: { planToken: TOKEN, confirmedDeletes: 100, confirmLargeDeletes: true },
+        },
+        {
+            name: "sync + ignoreErrors(S15) → SAFETY_BLOCKED",
+            code: "SAFETY_BLOCKED",
+            opts: {
+                job: f_Job({
+                    mode: "sync",
+                    options: { ...f_Job().options, ignoreErrors: true },
+                }),
+                compare: f_SyncCompare(),
+            },
+            input: { planToken: TOKEN, confirmedDeletes: 2 },
+        },
+        {
+            name: "대량 삭제(S11) 확인 없음 → SAFETY_BLOCKED",
+            code: "SAFETY_BLOCKED",
+            opts: { job: f_Job({ mode: "sync" }), compare: f_SyncCompare({ destFiles: 3 }) },
+            input: { planToken: TOKEN, confirmedDeletes: 2 },
+        },
+        {
+            name: "대량 삭제 confirmLargeDeletes:false → SAFETY_BLOCKED",
+            code: "SAFETY_BLOCKED",
+            opts: {
+                job: f_Job({ mode: "sync" }),
+                compare: f_SyncCompare(),
+                safety: { deleteConfirmFiles: 0 },
+            },
+            input: { planToken: TOKEN, confirmedDeletes: 2, confirmLargeDeletes: false },
+        },
+        {
+            name: "sync 형식 충돌 → SAFETY_BLOCKED",
+            code: "SAFETY_BLOCKED",
+            opts: { job: f_Job({ mode: "sync" }), compare: f_SyncCompare({ conflictFiles: 1 }) },
             input: { planToken: TOKEN, confirmedDeletes: 2 },
         },
         {
@@ -596,5 +658,157 @@ describe("clsRunService 락·취소·실패", () => {
         expect(await h.svc.whenIdle(10)).toBe(false);
         h.procs[0]!.finish([]);
         expect(await h.svc.whenIdle(1000)).toBe(true);
+    });
+});
+
+function f_SyncJob(preflight = true): typJob {
+    return f_Job({
+        mode: "sync",
+        options: { ...f_Job().options, preflightBeforeDestructive: preflight },
+    });
+}
+
+describe("clsRunService 실제 sync (Phase 7)", () => {
+    const SYNC_INPUT = { jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 2 };
+
+    it("사전 확인 일치 → spawn 2회(1차 --dry-run·--max-delete 없음, 2차 --max-delete 2), 단계 순서", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(),
+            compare: f_SyncCompare(),
+            scripts: [{ lines: fixtureLines("sync-dryrun") }, { lines: fixtureLines("sync-real") }],
+        });
+        const { runId } = await h.svc.start(SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(2);
+        expect(h.procs[0]!.args).toContain("--dry-run");
+        expect(h.procs[0]!.args).not.toContain("--max-delete");
+        expect(h.procs[1]!.args).not.toContain("--dry-run");
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("2");
+        const phases = h.events.flatMap((e) => (e.type === "phase" ? [e.phase] : []));
+        expect(phases).toEqual(["preflight", "transferring", "finalizing"]);
+        expect(rec).toMatchObject({ status: "success", dryRun: false, pid: PID + 1 });
+        expect(rec.preflight).toMatchObject({ deletes: 2, errors: 0 });
+        expect(rec.stats).not.toBeNull();
+        expect(h.written.map((w) => w.pid)).toEqual([PID, PID + 1]);
+        expect(h.bookkeeping).toEqual([
+            expect.objectContaining({
+                lastRun: expect.objectContaining({ runId, status: "success" }),
+            }),
+        ]);
+        const fin = h.finished()[0]!;
+        if (fin.type !== "finished") throw new Error();
+        expect(fin.dryRunSummary).toBeNull();
+        const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
+        expect(text).toContain("# 단계: 사전 확인");
+        expect(text).toContain("# 단계: 실제 실행");
+        expect(text.match(/# rcloneGUI 실행 로그/g)).toHaveLength(1);
+        expect(text).not.toContain("fake");
+    });
+
+    it("사전 확인 불일치 → spawn 1회, blocked PLAN_DRIFT(차이 줄), record.preflight, 무효화, lastRun blocked", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(),
+            // 계획은 삭제 1개인데 사전 확인은 2개
+            compare: f_SyncCompare({ deleteFiles: 1 }),
+            scripts: [{ lines: fixtureLines("sync-dryrun") }, null],
+        });
+        const { runId } = await h.svc.start({ ...SYNC_INPUT, confirmedDeletes: 1 });
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(rec.status).toBe("blocked");
+        expect(rec.error?.code).toBe("PLAN_DRIFT");
+        expect(rec.error?.detail).toContain("삭제: 계획 1개, 미리보기 2개");
+        expect(rec.error?.detail).toContain("삭제(통계): 계획 1개, 사전 확인 2개");
+        expect(rec.preflight).toMatchObject({ deletes: 2 });
+        expect(rec.stats).toBeNull();
+        expect(h.invalidated).toEqual([JOB_ID]);
+        expect(h.bookkeeping).toEqual([
+            expect.objectContaining({
+                lastRun: expect.objectContaining({ runId, status: "blocked" }),
+            }),
+        ]);
+        expect(h.activity.current()).toBeNull();
+        expect(h.activeOps.at(-1)).toBe("clear");
+    });
+
+    it("사전 확인 꺼짐 → spawn 1회, --max-delete 2, --dry-run 없음", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(false),
+            compare: f_SyncCompare(),
+            script: { lines: fixtureLines("sync-real") },
+        });
+        await h.svc.start(SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(h.procs[0]!.args).not.toContain("--dry-run");
+        expect(h.procs[0]!.args).toEqual(expect.arrayContaining(["--max-delete", "2"]));
+        expect(rec.status).toBe("success");
+        expect(rec.preflight).toBeNull();
+    });
+
+    it("삭제 0인 sync → 사전 확인 없이 --max-delete 0", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(),
+            compare: f_SyncCompare({ deleteFiles: 0, deleteBytes: 0 }),
+            script: { lines: fixtureLines("copy-real") },
+        });
+        await h.svc.start({ ...SYNC_INPUT, confirmedDeletes: 0 });
+        await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(h.procs[0]!.args[0]).toBe("sync");
+        expect(h.procs[0]!.args).not.toContain("--dry-run");
+        const md = h.procs[0]!.args.indexOf("--max-delete");
+        expect(h.procs[0]!.args[md + 1]).toBe("0");
+    });
+
+    it("대량 삭제는 confirmLargeDeletes:true면 실행된다", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(false),
+            compare: f_SyncCompare({ destFiles: 3 }),
+            script: { lines: fixtureLines("sync-real") },
+        });
+        await h.svc.start({ ...SYNC_INPUT, confirmLargeDeletes: true });
+        expect((await f_Done(h)).status).toBe("success");
+    });
+
+    it("사전 확인 중 취소 → canceled(대상 불변 안내), 실제 실행 없음", async () => {
+        const h = f_Harness({ job: f_SyncJob(), compare: f_SyncCompare(), script: null });
+        const { runId } = await h.svc.start(SYNC_INPUT);
+        expect(h.svc.getActive()?.phase).toBe("preflight");
+        h.svc.cancel(runId);
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(rec.status).toBe("canceled");
+        expect(rec.error?.message).toContain("사전 확인 중 취소");
+        expect(h.invalidated).toEqual([JOB_ID]);
+    });
+
+    it("사전 확인 exit≠0 → failed, 실제 실행 없음", async () => {
+        const err = JSON.stringify({ level: "error", msg: "boom" });
+        const h = f_Harness({
+            job: f_SyncJob(),
+            compare: f_SyncCompare(),
+            scripts: [{ lines: [err], over: { exitCode: 1 } }],
+        });
+        await h.svc.start(SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(rec.status).toBe("failed");
+        expect(rec.error).toMatchObject({ code: "RCLONE_FAILED", detail: "boom" });
+        expect(rec.error?.message).toMatch(/^사전 확인에 실패해/);
+    });
+
+    it("실제 sync exit 7 → failed MAX_DELETE_EXCEEDED (fixture sync-maxdelete1)", async () => {
+        const h = f_Harness({
+            job: f_SyncJob(false),
+            compare: f_SyncCompare(),
+            script: { lines: fixtureLines("sync-maxdelete1"), over: { exitCode: 7 } },
+        });
+        await h.svc.start(SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("failed");
+        expect(rec.error?.code).toBe("MAX_DELETE_EXCEEDED");
+        expect(rec.stats).toMatchObject({ deletes: 1, fatalError: true });
     });
 });

@@ -4,7 +4,7 @@ title: rclone 기반 폴더 비교·동기화 데스크톱 앱 (rcloneGUI)
 status: active
 priority: P2
 created: 2026-10-27
-updated: 2026-10-28
+updated: 2026-10-29
 ---
 
 # Intent: rclone 기반 폴더 비교·동기화 데스크톱 앱 (rcloneGUI)
@@ -57,9 +57,11 @@ updated: 2026-10-28
 - [x] T-04 [P1] 작업(job) CRUD 및 영속화 (원본/대상, 옵션, 사용할 `.conf`, 마지막 실행 결과 저장) (depends: T-01)
 - [x] T-05 [P1] 메타데이터 기반 폴더 비교 엔진 (`rclone lsjson`/`check`/`--dry-run` 결과 파싱, 원본만·대상만·변경·동일 분류) (depends: T-02, T-03)
 - [x] T-06 [P1] 차이(diff) 2-pane UI (Compare Folders 스타일 목록, 크기·수정시간·해시 표시, 정렬/필터) (depends: T-04, T-05)
-- [ ] T-07 [P1] copy/sync 실행과 진행률·로그 표시 (실행 직전 dry-run 사전점검, `--stats`/`--progress` 파싱, 취소 처리, 전역 단일 활동 락으로 비교·실행·자동 실행 중복 방지) (depends: T-05, T-06)
-  - 진행 (2026-10-28, Phase 6): dry-run 미리보기와 **copy 실제 실행까지 완료**(진행률·stats·로그 tail·취소·이력·실행 로그·active-run 복구·전역 락). **sync 실제 실행은 Phase 7로 남김**(지금은 SAFETY_BLOCKED) — 그래서 체크하지 않는다.
-- [ ] T-08 [P1] dry-run 미리보기 및 삭제 안전확인 (삭제 예정 목록 명시, 확인 후 실행, 위험 옵션 차단) (depends: T-07)
+- [x] T-07 [P1] copy/sync 실행과 진행률·로그 표시 (실행 직전 dry-run 사전점검, `--stats`/`--progress` 파싱, 취소 처리, 전역 단일 활동 락으로 비교·실행·자동 실행 중복 방지) (depends: T-05, T-06)
+  - 진행 (2026-10-28, Phase 6): dry-run 미리보기와 copy 실제 실행(진행률·stats·로그 tail·취소·이력·실행 로그·active-run 복구·전역 락).
+  - 완료 (2026-10-29, Phase 7): sync 실제 실행. 삭제가 있으면 같은 실행 안에서 사전 확인 dry-run → 계획과 다르면 PLAN_DRIFT로 막음, 실제 sync에는 항상 `--max-delete <계획 삭제 수>`.
+- [x] T-08 [P1] dry-run 미리보기 및 삭제 안전확인 (삭제 예정 목록 명시, 확인 후 실행, 위험 옵션 차단) (depends: T-07)
+  - 완료 (2026-10-29, Phase 7): 삭제 확인 모달(샘플 20·비율·대량 삭제 2차 확인), main 재검증(확인한 삭제 수·대량 확인), 빈 원본·형식 충돌·대소문자·오류 무시 sync 차단.
 - [x] T-09 [P2] `.conf` 관리 (설정 파일 선택·검증, remote 목록 조회) (depends: T-02)
 - [ ] T-10 [P2] 자동 동기화 스케줄러 (job별 주기 실행, 중복 실행 방지, 실패 시 로그·알림) (depends: T-04, T-07, T-08)
 - [ ] T-11 [P3] 설정 화면 (rclone 경로, 기본 옵션, 로그 보관/정리, 앱 테마) (depends: T-02)

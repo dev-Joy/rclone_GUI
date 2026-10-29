@@ -55,10 +55,7 @@ export default function DryRunSummary(props: itfDryRunSummaryProps) {
                 {s.removeDirs > 0 && <li>빈 폴더 정리 {s.removeDirs}개</li>}
             </ul>
             {mode === "sync" && s.deleteFiles > 0 && (
-                <p className={styles.note}>
-                    동기화를 실제로 실행하면 대상에서 위 파일을 지웁니다(실제 실행은 다음 단계에서
-                    제공).
-                </p>
+                <p className={styles.note}>동기화를 실제로 실행하면 대상에서 위 파일을 지웁니다.</p>
             )}
             {match && (
                 <p className={styles.match} data-ok={match.ok}>

@@ -81,7 +81,8 @@ export type typHistoryFile = z.infer<typeof zHistoryFile>;
 
 /**
  * run:start 입력. 실제 실행(dryRun:false)은 비교의 planToken과 확인한 삭제 수가 필요하다
- * (main이 계획에서 삭제 수를 다시 계산해 맞춰 본다). 알 수 없는 키는 거부한다.
+ * (main이 계획에서 삭제 수를 다시 계산해 맞춰 본다). 대량 삭제(isLargeDelete)는 confirmLargeDeletes도
+ * 필요하다. 알 수 없는 키는 거부한다.
  */
 export const zStartRunInput = z
     .object({
@@ -89,6 +90,7 @@ export const zStartRunInput = z
         dryRun: z.boolean(),
         planToken: z.string().min(1).max(200).optional(),
         confirmedDeletes: zCount.optional(),
+        confirmLargeDeletes: z.boolean().optional(),
     })
     .strict();
 export type typStartRunInput = z.infer<typeof zStartRunInput>;

@@ -1,8 +1,9 @@
 /**
  * 실행 화면 상태 (zustand). 진행 중인 실행(앱 전역 하나)은 run:event로 갱신하고, 화면을 다시 열면
  * run:getActive로 복구한다. 끝난 실행은 마지막 1건만 보관한다(자세한 기록은 이력·로그 파일).
- * 실제 실행은 compare-store의 비교 결과(planToken·삭제 예정 수)를 함께 보낸다.
+ * 실제 실행은 compare-store의 비교 결과(planToken·삭제 예정 수)와 대량 삭제 확인을 함께 보낸다.
  * 실제 실행이 끝나면 main이 비교 결과를 버리므로 비교 화면을 다시 불러온다.
+ * 사전 확인이 비교 결과와 달라 막히면(PLAN_DRIFT) driftNotice로 알린다(PlanDriftModal).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -43,11 +44,18 @@ interface itfRunState {
     startingJobId: string | null;
     /** 마지막 시작 실패(작업별 표시용) */
     error: { jobId: string; payload: typAppErrorPayload } | null;
-    /** 미리보기(dryRun) 또는 실제 실행 시작. 시작했으면 true */
-    start: (jobId: string, dryRun: boolean) => Promise<boolean>;
+    /** 사전 확인 불일치(PLAN_DRIFT)로 막힌 실행. 사용자가 닫을 때까지 */
+    driftNotice: typRunRecord | null;
+    /** 미리보기(dryRun) 또는 실제 실행 시작. confirm은 삭제 확인 모달의 대량 삭제 확인. 시작했으면 true */
+    start: (jobId: string, dryRun: boolean, confirm?: itfRunConfirm) => Promise<boolean>;
+    dismissDrift: () => void;
     cancel: () => Promise<void>;
     /** run:event 구독 + getActive 1회. 해제 함수를 돌려준다 */
     subscribe: () => () => void;
+}
+
+export interface itfRunConfirm {
+    largeDeletes: boolean;
 }
 
 /** IPC 자체가 실패(창 종료 등)해도 envelope로 돌려준다 */
@@ -59,7 +67,7 @@ function f_Call<T>(pending: Promise<typApiResult<T>>): Promise<typApiResult<T>> 
 }
 
 /** 실제 실행 입력: 화면에 있는 그 작업의 비교 결과에서 토큰·삭제 예정 수를 넣는다 */
-function f_Input(jobId: string, dryRun: boolean): typStartRunInput {
+function f_Input(jobId: string, dryRun: boolean, confirm?: itfRunConfirm): typStartRunInput {
     if (dryRun) return { jobId, dryRun };
     const r = useCompareStore.getState().result;
     if (!r || r.jobId !== jobId) return { jobId, dryRun };
@@ -68,6 +76,7 @@ function f_Input(jobId: string, dryRun: boolean): typStartRunInput {
         dryRun,
         planToken: r.planToken,
         confirmedDeletes: expectedDeletes(r.summary, r.mode),
+        ...(confirm?.largeDeletes ? { confirmLargeDeletes: true } : {}),
     };
 }
 
@@ -79,7 +88,12 @@ function f_FinishToast(rec: typRunRecord): void {
             push("success", text);
             return;
         case "canceled":
-            push("info", rec.dryRun ? text : `${text}: 이미 복사된 파일은 대상에 남습니다.`);
+            push(
+                "info",
+                rec.dryRun || rec.error?.message.startsWith("사전 확인")
+                    ? text
+                    : `${text}: ${rec.mode === "sync" ? "이미 복사·삭제된 파일은 되돌리지 않습니다." : "이미 복사된 파일은 대상에 남습니다."}`,
+            );
             return;
         default:
             push(
@@ -114,6 +128,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
                 set({
                     active: a?.runId === e.runId ? null : a,
                     last: { record: e.record, dryRunSummary: e.dryRunSummary, tail },
+                    ...(e.record.error?.code === "PLAN_DRIFT" ? { driftNotice: e.record } : {}),
                 });
                 f_FinishToast(e.record);
                 // 실제 실행은 main이 비교 결과를 버린다 → 비교 화면을 다시 불러온다
@@ -132,9 +147,10 @@ export const useRunStore = create<itfRunState>((set, get) => {
         last: null,
         startingJobId: null,
         error: null,
-        start: async (jobId, dryRun) => {
+        driftNotice: null,
+        start: async (jobId, dryRun, confirm) => {
             set({ startingJobId: jobId, error: null });
-            const r = await f_Call(getApi().run.start(f_Input(jobId, dryRun)));
+            const r = await f_Call(getApi().run.start(f_Input(jobId, dryRun, confirm)));
             set({ startingJobId: null });
             if (r.ok) return true;
             set({ error: { jobId, payload: r.error } });
@@ -143,6 +159,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
                 .push(r.error.code === "BUSY" ? "warning" : "error", r.error.message);
             return false;
         },
+        dismissDrift: () => set({ driftNotice: null }),
         cancel: async () => {
             const a = get().active;
             if (!a || a.cancelRequested) return;

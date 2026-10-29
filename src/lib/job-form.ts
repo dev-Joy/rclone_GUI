@@ -61,7 +61,8 @@ const PAIR_ERROR_HIGHLIGHT = "원본과 대상 경로를 확인하세요.";
 
 const WARN_SYNC_IGNORE_ERRORS =
     "동기화 모드에서는 ‘오류 무시’로 실행할 수 없습니다(백업 폴더 미지원). 끄거나 복사 모드를 쓰세요.";
-const WARN_SYNC_NO_PREFLIGHT = "실행 직전 사전점검을 끄면 비교 뒤 바뀐 삭제를 막지 못합니다.";
+const WARN_SYNC_NO_PREFLIGHT =
+    "실행 직전 사전 확인을 끄면 비교 뒤 바뀐 삭제는 삭제 한도(--max-delete)로만 막습니다.";
 const WARN_COPY_ALLOW_DELETES =
     "복사 모드에서는 삭제가 일어나지 않으므로 ‘자동 실행 때 삭제 허용’은 쓰이지 않습니다.";
 const WARN_AUTO_DELETES =
