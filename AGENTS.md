@@ -27,11 +27,17 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `pnpm run check` — typecheck + lint(oxlint, eslint) + 단위 테스트 (커밋 전 필수, 포맷 검사는 포함 안 됨)
 - `pnpm run format` — oxfmt로 포맷 (`pnpm run format:check`는 검사만)
 - `pnpm run test:int` — 실제 rclone으로 통합 테스트 (rclone이 없으면 이유를 출력하고 건너뜀)
+- `pnpm run test:e2e` — `out/` 빌드 + Playwright Electron E2E. Windows GUI 세션이 필요하고, rclone이 없으면 비교·복사 테스트만 건너뜀
 - `pnpm run build` — `out/`에 빌드, `pnpm start`로 빌드본 실행
-- `pnpm run dist` — Windows 설치 파일(NSIS, 사용자 단위)을 `dist/`에 만든다. 설정은 `electron-builder.yml`
+- `pnpm run build:win` — Windows 설치 파일(NSIS x64, 사용자 단위)을 `dist/`에 만든다. 설정은 `electron-builder.yml`
+- `pnpm run dist` — `build:win`과 같음(호환용 이름)
+- `pnpm run smoke:installer` — 설치본을 임시 폴더에 설치·실행·제거하고 asar 구성·바로가기·데이터 보존을 확인. `-- --login-item`이면 로그인 항목까지 확인
 - `node scripts/probes/rclone-probes.mjs` — rclone 동작 확인. 임시 폴더만 쓰고 결과를 `tests/fixtures/rclone/`에 저장 (rclone을 올릴 때마다 재실행)
+- `node scripts/dev/make-icon.mjs` — `build/icon.ico` 재생성(외부 이미지 없이 도형만 그림)
+- `node scripts/dev/drive-app.mjs [--dev|--exe <설치본>]` — 빌드본·개발 서버·설치본을 임시 userData로 띄워 조작하는 확인 도구
 
-설치본은 코드 서명이 없다. 설치본에는 `out/`과 운영 의존성만 들어간다 (소스 · 테스트 · 문서 · 하네스 제외).
+설치본은 코드 서명이 없다. 설치본에는 `out/`과 운영 의존성(zod)만 들어간다 (소스 · 테스트 · 문서 · 하네스 제외).
+사용자 데이터(`%APPDATA%\rcloneGUI`)는 제거해도 보존한다.
 
 ## 3. 구조
 
@@ -42,10 +48,12 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `src/pages` — 페이지·레이아웃 컴포넌트와 `*.module.css`
 - `src/stores`, `src/lib` — 화면 상태(zustand)와 화면용 도우미
 - `src/shared` — 타입·IPC 계약·zod 스키마 (Node·DOM 의존 금지)
-- `tests/unit`, `tests/integration`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone 출력
+- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone 출력
+- `playwright.config.ts` — Electron E2E 설정(`tests/e2e/**/*.spec.ts`, 임시 userData·`RCLONEGUI_E2E=1`)
 - `docs/guide` — 신규 파일 작성 가이드 (`File.tsx.guide`, `File.module.css.guide`)
 - `docs/knowhow/rclone-notes.md`, `docs/CHANGELOG.md`, `docs/works/`
-- `scripts/probes` — rclone 동작 실험, `scripts/dev/drive-app.mjs` — 빌드본을 임시 프로필로 띄워 조작하는 확인 도구
+- `scripts/probes` — rclone 동작 실험, `scripts/dev/drive-app.mjs` — 빌드본·개발 서버·설치본을 임시 프로필로 띄워 조작하는 확인 도구
+- `scripts/dev/installer-smoke.mjs` — 설치본 무인 설치·실행·제거 확인, `scripts/dev/make-icon.mjs` — 앱 아이콘 생성
 - `@/`는 어느 프로세스에서나 `src`를 가리킨다 (`electron.vite.config.mts`, `tsconfig.*.json`, `vitest.config.mts`)
 
 ## 4. 코드 컨벤션
@@ -55,7 +63,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - TypeScript strict, `any` 금지. 외부 입력은 `unknown`으로 받아 zod로 파싱한다.
 - 들여쓰기는 공백 4칸. 문자열은 큰따옴표("")가 기본이고, 작은따옴표('')·백틱(``)은 필요할 때만 쓴다.
 - import는 `@/`를 쓴다. 같은 폴더와 하위 폴더만 `./`를 쓴다 (예: `./sub/x`). 상위 폴더 상대 경로(`../`)는 금지.
-- 파일명 kebab-case, 컴포넌트 `PascalCase.tsx`, 훅 `useXxx`, 테스트 `*.test.ts`.
+- 파일명 kebab-case, 컴포넌트 `PascalCase.tsx`, 훅 `useXxx`, 단위·통합 테스트 `*.test.ts`, E2E `*.spec.ts`.
 - 식별자와 커밋 타입은 영어, 주석·UI 문구·문서는 한국어.
 - UI 문구는 일어날 일을 쓴다: "동기화" 대신 "대상에 12개 복사, 3개 삭제".
 
@@ -94,6 +102,13 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - IPC 응답은 `{ ok: true, data } | { ok: false, error: { code, message } }`. 예외를 그대로 넘기지 않는다.
 - rclone 출력 파서는 순수 함수로 만들고 `tests/fixtures`의 실제 출력으로 테스트한다.
 
+### 4.7 E2E (`tests/e2e/`)
+
+- `@playwright/test`의 `_electron`으로 `out/` 빌드본을 띄운다. 실행 전 `pnpm run build`가 필요하다.
+- 임시 userData(`RCLONEGUI_USER_DATA`)·임시 `RCLONE_CONFIG`·`RCLONEGUI_E2E=1`을 쓰고, 실제 사용자 폴더·remote에 접근하지 않는다.
+- 화면 조작은 역할·이름·id(`#job-name` 등)로 하고, 확인 창은 `getByRole("dialog")`로 범위를 좁힌다.
+- 테스트마다 renderer 콘솔 오류 0건을 확인한다. rclone이 필요한 테스트는 없으면 이유와 함께 skip한다.
+
 ## 5. 작업 원칙
 
 - **Surgical Changes**: 요청된 부분만 수정하고 나머지는 그대로 둔다.
@@ -104,6 +119,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - [ ] `pnpm run check` 통과
 - [ ] `pnpm run format:check` 통과
 - [ ] 빌더·파서·안전 로직을 바꿨다면 테스트 추가, `pnpm run test:int` 통과
+- [ ] 화면·패키징을 바꿨다면 `pnpm run test:e2e` 통과(콘솔 오류 0), `pnpm run build:win` 성공
 - [ ] 사용자에게 보이는 변경은 `docs/CHANGELOG.md`에 한 줄
 - [ ] 새로 알게 된 rclone 동작은 `docs/knowhow/rclone-notes.md`에 기록
 - [ ] `docs/works/` 작업 내역 기록 (7장)
@@ -129,5 +145,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `.gitattributes` · `.editorconfig`: 모든 텍스트 파일 줄바꿈 LF (`*.bat`·`*.cmd`·`*.ps1`만 CRLF, `tests/fixtures/`는 원본 보존)
 - oxlint(`.oxlintrc.json`): `no-explicit-any`, 훅 규칙, 상위 폴더 상대 경로 import 금지(`@/` 사용), 화면 코드의 Node·Electron·main import 금지, shared의 Node import 금지
 - ESLint(`eslint.config.mjs`): oxlint에 없는 두 가지만 — `shell: true` 금지, `typ`/`itf`/`cls` 접두사
+- Playwright(`playwright.config.ts`): Electron E2E는 `tests/e2e/**/*.spec.ts`만, worker 1, 120초 제한
+- electron-builder(`electron-builder.yml`): NSIS x64 사용자 단위, asar, 언어 팩 ko·en-US, `dist/` 산출
 - 단위 테스트: 차단 목록의 옵션이 생성 결과에 나오지 않는다 (`tests/unit/command-builder.test.ts`)
 - `f_`·`h_` 접두사와 4.3~4.5 규칙은 도구로 강제하지 않으므로 리뷰에서 확인한다.

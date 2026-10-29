@@ -1,5 +1,6 @@
-# Windows NSIS 설치 파일(사용자 단위) 설정 초안. `pnpm run dist` → dist/
-# 설치본에는 out/ 과 운영 의존성만 들어간다(소스·테스트·문서·하네스 제외). 코드 서명 없음.
+# Windows NSIS 설치 파일(사용자 단위) 설정. `pnpm run dist` → dist/rcloneGUI-Setup-<버전>.exe
+# 설치본에는 out/ 과 운영 의존성(zod)만 들어간다(소스·테스트·문서·하네스 제외). 코드 서명 없음.
+# 제거해도 사용자 데이터(%APPDATA%\rcloneGUI)는 지우지 않는다. 로그인 항목은 build/installer.nsh가 지운다.
 appId: com.rclonegui.app
 productName: rcloneGUI
 directories:
@@ -8,12 +9,31 @@ directories:
 files:
     - out/**/*
     - package.json
+# 앱 밖에서 읽을 수 있는 고지. 트레이 아이콘은 out/main/assets에 번들된다(?asset)
+extraResources:
+    - from: THIRD_PARTY_NOTICES.md
+      to: THIRD_PARTY_NOTICES.md
+asar: true
+# 네이티브 모듈이 없으므로 다시 빌드하지 않는다
+npmRebuild: false
+# Chromium 언어 팩은 한국어·영어만 넣는다
+electronLanguages:
+    - ko
+    - en-US
 win:
     target:
         - target: nsis
           arch:
               - x64
+    icon: build/icon.ico
+    artifactName: rcloneGUI-Setup-${version}.${ext}
 nsis:
     oneClick: false
     perMachine: false
     allowToChangeInstallationDirectory: true
+    createDesktopShortcut: true
+    createStartMenuShortcut: true
+    shortcutName: rcloneGUI
+    uninstallDisplayName: rcloneGUI
+    deleteAppDataOnUninstall: false
+    include: build/installer.nsh

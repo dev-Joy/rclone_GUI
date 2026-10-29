@@ -33,7 +33,8 @@
         "tests/**/*",
         "electron.vite.config.mts",
         "vitest.config.mts",
-        "vitest.integration.config.mts"
+        "vitest.integration.config.mts",
+        "playwright.config.ts"
     ],
     "exclude": ["tests/unit/renderer/**"]
 }

@@ -1,7 +1,7 @@
 ---
 id: INT-001
 title: rclone 기반 폴더 비교·동기화 데스크톱 앱 (rcloneGUI)
-status: active
+status: done
 priority: P2
 created: 2026-10-27
 updated: 2026-10-29
@@ -67,9 +67,16 @@ updated: 2026-10-29
   - 완료 (2026-10-29, Phase 8): 20초 tick·nextRunAt 영속(시작 즉시 선기록, 재시작·절전 재개는 +60초)·일시정지, 같은 실행 안 비교 → 자동 게이트(삭제는 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 모두 필요) → 실행, noop은 이력 없이 lastRun만, 결과 알림(토스트/Windows 알림)·연속 실패 3회 경고.
 - [x] T-11 [P3] 설정 화면 (rclone 경로, 기본 옵션, 로그 보관/정리, 앱 테마) (depends: T-02)
   - 완료 (2026-10-29, Phase 8): 로그 30일·이력 500건 정리(시작·24시간마다), 이력 비우기(로그 삭제 선택), 테마(nativeTheme 연동), 트레이·로그인 시 시작 토글.
-- [ ] T-12 [P3] 테스트 및 패키징 (핵심 로직 단위 테스트, Windows 인스톨러 빌드, 실행 스모크 테스트) (depends: T-08, T-09, T-10, T-11, T-13, T-14)
+- [x] T-12 [P3] 테스트 및 패키징 (핵심 로직 단위 테스트, Windows 인스톨러 빌드, 실행 스모크 테스트) (depends: T-08, T-09, T-10, T-11, T-13, T-14)
+  - 완료 (2026-10-29, Phase 9): NSIS x64 사용자 단위 설치본 빌드(`dist/rcloneGUI-Setup-0.1.0.exe`, 113,606,102 bytes), 단위 707·통합 36(+1 skip)·E2E 3 통과, `pnpm run smoke:installer` 15/15 통과(임시 설치·실행·제거, asar 구성, 언어 팩 ko/en-US, 바로가기, 로그인 항목, userData 보존, 실제 %APPDATA% 불변), 패키징 `drive-app --exe` 89/89 통과.
 - [x] T-13 [P1] 실행 이력/로그 UI (이력 목록, 로그 tail 보기, 로그 폴더 열기·정리) (depends: T-07)
   - 완료 (2026-10-29, Phase 8): 작업 화면 이력 탭(종류·결과 필터)·상세(통계·오류·로그 끝부분 256KB)·로그 폴더 열기·이력 비우기.
 - [x] T-14 [P2] 트레이·로그인 시 자동 시작·단일 인스턴스 (depends: T-10)
   - 완료 (2026-10-29, Phase 8): 트레이(열기·로그 폴더·일시정지·종료, 툴팁에 다음 실행), 창 X → 트레이 숨김, 실행 중 종료 확인, 로그인 시 `--hidden` 시작(설치본만), second-instance 시 창 표시.
-- [ ] T-15 [P2] 문서(README/AGENTS.md) 및 실제 환경 수용 테스트(임시 경로·테스트 remote) (depends: T-12)
+- [x] T-15 [P2] 문서(README/AGENTS.md) 및 실제 환경 수용 테스트(임시 경로·테스트 remote) (depends: T-12)
+  - 완료 (2026-10-29, Phase 9): README(설치·개발·E2E·안전·데이터·문제 해결·제한)와 AGENTS.md(명령·구조·E2E 규칙·완료 기준)를 실제 pnpm 명령과 일치하게 작성, MVP_SPEC Phase 9 구현 반영. 실제 환경 수용은 임시 폴더·임시 rclone.conf·alias remote와 설치본 임시 userData로 수행했고 실제 사용자 폴더·실제 업무 remote는 사용하지 않음.
+
+## 결과 (Result)
+- Windows x64 NSIS 사용자 단위 설치본(`dist/rcloneGUI-Setup-0.1.0.exe`, 113,606,102 bytes)으로 빌드·설치·실행·제거까지 검증했고, 단위 707·통합 36(+1 skip)·E2E 3·설치 스모크 15/15·패키징 `drive-app --exe` 89/89가 통과했다.
+- 비교·copy/sync·자동 실행 안전장치·이력/로그·설정·트레이까지 Phase 0~9 기능이 완료되어 로컬 단일 사용자가 매일 사용할 수 있는 MVP 상태다.
+- 완료일: 2026-10-29

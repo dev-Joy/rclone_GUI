@@ -75,6 +75,11 @@ const APP_USER_MODEL_ID = "com.rclonegui.app";
 /** 로그인 시 시작 인자: 창 없이 트레이로 시작 */
 const HIDDEN_ARG = "--hidden";
 const START_HIDDEN = process.argv.includes(HIDDEN_ARG);
+/**
+ * Playwright E2E: 트레이를 만들지 않고 창을 닫으면 앱을 끝낸다.
+ * 임시 userData(RCLONEGUI_USER_DATA)와 함께 써서 실제 사용자 환경을 건드리지 않는다.
+ */
+const E2E = process.env.RCLONEGUI_E2E === "1";
 
 /** 종료를 허락했는지(확인·취소를 마쳤거나 세션 종료). 그 전에는 창 닫기·before-quit를 막는다 */
 let allowQuit = false;
@@ -141,9 +146,14 @@ function f_Notify(n: itfAppNotify): void {
 
 /** 로그인 시 시작 항목. 개발 실행은 electron.exe가 등록되므로 바꾸지 않는다 */
 function f_SyncLoginItem(enabled: boolean): void {
-    if (!app.isPackaged) return;
+    if (!app.isPackaged || E2E) return;
     try {
-        app.setLoginItemSettings({ openAtLogin: enabled, args: [HIDDEN_ARG] });
+        // 값 이름을 고정해야 제거 프로그램(build/installer.nsh)이 같은 이름으로 지운다
+        app.setLoginItemSettings({
+            openAtLogin: enabled,
+            args: [HIDDEN_ARG],
+            name: APP_USER_MODEL_ID,
+        });
     } catch (e) {
         logger.warn("로그인 항목을 바꾸지 못함", e);
     }
@@ -176,7 +186,7 @@ function f_OpenWindow(hidden: boolean): void {
     win.on("close", (event) => {
         if (allowQuit) return;
         event.preventDefault();
-        if (svc?.settings.get().ui.minimizeToTray && tray) {
+        if (!E2E && svc?.settings.get().ui.minimizeToTray && tray) {
             win.hide();
             if (!trayHintShown) {
                 trayHintShown = true;
@@ -462,26 +472,31 @@ async function f_Start(): Promise<void> {
         getWindow: () => mainWindow,
     });
 
-    f_OpenWindow(START_HIDDEN);
-    try {
-        tray = createTray({
-            icon: trayIconPath,
-            onShow: f_ShowWindow,
-            onOpenLogs: () => {
-                void shell.openPath(paths.logs);
-            },
-            onTogglePause: (paused) => {
-                scheduler?.setPaused(paused).catch((e: unknown) => {
-                    logger.warn("일시정지 변경 실패", e);
-                });
-            },
-            onQuit: f_RequestQuit,
-        });
-    } catch (e) {
-        logger.error("트레이 아이콘을 만들지 못함", e);
-        tray = null;
-        // 트레이가 없으면 숨긴 창을 다시 찾을 방법이 없으므로 보인다
+    f_OpenWindow(START_HIDDEN && !E2E);
+    if (E2E) {
+        // 트레이가 없으므로 --hidden으로 시작해도 창을 보인다(E2E가 화면을 조작한다)
         if (START_HIDDEN) f_ShowWindow();
+    } else {
+        try {
+            tray = createTray({
+                icon: trayIconPath,
+                onShow: f_ShowWindow,
+                onOpenLogs: () => {
+                    void shell.openPath(paths.logs);
+                },
+                onTogglePause: (paused) => {
+                    scheduler?.setPaused(paused).catch((e: unknown) => {
+                        logger.warn("일시정지 변경 실패", e);
+                    });
+                },
+                onQuit: f_RequestQuit,
+            });
+        } catch (e) {
+            logger.error("트레이 아이콘을 만들지 못함", e);
+            tray = null;
+            // 트레이가 없으면 숨긴 창을 다시 찾을 방법이 없으므로 보인다
+            if (START_HIDDEN) f_ShowWindow();
+        }
     }
 
     await f_Retention().catch((e: unknown) => logger.warn("보관 정리 실패", e));

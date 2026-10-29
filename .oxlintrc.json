@@ -53,6 +53,7 @@
                 "scripts/**/*.mjs",
                 "electron.vite.config.mts",
                 "eslint.config.mjs",
+                "playwright.config.ts",
                 "vitest.config.mts",
                 "vitest.integration.config.mts"
             ],
@@ -153,6 +154,16 @@
                 "es2024": true,
                 "node": true,
                 "vitest": true
+            },
+            "rules": {
+                "no-console": "off"
+            }
+        },
+        {
+            "files": ["tests/e2e/**/*.ts"],
+            "env": {
+                "es2024": true,
+                "node": true
             },
             "rules": {
                 "no-console": "off"

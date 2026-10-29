@@ -18,8 +18,14 @@
  * 개발 실행 전용 환경 변수: RCLONEGUI_DEV_TICK_MS(스케줄러 tick 단축), RCLONEGUI_DEV_QUIT_CHOICE(종료 확인 창 자동 응답)
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
+ * 설치본 모드(--exe <설치된 rcloneGUI.exe>): 그 exe로 띄우고 second-instance도 그 exe로 확인한다.
+ *   app:getInfo isPackaged === true, 설정의 로그인 시 시작은 활성. 설치본은 개발 실행 전용 환경 변수를 무시하므로
+ *   2회차의 자동 실행·실행 중 종료와 3회차는 건너뛰고, 재시작 유지·창 X 숨김·second-instance·--hidden·콘솔 오류만 본다.
+ *   --login-item을 함께 주면 설정에서 로그인 시 시작을 켠다(HKCU Run에 값이 생긴다. 명시할 때만).
+ *
  * 실행: pnpm run build 후 node scripts/dev/drive-app.mjs   (Windows node)
  *       개발 서버(HMR·개발 CSP)로 확인: node scripts/dev/drive-app.mjs --dev
+ *       설치본으로 확인: node scripts/dev/drive-app.mjs --exe <설치 폴더>\rcloneGUI.exe [--login-item]
  *
  * @author dev-Joy 2026-10-28
  */
@@ -45,6 +51,19 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const electronExe = createRequire(join(repoRoot, "package.json"))("electron");
 const PORT = 9333;
 const DEV = process.argv.includes("--dev");
+const exeArgAt = process.argv.indexOf("--exe");
+/** 설치본 exe 경로(--exe). 없으면 null(개발·빌드본 모드) */
+const EXE = exeArgAt > 0 ? resolve(process.argv[exeArgAt + 1] ?? "") : null;
+const PACKAGED = EXE !== null;
+const LOGIN_ITEM = process.argv.includes("--login-item");
+if (PACKAGED && (DEV || !existsSync(EXE))) {
+    console.error("--exe에는 설치된 rcloneGUI.exe 경로를 주고 --dev와 함께 쓰지 않습니다.");
+    process.exit(2);
+}
+if (LOGIN_ITEM && !PACKAGED) {
+    console.error("--login-item은 --exe(설치본)와 함께만 씁니다.");
+    process.exit(2);
+}
 
 function f_Sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -133,9 +152,11 @@ async function f_Launch(userData, extra = {}) {
                   ...(appArgs.length > 0 ? ["--", ...appArgs] : []),
               ],
           ]
-        : [electronExe, [repoRoot, `--remote-debugging-port=${PORT}`, ...appArgs]];
+        : PACKAGED
+          ? [EXE, [`--remote-debugging-port=${PORT}`, ...appArgs]]
+          : [electronExe, [repoRoot, `--remote-debugging-port=${PORT}`, ...appArgs]];
     const child = spawn(cmd, args, {
-        cwd: repoRoot,
+        cwd: PACKAGED ? dirname(EXE) : repoRoot,
         env: {
             ...process.env,
             RCLONEGUI_USER_DATA: userData,
@@ -207,8 +228,9 @@ function f_WindowShown(pid) {
 /** 같은 userData로 앱을 한 번 더 띄운다(단일 인스턴스: 기존 앱이 창을 보이고 새 프로세스는 바로 끝난다) */
 function f_SecondInstance(userData) {
     return new Promise((done) => {
-        const child = spawn(electronExe, [repoRoot], {
-            cwd: repoRoot,
+        const [cmd, args] = PACKAGED ? [EXE, []] : [electronExe, [repoRoot]];
+        const child = spawn(cmd, args, {
+            cwd: PACKAGED ? dirname(EXE) : repoRoot,
             env: { ...process.env, RCLONEGUI_USER_DATA: userData, ELECTRON_RENDERER_URL: "" },
             stdio: "ignore",
             shell: false,
@@ -344,6 +366,7 @@ try {
         info.ok && info.data.userDataPath === userData,
         JSON.stringify(info.data),
     );
+    f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
     const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy",
         excludes: ["node_modules/**"], configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
@@ -949,14 +972,39 @@ try {
     await ui.click("설정");
     await ui.until(`document.querySelector("#settings-launch-at-login")`);
     const appSettingsText = await ui.text();
-    f_Check(
-        "설정: 트레이 숨김(기본 켜짐)·로그인 시 시작(개발 실행은 비활성+이유)",
+    const trayOn =
         (await a.evaluate(`document.querySelector("#settings-minimize-to-tray")?.checked`)) ===
-            true &&
-            (await a.evaluate(`document.querySelector("#settings-launch-at-login")?.disabled`)) ===
-                true &&
-            appSettingsText.includes("개발 실행에서는 바꿀 수 없습니다"),
+        true;
+    const loginDisabled = await a.evaluate(
+        `document.querySelector("#settings-launch-at-login")?.disabled`,
     );
+    if (PACKAGED) {
+        f_Check(
+            "설정: 트레이 숨김(기본 켜짐)·로그인 시 시작(설치본은 활성·기본 꺼짐)",
+            trayOn &&
+                loginDisabled === false &&
+                (await a.evaluate(
+                    `document.querySelector("#settings-launch-at-login")?.checked`,
+                )) === false &&
+                appSettingsText.includes("창을 띄우지 않고 트레이에서 시작"),
+        );
+        if (LOGIN_ITEM) {
+            const loginOn = await a.evaluate(
+                `window.rclonegui.settings.update({ ui: { launchAtLogin: true } })`,
+            );
+            f_Check(
+                "설정: 로그인 시 시작 켜기(--login-item)",
+                loginOn.ok && loginOn.data.ui.launchAtLogin === true,
+            );
+        }
+    } else {
+        f_Check(
+            "설정: 트레이 숨김(기본 켜짐)·로그인 시 시작(개발 실행은 비활성+이유)",
+            trayOn &&
+                loginDisabled === true &&
+                appSettingsText.includes("개발 실행에서는 바꿀 수 없습니다"),
+        );
+    }
     const histBefore = (await a.evaluate("window.rclonegui.history.list()")).data?.length ?? 0;
     await ui.click("이력 비우기…");
     await ui.until(`document.querySelector("dialog[open] #clear-history-logs")`);
@@ -985,6 +1033,8 @@ try {
         )) && (await ui.until(`document.body.innerText.includes("자동 실행 일시정지됨")`)),
     );
     const errors1 = [...a.consoleErrors];
+    let errorsB = [];
+    let errorsC = [];
     await f_Close(a);
 
     // 2회차는 개발 실행 전용 환경 변수로 tick을 1초로 줄이고 종료 확인 창에 "종료"로 답한다
@@ -1028,234 +1078,268 @@ try {
         settings.data.scheduler.paused === true &&
             (await bUi.until(`document.body.innerText.includes("자동 실행 일시정지됨")`)),
     );
-    await bUi.click("자동 실행 재개");
-    await bUi.untilAsync(
-        `window.rclonegui.scheduler.getState().then((r) => r.data?.paused === false)`,
-    );
-    const autoCopyDst = join(smokeRoot, "auto-copy-dst");
-    const autoSyncDst = join(smokeRoot, "auto-sync-dst");
-    mkdirSync(autoCopyDst);
-    mkdirSync(autoSyncDst);
-    writeFileSync(join(autoSyncDst, "extra.txt"), "extra");
-    const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false }`;
-    const autoCopy = await b.evaluate(
-        `window.rclonegui.jobs.create({ ...${draft}, name: "자동 copy", source: ${js(smokeSrc)}, destination: ${js(autoCopyDst)}, ${autoOn} })`,
-    );
-    const autoSync = await b.evaluate(
-        `window.rclonegui.jobs.create({ ...${draft}, name: "자동 sync", mode: "sync", source: ${js(smokeSrc)}, destination: ${js(autoSyncDst)}, ${autoOn} })`,
-    );
-    const autoCreatedAt = Date.now();
-    f_Check(
-        "자동 실행 켠 작업: nextRunAt = 만든 시각 + 1분, 상단 막대에 다음 자동 실행",
-        autoCopy.ok &&
-            autoSync.ok &&
-            Math.abs(Date.parse(autoCopy.data.autoSync.nextRunAt) - (autoCreatedAt + 60_000)) <
-                5000 &&
-            (await bUi.until(`document.body.innerText.includes("다음 자동 실행")`)),
-        JSON.stringify(autoCopy.data?.autoSync),
-    );
-    const autoRecs = `window.rclonegui.history.list().then((r) => (r.data ?? []).filter((x) => x.trigger === "scheduler"))`;
-    const autoDone = await bUi.untilAsync(`${autoRecs}.then((l) => l.length >= 2)`, 120_000, 1000);
-    const autoList = await b.evaluate(autoRecs);
-    const autoCopyRec = autoList.find((r) => r.jobId === autoCopy.data?.id);
-    const autoSyncRec = autoList.find((r) => r.jobId === autoSync.data?.id);
-    f_Check(
-        "1분 주기 자동 실행: copy 반영(이력 자동·완료)",
-        autoDone &&
-            autoCopyRec?.status === "success" &&
-            readdirSync(autoCopyDst).toSorted().join(",") ===
-                readdirSync(smokeSrc).toSorted().join(","),
-        JSON.stringify(autoCopyRec?.status) + readdirSync(autoCopyDst).join(","),
-    );
-    f_Check(
-        "자동 sync + 삭제 허용 끔 → blocked 이력, 대상 불변",
-        autoSyncRec?.status === "blocked" &&
-            autoSyncRec.error?.message.includes("삭제를 허용하지 않아") &&
-            readdirSync(autoSyncDst).join(",") === "extra.txt",
-        JSON.stringify(autoSyncRec?.error),
-    );
-    await bUi.untilAsync(
-        `window.rclonegui.jobs.list().then((r) => r.data.filter((j) => j.name.startsWith("자동 ")).every((j) => j.autoSync.lastAutoRunAt !== null))`,
-        5000,
-    );
-    const autoJobs = (await b.evaluate("window.rclonegui.jobs.list()")).data.filter((j) =>
-        j.name.startsWith("자동 "),
-    );
-    f_Check(
-        "자동 실행 뒤 다음 예약 = 끝난 시각 + 1분, lastAutoRunAt 기록, lastRun 갱신",
-        autoJobs.length === 2 &&
-            autoJobs.every(
-                (j) =>
-                    j.autoSync.lastAutoRunAt !== null &&
-                    Date.parse(j.autoSync.nextRunAt) - Date.parse(j.autoSync.lastAutoRunAt) ===
-                        60_000 &&
-                    j.lastRun !== null,
-            ),
-        JSON.stringify(autoJobs.map((j) => [j.autoSync, j.lastRun?.status])),
-    );
-    // 이후 시나리오를 방해하지 않도록 일시정지(재시작 후 유지·예약 유지 확인용)
-    await bUi.click("자동 실행 일시정지");
-    await bUi.untilAsync(
-        `window.rclonegui.scheduler.getState().then((r) => r.data?.paused === true)`,
-    );
-    const autoNextBefore = Object.fromEntries(autoJobs.map((j) => [j.id, j.autoSync.nextRunAt]));
-    const autoCountBefore = autoList.length;
+    if (PACKAGED) {
+        // 설치본은 개발 실행 전용 환경 변수(tick 단축·종료 확인 자동 응답)를 무시한다:
+        // 자동 실행·실행 중 종료·3회차는 건너뛰고 창 X 숨김과 second-instance만 확인한다
+        const exitedP = new Promise((r) => b.child.once("exit", () => r(true)));
+        await f_SendClose(b.child.pid);
+        await f_Sleep(1000);
+        const aliveAfterHideP = await Promise.race([
+            exitedP.then(() => false),
+            f_Sleep(200).then(() => true),
+        ]);
+        f_Check(
+            "설치본: 창 X(트레이 켜짐) → 창 숨김, 앱 계속",
+            aliveAfterHideP && !(await f_WindowShown(b.child.pid)),
+        );
+        await f_SecondInstance(userData);
+        let shownAgainP = false;
+        for (let i = 0; i < 20 && !shownAgainP; i += 1) {
+            await f_Sleep(200);
+            shownAgainP = await f_WindowShown(b.child.pid);
+        }
+        f_Check("설치본: 두 번째 실행(second-instance) → 숨긴 창 다시 표시", shownAgainP);
+        errorsB = [...b.consoleErrors];
+        await f_Close(b);
+    } else {
+        await bUi.click("자동 실행 재개");
+        await bUi.untilAsync(
+            `window.rclonegui.scheduler.getState().then((r) => r.data?.paused === false)`,
+        );
+        const autoCopyDst = join(smokeRoot, "auto-copy-dst");
+        const autoSyncDst = join(smokeRoot, "auto-sync-dst");
+        mkdirSync(autoCopyDst);
+        mkdirSync(autoSyncDst);
+        writeFileSync(join(autoSyncDst, "extra.txt"), "extra");
+        const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false }`;
+        const autoCopy = await b.evaluate(
+            `window.rclonegui.jobs.create({ ...${draft}, name: "자동 copy", source: ${js(smokeSrc)}, destination: ${js(autoCopyDst)}, ${autoOn} })`,
+        );
+        const autoSync = await b.evaluate(
+            `window.rclonegui.jobs.create({ ...${draft}, name: "자동 sync", mode: "sync", source: ${js(smokeSrc)}, destination: ${js(autoSyncDst)}, ${autoOn} })`,
+        );
+        const autoCreatedAt = Date.now();
+        f_Check(
+            "자동 실행 켠 작업: nextRunAt = 만든 시각 + 1분, 상단 막대에 다음 자동 실행",
+            autoCopy.ok &&
+                autoSync.ok &&
+                Math.abs(Date.parse(autoCopy.data.autoSync.nextRunAt) - (autoCreatedAt + 60_000)) <
+                    5000 &&
+                (await bUi.until(`document.body.innerText.includes("다음 자동 실행")`)),
+            JSON.stringify(autoCopy.data?.autoSync),
+        );
+        const autoRecs = `window.rclonegui.history.list().then((r) => (r.data ?? []).filter((x) => x.trigger === "scheduler"))`;
+        const autoDone = await bUi.untilAsync(
+            `${autoRecs}.then((l) => l.length >= 2)`,
+            120_000,
+            1000,
+        );
+        const autoList = await b.evaluate(autoRecs);
+        const autoCopyRec = autoList.find((r) => r.jobId === autoCopy.data?.id);
+        const autoSyncRec = autoList.find((r) => r.jobId === autoSync.data?.id);
+        f_Check(
+            "1분 주기 자동 실행: copy 반영(이력 자동·완료)",
+            autoDone &&
+                autoCopyRec?.status === "success" &&
+                readdirSync(autoCopyDst).toSorted().join(",") ===
+                    readdirSync(smokeSrc).toSorted().join(","),
+            JSON.stringify(autoCopyRec?.status) + readdirSync(autoCopyDst).join(","),
+        );
+        f_Check(
+            "자동 sync + 삭제 허용 끔 → blocked 이력, 대상 불변",
+            autoSyncRec?.status === "blocked" &&
+                autoSyncRec.error?.message.includes("삭제를 허용하지 않아") &&
+                readdirSync(autoSyncDst).join(",") === "extra.txt",
+            JSON.stringify(autoSyncRec?.error),
+        );
+        await bUi.untilAsync(
+            `window.rclonegui.jobs.list().then((r) => r.data.filter((j) => j.name.startsWith("자동 ")).every((j) => j.autoSync.lastAutoRunAt !== null))`,
+            5000,
+        );
+        const autoJobs = (await b.evaluate("window.rclonegui.jobs.list()")).data.filter((j) =>
+            j.name.startsWith("자동 "),
+        );
+        f_Check(
+            "자동 실행 뒤 다음 예약 = 끝난 시각 + 1분, lastAutoRunAt 기록, lastRun 갱신",
+            autoJobs.length === 2 &&
+                autoJobs.every(
+                    (j) =>
+                        j.autoSync.lastAutoRunAt !== null &&
+                        Date.parse(j.autoSync.nextRunAt) - Date.parse(j.autoSync.lastAutoRunAt) ===
+                            60_000 &&
+                        j.lastRun !== null,
+                ),
+            JSON.stringify(autoJobs.map((j) => [j.autoSync, j.lastRun?.status])),
+        );
+        // 이후 시나리오를 방해하지 않도록 일시정지(재시작 후 유지·예약 유지 확인용)
+        await bUi.click("자동 실행 일시정지");
+        await bUi.untilAsync(
+            `window.rclonegui.scheduler.getState().then((r) => r.data?.paused === true)`,
+        );
+        const autoNextBefore = Object.fromEntries(
+            autoJobs.map((j) => [j.id, j.autoSync.nextRunAt]),
+        );
+        const autoCountBefore = autoList.length;
 
-    // ===== 실행 중 앱 종료: 창 X는 트레이로 숨김(실행 계속), 트레이를 끄면 종료 확인 → 취소 뒤 종료 =====
-    // 작은 파일 3000개를 transfers 1로 복사해 실행 중에 창을 닫는다(앱에는 대역폭 제한 옵션이 없다)
-    const quitSrc = join(smokeRoot, "quit-src");
-    const quitDst = join(smokeRoot, "quit-dst");
-    mkdirSync(quitSrc);
-    mkdirSync(quitDst);
-    for (let i = 0; i < QUIT_FILES; i += 1) {
-        writeFileSync(join(quitSrc, `f${String(i).padStart(4, "0")}.bin`), Buffer.alloc(4096, i));
-    }
-    const quitJob = await b.evaluate(
-        `window.rclonegui.jobs.create({ ...${draft}, name: "종료 스모크", source: ${js(quitSrc)}, destination: ${js(quitDst)}, options: { ...${draft}.options, checkers: 1, transfers: 1 } })`,
-    );
-    const quitJobId = quitJob.data?.id;
-    const quitCmp = await b.evaluate(`window.rclonegui.compare.run(${js(quitJobId)})`);
-    const quitStart = await b.evaluate(
-        `window.rclonegui.run.start({ jobId: ${js(quitJobId)}, dryRun: false, planToken: ${js(quitCmp.data?.planToken ?? "")}, confirmedDeletes: 0 })`,
-    );
-    const activeRunFile = join(userData, "active-run.json");
-    await bUi.until(
-        `window.rclonegui.run.getActive().then((r) => r.data?.phase === "transferring")`,
-        20000,
-    );
-    for (let t = 0; t < 50 && !existsSync(activeRunFile); t += 1) await f_Sleep(100);
-    const activeRec = existsSync(activeRunFile)
-        ? JSON.parse(readFileSync(activeRunFile, "utf8"))
-        : null;
-    const runningBeforeQuit =
-        quitStart.ok && (await b.evaluate("window.rclonegui.run.getActive()")).data !== null;
-    f_Check(
-        "종료 전: 실제 copy 실행 중·active-run.json에 rclone pid",
-        runningBeforeQuit && Number.isInteger(activeRec?.pid),
-        JSON.stringify({ quitStart, activeRec }),
-    );
-    const exitedB = new Promise((r) => b.child.once("exit", () => r(true)));
-    // 트레이 숨김(기본 켜짐): 창을 닫아도 앱·실행은 계속된다
-    await f_SendClose(b.child.pid);
-    await f_Sleep(1000);
-    const aliveAfterHide = await Promise.race([
-        exitedB.then(() => false),
-        f_Sleep(200).then(() => true),
-    ]);
-    f_Check(
-        "실행 중 창 X(트레이 켜짐) → 창 숨김, 앱·실행 계속",
-        aliveAfterHide &&
-            !(await f_WindowShown(b.child.pid)) &&
-            (await b.evaluate("window.rclonegui.run.getActive()")).data !== null,
-    );
-    // 단일 인스턴스: 한 번 더 띄우면 새 프로세스는 끝나고 숨긴 창이 다시 보인다
-    await f_SecondInstance(userData);
-    let shownAgain = false;
-    for (let i = 0; i < 20 && !shownAgain; i += 1) {
-        await f_Sleep(200);
-        shownAgain = await f_WindowShown(b.child.pid);
-    }
-    f_Check("두 번째 실행(second-instance) → 숨긴 창 다시 표시", shownAgain);
-    // 트레이를 끄면 창 X가 종료 흐름(확인 창 → 취소 → 최대 10초 대기)을 탄다
-    await b.evaluate(`window.rclonegui.settings.update({ ui: { minimizeToTray: false } })`);
-    const errorsB = [...b.consoleErrors];
-    await f_SendClose(b.child.pid);
-    const quitStartedAt = Date.now();
-    const quitOk = await Promise.race([exitedB, f_Sleep(QUIT_TIMEOUT_MS).then(() => false)]);
-    const quitMs = Date.now() - quitStartedAt;
-    b.ws.close();
-    if (!quitOk) await f_Close(b);
-    const rcloneLeft = activeRec ? await f_PidAlive(activeRec.pid) : true;
-    const quitHist = existsSync(join(userData, "history.json"))
-        ? JSON.parse(readFileSync(join(userData, "history.json"), "utf8")).records.find(
-              (r) => r.id === activeRec?.runId,
-          )
-        : null;
-    const copiedCount = readdirSync(quitDst).length;
-    f_Check(
-        "트레이 끈 채 실행 중 창 닫기 → 종료 확인(종료) → 실행 취소 후 앱 종료",
-        quitOk && quitMs < QUIT_TIMEOUT_MS,
-        `quitOk=${quitOk} ${quitMs}ms`,
-    );
-    f_Check(
-        "종료 뒤 rclone 프로세스 없음·active-run.json 없음",
-        !rcloneLeft && !existsSync(activeRunFile),
-        `pid=${activeRec?.pid} alive=${rcloneLeft}`,
-    );
-    f_Check(
-        "종료 뒤 이력은 canceled(중단됨 아님)·전송 시작 기록·대상은 일부만 복사",
-        quitHist?.status === "canceled" &&
-            quitHist?.transferStarted === true &&
-            copiedCount < QUIT_FILES,
-        `status=${quitHist?.status} transferStarted=${quitHist?.transferStarted} copied=${copiedCount}`,
-    );
+        // ===== 실행 중 앱 종료: 창 X는 트레이로 숨김(실행 계속), 트레이를 끄면 종료 확인 → 취소 뒤 종료 =====
+        // 작은 파일 3000개를 transfers 1로 복사해 실행 중에 창을 닫는다(앱에는 대역폭 제한 옵션이 없다)
+        const quitSrc = join(smokeRoot, "quit-src");
+        const quitDst = join(smokeRoot, "quit-dst");
+        mkdirSync(quitSrc);
+        mkdirSync(quitDst);
+        for (let i = 0; i < QUIT_FILES; i += 1) {
+            writeFileSync(
+                join(quitSrc, `f${String(i).padStart(4, "0")}.bin`),
+                Buffer.alloc(4096, i),
+            );
+        }
+        const quitJob = await b.evaluate(
+            `window.rclonegui.jobs.create({ ...${draft}, name: "종료 스모크", source: ${js(quitSrc)}, destination: ${js(quitDst)}, options: { ...${draft}.options, checkers: 1, transfers: 1 } })`,
+        );
+        const quitJobId = quitJob.data?.id;
+        const quitCmp = await b.evaluate(`window.rclonegui.compare.run(${js(quitJobId)})`);
+        const quitStart = await b.evaluate(
+            `window.rclonegui.run.start({ jobId: ${js(quitJobId)}, dryRun: false, planToken: ${js(quitCmp.data?.planToken ?? "")}, confirmedDeletes: 0 })`,
+        );
+        const activeRunFile = join(userData, "active-run.json");
+        await bUi.until(
+            `window.rclonegui.run.getActive().then((r) => r.data?.phase === "transferring")`,
+            20000,
+        );
+        for (let t = 0; t < 50 && !existsSync(activeRunFile); t += 1) await f_Sleep(100);
+        const activeRec = existsSync(activeRunFile)
+            ? JSON.parse(readFileSync(activeRunFile, "utf8"))
+            : null;
+        const runningBeforeQuit =
+            quitStart.ok && (await b.evaluate("window.rclonegui.run.getActive()")).data !== null;
+        f_Check(
+            "종료 전: 실제 copy 실행 중·active-run.json에 rclone pid",
+            runningBeforeQuit && Number.isInteger(activeRec?.pid),
+            JSON.stringify({ quitStart, activeRec }),
+        );
+        const exitedB = new Promise((r) => b.child.once("exit", () => r(true)));
+        // 트레이 숨김(기본 켜짐): 창을 닫아도 앱·실행은 계속된다
+        await f_SendClose(b.child.pid);
+        await f_Sleep(1000);
+        const aliveAfterHide = await Promise.race([
+            exitedB.then(() => false),
+            f_Sleep(200).then(() => true),
+        ]);
+        f_Check(
+            "실행 중 창 X(트레이 켜짐) → 창 숨김, 앱·실행 계속",
+            aliveAfterHide &&
+                !(await f_WindowShown(b.child.pid)) &&
+                (await b.evaluate("window.rclonegui.run.getActive()")).data !== null,
+        );
+        // 단일 인스턴스: 한 번 더 띄우면 새 프로세스는 끝나고 숨긴 창이 다시 보인다
+        await f_SecondInstance(userData);
+        let shownAgain = false;
+        for (let i = 0; i < 20 && !shownAgain; i += 1) {
+            await f_Sleep(200);
+            shownAgain = await f_WindowShown(b.child.pid);
+        }
+        f_Check("두 번째 실행(second-instance) → 숨긴 창 다시 표시", shownAgain);
+        // 트레이를 끄면 창 X가 종료 흐름(확인 창 → 취소 → 최대 10초 대기)을 탄다
+        await b.evaluate(`window.rclonegui.settings.update({ ui: { minimizeToTray: false } })`);
+        errorsB = [...b.consoleErrors];
+        await f_SendClose(b.child.pid);
+        const quitStartedAt = Date.now();
+        const quitOk = await Promise.race([exitedB, f_Sleep(QUIT_TIMEOUT_MS).then(() => false)]);
+        const quitMs = Date.now() - quitStartedAt;
+        b.ws.close();
+        if (!quitOk) await f_Close(b);
+        const rcloneLeft = activeRec ? await f_PidAlive(activeRec.pid) : true;
+        const quitHist = existsSync(join(userData, "history.json"))
+            ? JSON.parse(readFileSync(join(userData, "history.json"), "utf8")).records.find(
+                  (r) => r.id === activeRec?.runId,
+              )
+            : null;
+        const copiedCount = readdirSync(quitDst).length;
+        f_Check(
+            "트레이 끈 채 실행 중 창 닫기 → 종료 확인(종료) → 실행 취소 후 앱 종료",
+            quitOk && quitMs < QUIT_TIMEOUT_MS,
+            `quitOk=${quitOk} ${quitMs}ms`,
+        );
+        f_Check(
+            "종료 뒤 rclone 프로세스 없음·active-run.json 없음",
+            !rcloneLeft && !existsSync(activeRunFile),
+            `pid=${activeRec?.pid} alive=${rcloneLeft}`,
+        );
+        f_Check(
+            "종료 뒤 이력은 canceled(중단됨 아님)·전송 시작 기록·대상은 일부만 복사",
+            quitHist?.status === "canceled" &&
+                quitHist?.transferStarted === true &&
+                copiedCount < QUIT_FILES,
+            `status=${quitHist?.status} transferStarted=${quitHist?.transferStarted} copied=${copiedCount}`,
+        );
 
-    const cLaunchedAt = Date.now();
-    const c = await f_Launch(userData, { env: { RCLONEGUI_DEV_TICK_MS: "1000" } });
-    const notices = await c.evaluate("window.rclonegui.app.getNotices()");
-    const quitJobAfter = (await c.evaluate("window.rclonegui.jobs.list()")).data.find(
-        (j) => j.id === quitJobId,
-    );
-    f_Check(
-        "재시작: 중단됨 안내 없음·실행 없음·lastRun canceled",
-        notices.ok &&
-            !notices.data.some((n) => n.message.includes("중단됨")) &&
-            (await c.evaluate("window.rclonegui.run.getActive()")).data === null &&
-            quitJobAfter?.lastRun?.status === "canceled",
-        JSON.stringify({ notices: notices.data, lastRun: quitJobAfter?.lastRun }),
-    );
-    // 재시작: 일시정지 유지, 미래 예약은 그대로·지난 예약은 시작 + 60초(몰아서 실행하지 않음), 중복 실행 없음
-    await f_Sleep(3000);
-    const cState = await c.evaluate("window.rclonegui.scheduler.getState()");
-    const cJobs = (await c.evaluate("window.rclonegui.jobs.list()")).data.filter((j) =>
-        j.name.startsWith("자동 "),
-    );
-    const cAuto = (await c.evaluate("window.rclonegui.history.list()")).data.filter(
-        (r) => r.trigger === "scheduler",
-    );
-    f_Check(
-        "재시작 후 일시정지·자동 실행 예약 유지, 중복 실행 없음",
-        cState.data?.paused === true &&
-            cJobs.length === 2 &&
-            cJobs.every((j) => {
-                const before = autoNextBefore[j.id];
-                const now = Date.parse(j.autoSync.nextRunAt);
-                return Date.parse(before) > cLaunchedAt
-                    ? j.autoSync.nextRunAt === before
-                    : now >= cLaunchedAt + 55_000;
-            }) &&
-            cAuto.length === autoCountBefore,
-        JSON.stringify({
-            paused: cState.data?.paused,
-            autoNextBefore,
-            cJobs: cJobs.map((j) => j.autoSync.nextRunAt),
-            cAuto: cAuto.length,
-        }),
-    );
-    // 전송 중 취소한 기록의 이력 상세에는 .partial 안내가 보인다
-    const cUi = f_Ui(c);
-    await cUi.clickJob("종료 스모크");
-    await cUi.until(`document.querySelector("#job-title")?.textContent === "종료 스모크"`);
-    await c.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
-    await cUi.until(
-        `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button").length === 1`,
-    );
-    await c.evaluate(
-        `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
-    );
-    const quitDetail = await cUi.until(
-        `document.querySelector("dialog[open]")?.innerText.includes("임시 파일(.partial)이 남을 수 있습니다")`,
-        5000,
-    );
-    f_Check(
-        "전송 중 취소한 기록의 이력 상세 → .partial 안내",
-        quitDetail,
-        (await cUi.dialogText()).replace(/\s+/g, " ").slice(0, 300),
-    );
-    await cUi.click("닫기", { inDialog: true });
-    await f_Sleep(300);
-    const errorsC = [...c.consoleErrors];
-    await f_Close(c);
+        const cLaunchedAt = Date.now();
+        const c = await f_Launch(userData, { env: { RCLONEGUI_DEV_TICK_MS: "1000" } });
+        const notices = await c.evaluate("window.rclonegui.app.getNotices()");
+        const quitJobAfter = (await c.evaluate("window.rclonegui.jobs.list()")).data.find(
+            (j) => j.id === quitJobId,
+        );
+        f_Check(
+            "재시작: 중단됨 안내 없음·실행 없음·lastRun canceled",
+            notices.ok &&
+                !notices.data.some((n) => n.message.includes("중단됨")) &&
+                (await c.evaluate("window.rclonegui.run.getActive()")).data === null &&
+                quitJobAfter?.lastRun?.status === "canceled",
+            JSON.stringify({ notices: notices.data, lastRun: quitJobAfter?.lastRun }),
+        );
+        // 재시작: 일시정지 유지, 미래 예약은 그대로·지난 예약은 시작 + 60초(몰아서 실행하지 않음), 중복 실행 없음
+        await f_Sleep(3000);
+        const cState = await c.evaluate("window.rclonegui.scheduler.getState()");
+        const cJobs = (await c.evaluate("window.rclonegui.jobs.list()")).data.filter((j) =>
+            j.name.startsWith("자동 "),
+        );
+        const cAuto = (await c.evaluate("window.rclonegui.history.list()")).data.filter(
+            (r) => r.trigger === "scheduler",
+        );
+        f_Check(
+            "재시작 후 일시정지·자동 실행 예약 유지, 중복 실행 없음",
+            cState.data?.paused === true &&
+                cJobs.length === 2 &&
+                cJobs.every((j) => {
+                    const before = autoNextBefore[j.id];
+                    const now = Date.parse(j.autoSync.nextRunAt);
+                    return Date.parse(before) > cLaunchedAt
+                        ? j.autoSync.nextRunAt === before
+                        : now >= cLaunchedAt + 55_000;
+                }) &&
+                cAuto.length === autoCountBefore,
+            JSON.stringify({
+                paused: cState.data?.paused,
+                autoNextBefore,
+                cJobs: cJobs.map((j) => j.autoSync.nextRunAt),
+                cAuto: cAuto.length,
+            }),
+        );
+        // 전송 중 취소한 기록의 이력 상세에는 .partial 안내가 보인다
+        const cUi = f_Ui(c);
+        await cUi.clickJob("종료 스모크");
+        await cUi.until(`document.querySelector("#job-title")?.textContent === "종료 스모크"`);
+        await c.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+        await cUi.until(
+            `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button").length === 1`,
+        );
+        await c.evaluate(
+            `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+        );
+        const quitDetail = await cUi.until(
+            `document.querySelector("dialog[open]")?.innerText.includes("임시 파일(.partial)이 남을 수 있습니다")`,
+            5000,
+        );
+        f_Check(
+            "전송 중 취소한 기록의 이력 상세 → .partial 안내",
+            quitDetail,
+            (await cUi.dialogText()).replace(/\s+/g, " ").slice(0, 300),
+        );
+        await cUi.click("닫기", { inDialog: true });
+        await f_Sleep(300);
+        errorsC = [...c.consoleErrors];
+        await f_Close(c);
+    }
 
     // ===== 4회차: --hidden(로그인 시 시작)이면 창을 보이지 않는다 =====
     const d = await f_Launch(userData, { args: ["--hidden"] });

@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
 
-# Build output (electron-vite → out/, electron-builder → release/)
+# Build output (electron-vite → out/, electron-builder → dist/)
 # build/ 는 electron-builder 리소스(icon.ico 등) 폴더이므로 제외하지 않는다.
 out/
 release/

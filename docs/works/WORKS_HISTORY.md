@@ -110,7 +110,18 @@
 - 검증: check(unit 708), format:check, test:int 36(+1 skip), build, drive-app 빌드본 98 통과
 - 후속: 실행 중 앱 비정상 종료로 `interrupted`가 된 기록도 전송이 시작됐다면 안내 대상에 포함(`mayLeavePartial`)
 
+[TASK_012] : (2026-10-29) INT-001 Phase 9 — 패키징·E2E·문서·실제 환경 수용 (관련 Intent: INT-001, T-12·T-15 완료)
+- 패키징: `electron-builder.yml` — NSIS x64 사용자 단위, asar, 언어 팩 ko/en-US, `build/icon.ico`, `artifactName`, 바탕 화면·시작 메뉴 바로가기, `uninstallDisplayName`, `deleteAppDataOnUninstall: false`, `build/installer.nsh`(로그인 항목 정리), `extraResources`에 `THIRD_PARTY_NOTICES.md`, `npmRebuild: false`. `build/icon.ico`·`scripts/dev/make-icon.mjs`(도형만 그림), `scripts/dev/installer-smoke.mjs`(임시 설치 → asar 구성·언어 팩·바로가기·Uninstall 키 → 설치본 실행·`drive-app --exe` → 무인 제거 → userData 보존·로그인 항목 제거·실제 `%APPDATA%` 불변), `drive-app`에 `--exe`·`--login-item` 모드
+- E2E: `@playwright/test` 1.64.1, `playwright.config.ts`(worker 1, 120초, trace retain-on-failure), `tests/e2e/app-harness.ts`(임시 userData·빈 rclone.conf·`RCLONEGUI_E2E=1`·콘솔 오류 수집·재시작), `smoke.spec.ts`(창·preload·getInfo·새 작업 저장·재시작·설정), `compare-copy.spec.ts`(비교 2/1/1 → 복사 확인 창 → 대상 파일 → 이력, rclone 없으면 skip). main `RCLONEGUI_E2E`: 트레이 없음·창 닫기 종료·로그인 항목 변경 없음·`--hidden`도 창 표시
+- 스크립트/설정: `build:win`(= build + electron-builder `--publish never`), `dist`= `build:win`, `smoke:installer`, `test:e2e`(build + playwright). `tsconfig.node.json`·`.oxlintrc.json`에 Playwright·e2e 예외. React·ReactDOM·zustand를 devDependencies로 옮겨 설치본에는 zod만 포함
+- 문서: README(설치·첫 실행·WSL/remote·copy/sync·안전 동작·데이터·개발 명령·E2E·설치 스모크·문제 해결·제한), AGENTS(명령·구조·E2E 규칙·완료 기준·도구), MVP_SPEC Phase 9 구현 반영, `.gitignore` 주석 정정
+- 검증: `pnpm run check`(unit 707), `format:check`, `test:int` 36(+1 skip), `test:e2e` 3, `build:win`(설치 파일 113,606,102 bytes), `smoke:installer` 15/15(`--login-item` 포함), 패키징 `drive-app --exe` 89/89
+- 설계와 다름: electron-builder 출력은 계획의 `release/` 대신 기존 `dist/`; 트레이 아이콘은 루트 `resources/tray.png` 대신 `src/main/assets/tray.png`를 `?asset`으로 asar에 번들; README 명령은 계획의 npm이 아니라 실제 pnpm; `test:e2e`가 `build`를 먼저 실행
+- 오류/해결: E2E 설정 화면 제목 셀렉터가 'rclone 설정'과 겹쳐 strict mode 실패 → `exact: true`. 기존 rcloneGUI 설치로 installer-smoke가 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행해 통과
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
 - (2026-10-28) 테스트·스모크로 찾은 결함: writeJsonAtomic 폴더 생성 실패가 STORE_ERROR로 감싸지지 않음, settings.update 동기 예외, jobs:create가 알 수 없는 키를 버리고 저장, 운영 CSP meta의 frame-ancestors 콘솔 오류 → 모두 수정 [TASK_001 해결]
+- (2026-10-29) E2E 설정 화면 제목 셀렉터(`getByRole("heading", { name: "설정" })`)가 'rclone 설정'과 겹쳐 strict mode 위반 → `exact: true` [TASK_012 해결]
+- (2026-10-29) 기존 rcloneGUI 0.1.0 설치로 installer-smoke 사전 확인 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행, 15건 통과 [TASK_012 해결]
