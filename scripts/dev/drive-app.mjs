@@ -5,8 +5,11 @@
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
  *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
  *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영),
- *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변 → 다시 비교 → 대상 반영)
- * 2회차: 재시작 후 작업·설정·lastRun 유지, active-run 없음, 이름순 첫 작업 자동 선택, 콘솔 오류 0건 확인
+ *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변
+ *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 비교 탭) → 대상 반영)
+ * 2회차: 재시작 후 작업·설정·lastRun 유지, active-run 없음, 이름순 첫 작업 자동 선택,
+ *        실행 중 창 닫기(before-quit) → 취소 뒤 종료·rclone 미잔존·active-run 없음·이력 canceled
+ * 3회차: 중단됨 안내 없음·lastRun canceled, 콘솔 오류 0건 확인
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
  *
  * 실행: pnpm run build 후 node scripts/dev/drive-app.mjs   (Windows node)
@@ -150,6 +153,22 @@ async function f_Close(app) {
 }
 
 const js = (v) => JSON.stringify(v);
+
+const QUIT_FILES = 3000;
+/** main의 종료 대기(10초) + 여유 */
+const QUIT_TIMEOUT_MS = 15_000;
+
+/** tasklist로 PID가 살아 있는지 (Windows) */
+function f_PidAlive(pid) {
+    return new Promise((done) => {
+        execFile(
+            "tasklist",
+            ["/FI", `PID eq ${pid}`, "/NH", "/FO", "CSV"],
+            { shell: false, windowsHide: true },
+            (err, out) => done(!err && out.includes(`"${pid}"`)),
+        );
+    });
+}
 
 /** 화면 조작 도우미 (React 제어 입력은 네이티브 setter + input/change 이벤트로 바꾼다) */
 function f_Ui(app) {
@@ -709,11 +728,30 @@ try {
             readdirSync(syncDst).toSorted().join(",") === "keep.txt,late.txt",
         driftText.replace(/\s+/g, " "),
     );
+    // 안내가 떠 있는 동안 다른 작업으로 옮겨 고친다 → 다시 비교는 변경 버리기 확인 뒤 막힌 작업의 비교 탭으로 옮겨 비교한다
+    await ui.clickJob("UI 작업");
+    await a.evaluate(`document.querySelector("#job-tabs-tab-edit")?.click()`);
+    await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`);
+    await ui.fill("input[name=name]", "UI 작업 수정");
     await ui.click("다시 비교", { inDialog: true });
     f_Check(
-        "다시 비교 → 동기화 실행 활성",
+        "다른 작업을 고친 채 다시 비교 → 변경 버리기 확인",
+        await ui.until(
+            `document.querySelector("dialog[open]")?.innerText.includes("변경 버리고 이동")`,
+        ),
+        await ui.dialogText(),
+    );
+    await ui.click("변경 버리고 이동", { inDialog: true });
+    f_Check(
+        "다시 비교 → 막힌 작업(sync 스모크)·비교 탭으로 옮겨 비교, 동기화 실행 활성",
         (await ui.until(`!document.querySelector("dialog[open]")`)) &&
-            (await ui.until(syncReady, 20000)),
+            (await ui.until(syncReady, 20000)) &&
+            (await a.evaluate(`document.querySelector("#job-title")?.textContent`)) ===
+                "sync 스모크" &&
+            (await a.evaluate(
+                `document.querySelector("#job-tabs-tab-compare")?.getAttribute("aria-selected")`,
+            )) === "true",
+        (await ui.text()).slice(0, 300),
     );
     await ui.click("동기화 실행");
     await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
@@ -777,10 +815,89 @@ try {
         "재시작 후 이름순 첫 작업 자동 선택",
         await f_Ui(b).until(`document.querySelector("input[name=name]")?.value === "스모크"`),
     );
+
+    // ===== 실행 중 앱 종료(before-quit): 창을 닫으면 실행을 취소하고 rclone이 끝난 뒤 앱이 종료된다 =====
+    // 작은 파일 3000개를 transfers 1로 복사해 실행 중에 창을 닫는다(앱에는 대역폭 제한 옵션이 없다)
+    const quitSrc = join(smokeRoot, "quit-src");
+    const quitDst = join(smokeRoot, "quit-dst");
+    mkdirSync(quitSrc);
+    mkdirSync(quitDst);
+    for (let i = 0; i < QUIT_FILES; i += 1) {
+        writeFileSync(join(quitSrc, `f${String(i).padStart(4, "0")}.bin`), Buffer.alloc(4096, i));
+    }
+    const quitJob = await b.evaluate(
+        `window.rclonegui.jobs.create({ ...${draft}, name: "종료 스모크", source: ${js(quitSrc)}, destination: ${js(quitDst)}, options: { ...${draft}.options, checkers: 1, transfers: 1 } })`,
+    );
+    const quitJobId = quitJob.data?.id;
+    const quitCmp = await b.evaluate(`window.rclonegui.compare.run(${js(quitJobId)})`);
+    const quitStart = await b.evaluate(
+        `window.rclonegui.run.start({ jobId: ${js(quitJobId)}, dryRun: false, planToken: ${js(quitCmp.data?.planToken ?? "")}, confirmedDeletes: 0 })`,
+    );
+    const activeRunFile = join(userData, "active-run.json");
+    const bUi = f_Ui(b);
+    await bUi.until(
+        `window.rclonegui.run.getActive().then((r) => r.data?.phase === "transferring")`,
+        20000,
+    );
+    for (let t = 0; t < 50 && !existsSync(activeRunFile); t += 1) await f_Sleep(100);
+    const activeRec = existsSync(activeRunFile)
+        ? JSON.parse(readFileSync(activeRunFile, "utf8"))
+        : null;
+    const runningBeforeQuit =
+        quitStart.ok && (await b.evaluate("window.rclonegui.run.getActive()")).data !== null;
+    f_Check(
+        "종료 전: 실제 copy 실행 중·active-run.json에 rclone pid",
+        runningBeforeQuit && Number.isInteger(activeRec?.pid),
+        JSON.stringify({ quitStart, activeRec }),
+    );
+    const errorsB = [...b.consoleErrors];
+    const exitedB = new Promise((r) => b.child.once("exit", () => r(true)));
+    await b.evaluate("setTimeout(() => window.close(), 0), true");
+    const quitStartedAt = Date.now();
+    const quitOk = await Promise.race([exitedB, f_Sleep(QUIT_TIMEOUT_MS).then(() => false)]);
+    const quitMs = Date.now() - quitStartedAt;
+    b.ws.close();
+    if (!quitOk) await f_Close(b);
+    const rcloneLeft = activeRec ? await f_PidAlive(activeRec.pid) : true;
+    const quitHist = existsSync(join(userData, "history.json"))
+        ? JSON.parse(readFileSync(join(userData, "history.json"), "utf8")).records.find(
+              (r) => r.id === activeRec?.runId,
+          )
+        : null;
+    const copiedCount = readdirSync(quitDst).length;
+    f_Check(
+        "실행 중 창 닫기 → 실행 취소 후 앱 종료",
+        quitOk && quitMs < QUIT_TIMEOUT_MS,
+        `quitOk=${quitOk} ${quitMs}ms`,
+    );
+    f_Check(
+        "종료 뒤 rclone 프로세스 없음·active-run.json 없음",
+        !rcloneLeft && !existsSync(activeRunFile),
+        `pid=${activeRec?.pid} alive=${rcloneLeft}`,
+    );
+    f_Check(
+        "종료 뒤 이력은 canceled(중단됨 아님)·대상은 일부만 복사",
+        quitHist?.status === "canceled" && copiedCount < QUIT_FILES,
+        `status=${quitHist?.status} copied=${copiedCount}`,
+    );
+
+    const c = await f_Launch(userData);
+    const notices = await c.evaluate("window.rclonegui.app.getNotices()");
+    const quitJobAfter = (await c.evaluate("window.rclonegui.jobs.list()")).data.find(
+        (j) => j.id === quitJobId,
+    );
+    f_Check(
+        "재시작: 중단됨 안내 없음·실행 없음·lastRun canceled",
+        notices.ok &&
+            !notices.data.some((n) => n.message.includes("중단됨")) &&
+            (await c.evaluate("window.rclonegui.run.getActive()")).data === null &&
+            quitJobAfter?.lastRun?.status === "canceled",
+        JSON.stringify({ notices: notices.data, lastRun: quitJobAfter?.lastRun }),
+    );
     await f_Sleep(300);
-    const errors = [...errors1, ...b.consoleErrors];
+    const errors = [...errors1, ...errorsB, ...c.consoleErrors];
     f_Check("콘솔 오류 0건", errors.length === 0, errors.join(" | "));
-    await f_Close(b);
+    await f_Close(c);
 } finally {
     rmSync(userData, { recursive: true, force: true });
     rmSync(smokeRoot, { recursive: true, force: true });

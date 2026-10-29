@@ -7,13 +7,14 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
+ *       묶음 이름(copy-cancel-large)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
  *
  * @author dev-Joy 2026-10-28
  */
 
 // ========== External imports ==========
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,14 +49,72 @@ function f_Sanitize(text) {
     return out;
 }
 
-function f_Probe(name, args) {
-    if (only && !only.has(name)) return;
+function f_Selected(name, group) {
+    return !only || only.has(name) || (group !== undefined && only.has(group));
+}
+
+function f_Save(name, stdout, stderr, status) {
+    writeFileSync(join(outDir, `${name}.stdout.txt`), f_Sanitize(stdout));
+    writeFileSync(join(outDir, `${name}.stderr.txt`), f_Sanitize(stderr));
+    writeFileSync(join(outDir, `${name}.exit.txt`), `${status}\n`);
+}
+
+function f_Probe(name, args, group) {
+    if (!f_Selected(name, group)) return;
     const r = spawnSync(rclone, args, { shell: false, windowsHide: true, encoding: "utf8" });
     if (r.error) throw r.error;
-    writeFileSync(join(outDir, `${name}.stdout.txt`), f_Sanitize(r.stdout ?? ""));
-    writeFileSync(join(outDir, `${name}.stderr.txt`), f_Sanitize(r.stderr ?? ""));
-    writeFileSync(join(outDir, `${name}.exit.txt`), `${r.status}\n`);
+    f_Save(name, r.stdout ?? "", r.stderr ?? "", r.status);
     console.log(`[${name}] exit=${r.status}  rclone ${f_Sanitize(args.join(" "))}`);
+}
+
+/**
+ * 실행 중 취소 실험: rclone을 띄우고 stats 줄의 bytes가 0보다 커지면(전송 시작) 앱과 같은 방식
+ * (taskkill /PID <pid> /T /F)으로 프로세스 트리를 끝낸다. exit에는 종료 코드 또는 신호를 적는다.
+ */
+async function f_ProbeKillOnTransfer(name, args) {
+    const child = spawn(rclone, args, { shell: false, windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    let killed = false;
+    const f_Kill = () => {
+        if (killed) return;
+        killed = true;
+        const root = process.env.SystemRoot ?? "C:\\Windows";
+        execFile(
+            `${root}\\System32\\taskkill.exe`,
+            ["/PID", String(child.pid), "/T", "/F"],
+            { shell: false, windowsHide: true },
+            () => undefined,
+        );
+    };
+    child.stdout.setEncoding("utf8").on("data", (d) => (stdout += d));
+    child.stderr.setEncoding("utf8").on("data", (d) => {
+        stderr += d;
+        for (const line of d.split("\n")) {
+            try {
+                if ((JSON.parse(line).stats?.bytes ?? 0) > 0) f_Kill();
+            } catch {
+                // 줄이 잘려 들어오면 다음 조각에서 다시 본다
+            }
+        }
+    });
+    const timer = setTimeout(f_Kill, 60_000); // 전송이 시작되지 않아도 끝낸다
+    const [code, signal] = await new Promise((r) => child.once("exit", (c, sg) => r([c, sg])));
+    clearTimeout(timer);
+    f_Save(name, stdout, stderr, code ?? signal);
+    console.log(`[${name}] exit=${code ?? signal}  rclone ${f_Sanitize(args.join(" "))}`);
+}
+
+/** 폴더 안 파일 이름(하위 폴더 포함, / 구분) */
+function f_ListFiles(dir) {
+    return readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((d) => d.isFile())
+        .map((d) =>
+            join(d.parentPath, d.name)
+                .slice(dir.length + 1)
+                .replaceAll("\\", "/"),
+        )
+        .toSorted();
 }
 
 function f_MakeDest(dst) {
@@ -229,6 +288,44 @@ try {
         dst,
     ]);
     f_Probe("lsjson-dst-after-maxdelete1", [...ls, ...common, "--", dst]);
+
+    // Phase 6 보완: 큰 파일(32 MiB)을 4 MiB/s로 복사하다 전송이 시작되면 taskkill /T /F로 취소
+    // → 대상에 임시 파일(.partial)이나 대상 파일이 남는지, 다음 비교·sync가 그것을 어떻게 보는지
+    if (f_Selected("copy-cancel-large")) {
+        const large = join(work, "large");
+        const largeDst = join(work, "large-dst");
+        mkdirSync(large, { recursive: true });
+        mkdirSync(largeDst, { recursive: true });
+        writeFileSync(join(large, "big.bin"), Buffer.alloc(32 * 1024 * 1024, 7));
+        await f_ProbeKillOnTransfer("copy-cancel-large", [
+            "copy",
+            ask,
+            ...common,
+            ...tx,
+            ...mw,
+            "--bwlimit",
+            "4M",
+            ...log,
+            "--",
+            large,
+            largeDst,
+        ]);
+        await new Promise((r) => setTimeout(r, 500)); // 파일 핸들 정리 대기
+        console.log(`  대상 파일(취소 직후): ${f_ListFiles(largeDst).join(", ") || "(없음)"}`);
+        const g = "copy-cancel-large";
+        f_Probe("lsjson-dst-after-cancel", [...ls, ...common, "--", largeDst], g);
+        f_Probe(
+            "sync-dryrun-after-cancel",
+            ["sync", ask, ...common, ...tx, ...mw, "--dry-run", ...log, "--", large, largeDst],
+            g,
+        );
+        f_Probe(
+            "copy-after-cancel",
+            ["copy", ask, ...common, ...tx, ...mw, ...log, "--", large, largeDst],
+            g,
+        );
+        console.log(`  대상 파일(다시 복사 뒤): ${f_ListFiles(largeDst).join(", ") || "(없음)"}`);
+    }
 } finally {
     rmSync(work, { recursive: true, force: true });
 }

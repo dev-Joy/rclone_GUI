@@ -4,6 +4,7 @@
  * 실제 실행은 compare-store의 비교 결과(planToken·삭제 예정 수)와 대량 삭제 확인을 함께 보낸다.
  * 실제 실행이 끝나면 main이 비교 결과를 버리므로 비교 화면을 다시 불러온다.
  * 사전 확인이 비교 결과와 달라 막히면(PLAN_DRIFT) driftNotice로 알린다(PlanDriftModal).
+ * "다시 비교"(recompareDrift)는 막힌 작업을 선택하고 비교 탭으로 옮긴 뒤 비교한다(설정·편집 변경 확인을 거친다).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -25,7 +26,10 @@ import type {
     typRunEvent,
 } from "@/shared/types/run";
 import { useCompareStore } from "@/stores/compare-store";
+import { useJobEditorStore } from "@/stores/job-editor-store";
+import { useJobsStore } from "@/stores/jobs-store";
 import { useToastStore } from "@/stores/toast-store";
+import { useUiStore } from "@/stores/ui-store";
 
 export interface itfFinishedRun {
     record: typRunRecord;
@@ -49,6 +53,11 @@ interface itfRunState {
     /** 미리보기(dryRun) 또는 실제 실행 시작. confirm은 삭제 확인 모달의 대량 삭제 확인. 시작했으면 true */
     start: (jobId: string, dryRun: boolean, confirm?: itfRunConfirm) => Promise<boolean>;
     dismissDrift: () => void;
+    /**
+     * PLAN_DRIFT 안내의 "다시 비교": 안내를 닫고, 막힌 작업을 선택·작업 화면 비교 탭으로 옮긴 뒤 비교한다.
+     * 설정 화면이나 다른 작업에 저장하지 않은 변경이 있으면 버리기 확인(leaveSettings·guard)을 거친다.
+     */
+    recompareDrift: () => void;
     cancel: () => Promise<void>;
     /** run:event 구독 + getActive 1회. 해제 함수를 돌려준다 */
     subscribe: () => () => void;
@@ -160,6 +169,27 @@ export const useRunStore = create<itfRunState>((set, get) => {
             return false;
         },
         dismissDrift: () => set({ driftNotice: null }),
+        recompareDrift: () => {
+            const notice = get().driftNotice;
+            if (!notice) return;
+            const jobId = notice.jobId;
+            set({ driftNotice: null });
+            if (!useJobsStore.getState().jobs.some((j) => j.id === jobId)) {
+                useToastStore
+                    .getState()
+                    .push("warning", `‘${notice.jobName}’ 작업이 지워져 다시 비교할 수 없습니다.`);
+                return;
+            }
+            const ui = useUiStore.getState();
+            ui.leaveSettings(() =>
+                useJobEditorStore.getState().guard(() => {
+                    useJobsStore.getState().select(jobId);
+                    ui.setView("job");
+                    ui.setTab("compare");
+                    void useCompareStore.getState().run(jobId);
+                }),
+            );
+        },
         cancel: async () => {
             const a = get().active;
             if (!a || a.cancelRequested) return;

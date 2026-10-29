@@ -105,6 +105,10 @@ export default function JobWorkspace() {
             ? { ok: false as const, reason: "실행 중에는 비교할 수 없습니다." }
             : baseCompareCheck;
     const compareReason = compareCheck.ok ? null : compareCheck.reason;
+    // "다시 비교"는 막힌 작업으로 옮겨 비교하므로 지금 보이는 작업의 저장 여부·경로는 보지 않는다
+    let recompareReason: string | null = null;
+    if (running) recompareReason = "다른 비교가 진행 중입니다.";
+    else if (runningJobId !== null) recompareReason = "실행 중에는 비교할 수 없습니다.";
     const runInput = {
         job,
         dirty,
@@ -331,7 +335,7 @@ export default function JobWorkspace() {
                 />
             )}
 
-            <PlanDriftModal compareBlockedReason={compareReason} />
+            <PlanDriftModal compareBlockedReason={recompareReason} />
 
             <ZBCModal
                 open={confirmDelete}

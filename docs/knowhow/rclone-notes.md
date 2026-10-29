@@ -85,18 +85,26 @@
 ### 14. 실행 중 취소(taskkill /T /F)와 `.partial`
 - 명령: 32 KiB 파일 400개를 `copy --transfers 1 --checkers 1`로 실행하고 첫 `Copied` 로그에서 취소(통합 테스트 `run.copy.test.ts`)
 - 결과: 대상에 13/400개만 복사된 채 끝났고 rclone 프로세스는 남지 않았다. 이 크기에서는 `.partial` 파일이 남지 않았다(쓰는 중이던 파일이 없었음). 이미 복사된 파일은 그대로 남는다.
-- 영향: 취소하면 결과와 관계없이 상태를 `canceled`로 기록하고, 화면·확인 창에 "취소해도 이미 복사된 파일은 대상에 남습니다"를 알린다. 실제 실행은 취소·실패해도 비교 결과를 버리고 lastRun을 갱신한다. 큰 파일 도중 취소 시 `.partial`이 남는지는 아직 확인하지 못했다.
+- 영향: 취소하면 결과와 관계없이 상태를 `canceled`로 기록하고, 화면·확인 창에 "취소해도 이미 복사된 파일은 대상에 남습니다"를 알린다. 실제 실행은 취소·실패해도 비교 결과를 버리고 lastRun을 갱신한다. 큰 파일 도중 취소하면 `.partial`이 남는다 → #17.
 
 ## 2026-10-29 · rclone v1.75.1 · Windows 11 x64 (Phase 7: 실제 sync·삭제 한도)
 
 ### 15. `--max-delete N`을 넘으면 N개까지는 지우고 멈춘다(exit 7), 빈 폴더는 지우지 않는다
 - 명령: 삭제 대상 2개(`extra.txt`, `gone/old.txt`)인 대상에 `sync --ask-password=false --config <conf> --checkers 8 --transfers 4 --fast-list --skip-links --modify-window 2000ms --max-delete 1 -v --use-json-log --stats 1s -- <src> <dst>` (fixture `sync-maxdelete1.*`, 실행 뒤 대상 목록 `lsjson-dst-after-maxdelete1.*`)
-- 결과: 복사 3개·시간 맞춤 1개는 모두 끝났고, `Deleted` 1개(`gone/old.txt`) 뒤 다음 삭제에서 `Got fatal error on delete: --max-delete threshold reached` → `Cancelling sync due to fatal error` → `not deleting directories as there were IO errors`(빈 폴더 `gone`은 남음) → exit 7. 최종 stats `deletes:1, errors:2, fatalError:true, lastError:"failed to delete 1 files"`. 대상에는 `extra.txt`가 남았다.
+- 결과: 복사 3개·시간 맞춤 1개는 모두 끝났고, `Deleted` 1개(fixture에서는 `gone/old.txt`) 뒤 다음 삭제에서 `Got fatal error on delete: --max-delete threshold reached` → `Cancelling sync due to fatal error` → `not deleting directories as there were IO errors`(빈 폴더 `gone`은 남음) → exit 7. 최종 stats `deletes:1, errors:2, fatalError:true, lastError:"failed to delete 1 files"`. 대상에는 `extra.txt`가 남았다.
+- 재확인(2026-10-29, 같은 버전·명령 7회): 매번 exit 7·`Deleted` 1개·`not deleting directories as there were IO errors`·복사 반영이 재현됐다. 다만 **어느 파일을 지울지는 실행마다 다르다**(`extra.txt` 5회, `gone/old.txt` 2회 — 삭제가 병렬로 처리됨). fixture는 그대로 두었다.
 - 결과: 통합 테스트(`run.sync.test.ts`)에서 사전 확인을 끄고 비교 뒤 삭제 대상을 2개 더 만들어(계획 2, 실제 4) `--max-delete 2`로 실행하면 정확히 2개를 지우고 exit 7.
-- 영향: 사전 확인을 끈 작업은 비교 뒤 삭제 대상이 늘면 **한도까지 일부 삭제된 채** `failed`/`MAX_DELETE_EXCEEDED`로 끝날 수 있다(복사도 이미 반영됨). 그래서 사전 확인을 기본으로 켜 두고, 끄면 편집기·삭제 확인 창에 경고한다. 한도는 계획 삭제 수와 같게 주므로 계획보다 많이 지우지는 않는다.
+- 영향: 사전 확인을 끈 작업은 비교 뒤 삭제 대상이 늘면 **한도까지 일부 삭제된 채** `failed`/`MAX_DELETE_EXCEEDED`로 끝날 수 있다(복사도 이미 반영됨). 그래서 사전 확인을 기본으로 켜 두고, 끄면 편집기·삭제 확인 창에 경고한다. 한도는 계획 삭제 수와 같게 주므로 계획보다 많이 지우지는 않는다. 한도를 넘었을 때 어느 파일이 지워졌는지는 정해져 있지 않으므로 로그(`Deleted` 줄)로만 알 수 있다.
 
 ### 16. sync dry-run의 최종 stats `deletes`는 건너뛴 삭제 수와 같다
 - 명령: `sync ... --dry-run`(fixture `sync-dryrun.*`, 통합 테스트 `run.sync.test.ts`의 사전 확인)
 - 결과: `Skipped delete` 줄 2개와 최종 stats `deletes:2`, `deletedDirs:1`이 일치한다. 비교 뒤 대상에 파일을 하나 더하면 사전 확인 stats `deletes:3`.
 - 영향: 사전 확인 일치 검사(`checkPreflight`)는 로그 집계 삭제 수와 stats `deletes`를 둘 다 계획과 맞춰 보고, stats `errors > 0`도 불일치로 본다. 바이트는 비교하지 않는다(노트 #1의 시간만 맞춤 파일 때문).
 
+## 2026-10-29 · rclone v1.75.1 · Windows 11 x64 (Phase 6 보완: 큰 파일 복사 중 취소)
+
+### 17. 큰 파일 전송 중 taskkill /T /F로 끝내면 `<이름>.<8자리 16진수>.partial`이 대상에 남는다
+- 명령: 32 MiB 파일 1개를 `copy --ask-password=false --config <conf> --checkers 8 --transfers 4 --fast-list --skip-links --modify-window 2000ms --bwlimit 4M -v --use-json-log --stats 1s -- <src> <dst>`로 복사하다 첫 stats의 `bytes > 0`에서 앱과 같은 `taskkill /PID <pid> /T /F` (fixture `copy-cancel-large.*`, `--bwlimit`은 이 실험에서만). 이어서 대상 목록(`lsjson-dst-after-cancel.*`), `sync --dry-run`(`sync-dryrun-after-cancel.*`), 같은 원본 다시 copy(`copy-after-cancel.*`)
+- 결과: exit 1(강제 종료). 대상에는 `big.bin.<hash>.partial`(약 5 MiB)만 남고 **대상 파일 `big.bin`은 생기지 않는다**. lsjson은 이 파일을 보통 파일로 나열하고, sync dry-run은 `Skipped delete ... big.bin.<hash>.partial`(대상에만 있음 → 삭제 대상)로 센다.
+- 결과: 같은 원본·대상이면 `<hash>`가 매번 같다(2회 취소해도 `.partial` 1개). 같은 원본을 다시 copy하면 `Copied (new)`로 끝나고 `.partial`은 없어진다(같은 임시 이름을 다시 써서 이름을 바꾸는 것으로 보임). **원본 파일이 바뀐 뒤** 다시 copy하면 새 파일은 복사되지만 예전 `.partial`은 그대로 남는다. 다른 temp 폴더에서 실행하면 `<hash>`가 다르다.
+- 영향: 앱에서 큰 파일 복사·동기화를 취소(또는 종료 시 취소)하면 대상에 `.partial` 찌꺼기가 남을 수 있다. 다음 비교에서 copy 작업은 "대상에만 있음(유지)", sync 작업은 삭제 대상(삭제 확인 창 샘플에 보임)으로 나온다 — sync는 다음 실행에서 지워 정리하지만 copy는 계속 남는다. 코드는 아직 바꾸지 않았다(대응안은 작업 기록 TASK_009 참고).

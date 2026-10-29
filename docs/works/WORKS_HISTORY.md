@@ -81,6 +81,15 @@
 - 검증: check(unit 603), format:check, test:int 31(+1 skip: WSL 조건부), build, drive-app 빌드본 71 통과
 - 설계와 다름: SafetyBanner는 만들지 않음(버튼 이유·모달로 대신). 락 전 차단은 비교 결과를 무효화하지 않음. 사전 확인 통과 뒤에도 취소 요청을 다시 확인해 실제 실행을 시작하지 않음(canceled). finished의 dryRunSummary는 실제 실행이면 사전 확인을 했어도 null
 
+[TASK_009] : (2026-10-29) Phase 6·7 남은 문제 재검증과 보완 (관련 Intent: INT-001)
+- --max-delete 재확인: 프로브 `sync-maxdelete1` 7회 — 매번 exit 7·`Deleted` 1개·빈 폴더 미삭제(`not deleting directories`)·복사 반영. 지우는 파일은 실행마다 다름(extra.txt 5회·gone/old.txt 2회). fixture는 원래대로 두고 notes #15에 기록
+- "다시 비교" 수정: run-store `recompareDrift`(안내 닫기 → 막힌 작업이 지워졌으면 경고 토스트 → ui-store leaveSettings → job-editor guard → jobs select·view job·tab compare → compare run). PlanDriftModal은 이것만 호출, JobWorkspace는 다시 비교 차단 이유를 진행 중 비교·실행만으로 계산(지금 보이는 작업의 미저장·경로 오류로 막지 않음)
+- 큰 파일 취소: 프로브 `copy-cancel-large`(32 MiB, --bwlimit 4M, 첫 stats bytes>0에서 taskkill /T /F) + `lsjson-dst-after-cancel`·`sync-dryrun-after-cancel`·`copy-after-cancel` fixture. `<이름>.<hash>.partial`이 남고 대상 파일은 안 생김, sync 다음 실행에서는 삭제 대상, 같은 원본 재복사면 정리, 원본이 바뀌면 계속 남음(notes #14·#17)
+- 대응안(미구현): ① 실제 실행이 canceled·failed로 끝나면 대상에 `*.partial`이 남을 수 있다고 토스트·실행 결과에 안내 ② 비교 결과에서 `.<8hex>.partial` 패턴의 대상 전용 파일을 "취소로 남은 임시 파일"로 표시(삭제 확인 창 샘플 포함) ③ copy 작업용으로 해당 파일만 지우는 정리 동작(사용자 확인 후 `deletefile`) — 기본 제외 규칙에 `*.partial`을 넣는 안은 sync에서 정리되지 않게 만들어 비추천
+- before-quit 검증: drive-app 2회차에 파일 3000개 copy(transfers 1)를 API로 시작 → `window.close()` → 앱 종료(약 0.4초)·active-run.json의 rclone PID가 tasklist에 없음·active-run.json 없음·history.json 레코드 canceled·대상 일부만 복사, 3회차 재시작에서 중단됨 안내 없음·lastRun canceled. 버그 없음
+- 테스트: 단위 run-store recompareDrift 4건, drive-app "다시 비교" 시나리오(다른 작업 고친 채 → 변경 버리기 확인 → 막힌 작업·비교 탭) + 종료 시나리오 4건 + 3회차 실행
+- 검증: check(unit 607), format:check, test:int 31(+1 skip), build, drive-app 빌드본 77 통과
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
