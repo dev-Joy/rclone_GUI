@@ -1,7 +1,7 @@
 ---
 id: INT-002
 title: rcloneGUI 스케줄·SQLite·리모트/제외 패턴 UX 개선
-status: planned
+status: active
 priority: P2
 created: 2026-10-29
 updated: 2026-10-29
@@ -108,7 +108,7 @@ updated: 2026-10-29
 - [x] 1차 범위 → OS 예약·헤드리스(T-13), 백업 없는 sync `--ignore-errors`(T-07)는 P3 보류. 근거: 로그인 시 트레이 시작(`--hidden`)으로 앱이 꺼지는 경우가 사용자가 직접 종료할 때뿐이고, 안전 규칙 3을 바꾸지 않는다. SQLite(T-01)는 첫 Phase로 단독 진행. (2026-10-29 결정)
 
 ## 작업 (Tasks)
-- [ ] T-01 [P1] SQLite 저장 계층 도입 — jobs/settings/history/remotes/exclude_patterns/schedules 스키마·마이그레이션, JSON→SQLite 이전(단일 트랜잭션·`user_version`·커밋 후 `.migrated`)·백업·롤백·`integrity_check`, 자격 증명 저장 금지, 기존 store API 유지, WAL 백업은 `VACUUM INTO`/`backup()`, 이력 페이지 조회(동기 API로 main 스레드 정지 방지), `active-run.json`·로그 파일은 파일 유지, 단위·통합 테스트
+- [x] T-01 [P1] SQLite 저장 계층 도입 — jobs/settings/history/remotes/exclude_patterns/schedules 스키마·마이그레이션, JSON→SQLite 이전(단일 트랜잭션·`user_version`·커밋 후 `.migrated`)·백업·롤백·`integrity_check`, 자격 증명 저장 금지, 기존 store API 유지, WAL 백업은 `VACUUM INTO`/`backup()`, 이력 페이지 조회(동기 API로 main 스레드 정지 방지), `active-run.json`·로그 파일은 파일 유지, 단위·통합 테스트
 - [ ] T-02 [P1] 리모트 등록·폴더 탐색 — 리모트 북마크(rclone.conf의 remote 이름 + 기준 경로 + 별칭) CRUD·읽기 전용 연결 테스트, rclone.conf 쓰기 없음, 등록된 리모트 선택 후 폴더 목록 탐색·선택, SQLite 저장, rclone.conf 경로만 전달, 연결 테스트·폴더 탐색에 `--ask-password=false`
 - [ ] T-03 [P1] 제외 패턴 라이브러리 — 전역 DB에 유일 저장, 작업별 체크박스 다중 선택, 새 패턴 추가, 한 줄 입력 유지, 중복 제거·앞뒤 공백만 정규화(줄바꿈 차단), 수정·삭제 시 사용 중인 작업 표시·확인, 패턴 스냅샷을 계획 토큰에 포함, `#`·`;`로 시작하는 패턴 차단(또는 이스케이프), 변경 시 관련 작업 비교 캐시 무효화·자동 실행 작업 별도 표시, 테스트
 - [ ] T-04 [P1] 작업 목록·편집기 확장 — 원본·대상·자동화 여부·주기·최근 동기화 시각·상태 텍스트 표시, 목록에서 실행(비교·삭제 확인 또는 자동 실행 게이트를 그대로 거침), GoodSync 참고 레이아웃
