@@ -5,6 +5,7 @@
  * 실제 실행이 끝나면 main이 비교 결과를 버리므로 비교 화면을 다시 불러온다.
  * 사전 확인이 비교 결과와 달라 막히면(PLAN_DRIFT) driftNotice로 알린다(PlanDriftModal).
  * "다시 비교"(recompareDrift)는 막힌 작업을 선택하고 비교 탭으로 옮긴 뒤 비교한다(설정·편집 변경 확인을 거친다).
+ * 자동 실행(trigger scheduler)의 결과는 main이 app:notify로 알리므로 여기서 토스트를 띄우지 않는다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -139,7 +140,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
                     last: { record: e.record, dryRunSummary: e.dryRunSummary, tail },
                     ...(e.record.error?.code === "PLAN_DRIFT" ? { driftNotice: e.record } : {}),
                 });
-                f_FinishToast(e.record);
+                if (e.record.trigger !== "scheduler") f_FinishToast(e.record);
                 // 실제 실행은 main이 비교 결과를 버린다 → 비교 화면을 다시 불러온다
                 const compare = useCompareStore.getState();
                 if (!e.record.dryRun && compare.jobId === e.record.jobId) {

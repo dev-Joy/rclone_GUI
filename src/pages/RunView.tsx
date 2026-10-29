@@ -33,8 +33,9 @@ const RUNNING_NOTE: Record<typRunMode, string> = {
 function f_PhaseText(phase: typRunPhase, dryRun: boolean, mode: typRunMode): string {
     switch (phase) {
         case "validating":
-        case "comparing":
             return "준비 중";
+        case "comparing":
+            return "비교 중(자동 실행, 파일은 바꾸지 않음)";
         case "preflight":
             return "사전 확인 중(파일은 바꾸지 않음)";
         case "transferring":
@@ -76,9 +77,11 @@ export default function RunView(props: itfRunViewProps) {
                     <p className={styles.note}>
                         {mine.dryRun
                             ? "미리보기는 파일을 바꾸지 않습니다."
-                            : mine.phase === "preflight"
-                              ? "실행 직전 비교 결과와 같은지 확인하고 있습니다. 다르면 실행하지 않습니다."
-                              : RUNNING_NOTE[mine.mode]}
+                            : mine.phase === "comparing"
+                              ? "자동 실행: 비교 결과가 자동 실행 조건(삭제 허용·한도·사전 확인)을 만족할 때만 실행합니다."
+                              : mine.phase === "preflight"
+                                ? "실행 직전 비교 결과와 같은지 확인하고 있습니다. 다르면 실행하지 않습니다."
+                                : RUNNING_NOTE[mine.mode]}
                     </p>
                     <ZBCButton onClick={h_Cancel} disabled={mine.cancelRequested}>
                         {mine.dryRun ? "미리보기 취소" : "실행 취소"}

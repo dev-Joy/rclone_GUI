@@ -2,6 +2,7 @@
  * 첫 화면(앱 셸). 앱 정보·시작 알림·설정·작업 목록을 불러오고 rclone을 감지한 뒤
  * 상단 막대 + 작업 목록 + [작업 화면 | 설정 화면]을 조립한다.
  * 작업 선택이 바뀌면 편집기를 그 작업으로 열고, 목록이 바뀌면 편집기에 알린다.
+ * 스케줄러 상태·이력 갱신(run:event finished)·main 알림(app:notify → 토스트)을 구독한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -15,10 +16,12 @@ import ZBCToast from "@/components/ZBCToast";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfAppInfo, itfAppNotice } from "@/shared/ipc-contract";
 import { useCompareStore } from "@/stores/compare-store";
+import { useHistoryStore } from "@/stores/history-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import { useRunStore } from "@/stores/run-store";
+import { useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore } from "@/stores/ui-store";
@@ -63,6 +66,8 @@ export default function HomePage(props: itfHomePageProps) {
     const subscribeCompare = useCompareStore((s) => s.subscribe);
     const showCompare = useCompareStore((s) => s.show);
     const subscribeRun = useRunStore((s) => s.subscribe);
+    const subscribeHistory = useHistoryStore((s) => s.subscribe);
+    const subscribeScheduler = useSchedulerStore((s) => s.subscribe);
 
     // ========== Effect (부수 효과) ==========
     useEffect(() => {
@@ -83,6 +88,15 @@ export default function HomePage(props: itfHomePageProps) {
 
     // 실행 이벤트 구독(진행 중인 실행은 getActive로 복구)
     useEffect(() => subscribeRun(), [subscribeRun]);
+
+    // 실행이 끝나면 이력을 다시 받는다
+    useEffect(() => subscribeHistory(), [subscribeHistory]);
+
+    // 스케줄러 상태(일시정지·다음 자동 실행) 구독
+    useEffect(() => subscribeScheduler(), [subscribeScheduler]);
+
+    // main 알림(자동 실행 결과 등, 창이 보일 때)을 토스트로
+    useEffect(() => getApi().events.onAppNotify((n) => pushToast(n.level, n.message)), [pushToast]);
 
     // 선택한 작업의 마지막 비교 결과를 main에서 받는다(화면에는 작업 1개 결과만 둔다)
     useEffect(() => {

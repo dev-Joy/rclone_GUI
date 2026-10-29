@@ -197,6 +197,25 @@ describe("run-store 이벤트", () => {
         off();
     });
 
+    it("자동 실행(trigger scheduler)이 끝나면 토스트를 띄우지 않는다(main이 app:notify로 알림)", () => {
+        const off = f_S().subscribe();
+        fake.emitRunEvent({
+            type: "started",
+            snapshot: f_Snapshot({ dryRun: false, trigger: "scheduler", phase: "comparing" }),
+        });
+        expect(f_S().active?.phase).toBe("comparing");
+        fake.emitRunEvent({
+            type: "finished",
+            runId: RUN,
+            record: f_Record({ trigger: "scheduler", status: "blocked" }),
+            dryRunSummary: null,
+        });
+        expect(f_S().active).toBeNull();
+        expect(f_S().last?.record.trigger).toBe("scheduler");
+        expect(useToastStore.getState().toasts).toEqual([]);
+        off();
+    });
+
     it("실제 실행이 끝나면 보이는 작업의 비교 결과를 다시 불러온다(dry-run은 그대로)", async () => {
         const off = f_S().subscribe();
         useCompareStore.setState({ jobId: J1, result: f_Compare(J1) });

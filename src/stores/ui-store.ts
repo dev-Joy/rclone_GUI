@@ -14,7 +14,7 @@ export type typJobTab = "compare" | "run" | "history" | "edit";
 
 interface itfUiState {
     view: typAppView;
-    /** "compare"·"run"·"edit" 활성 (history는 다음 단계). 새 작업에서는 compare·run 대신 edit로 보인다 */
+    /** 작업 화면 탭. 새 작업에서는 compare·run·history 대신 edit로 보인다 */
     tab: typJobTab;
     /** 설정 화면에 저장하지 않은 변경이 있는지 (SettingsPage가 알려 준다) */
     settingsDirty: boolean;

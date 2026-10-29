@@ -4,6 +4,7 @@
  * "미리보기"는 dry-run(파일을 바꾸지 않음), "복사 실행"·"동기화 실행"은 유효한 비교 결과가 있을 때만 확인 창을
  * 거쳐 실행한다. 삭제가 있는 동기화는 삭제 확인 모달(DeleteConfirmModal), 그 밖에는 간단한 확인 창을 쓴다.
  * 사전 확인 불일치(PLAN_DRIFT)는 PlanDriftModal로 알린다. 실행 중에는 비교·실행을 시작할 수 없다.
+ * "이력" 탭은 이 작업의 실행 이력(HistoryView)이다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -29,6 +30,7 @@ import { useToastStore } from "@/stores/toast-store";
 import { useUiStore, type typJobTab } from "@/stores/ui-store";
 import CompareView from "./CompareView";
 import DeleteConfirmModal from "./DeleteConfirmModal";
+import HistoryView from "./HistoryView";
 import JobEditor from "./JobEditor";
 import PlanDriftModal from "./PlanDriftModal";
 import RunView from "./RunView";
@@ -43,12 +45,12 @@ const DEFAULT_SAFETY = createDefaultSettings().safety;
 /** 비교 결과 낡음 판정을 다시 하는 간격 */
 const STALE_TICK_MS = 30_000;
 
-/** 비교·실행 탭은 저장된 작업에서만 연다 */
+/** 비교·실행·이력 탭은 저장된 작업에서만 연다 */
 function f_Tabs(isNew: boolean): readonly itfZBCTab<typJobTab>[] {
     return [
         { id: "compare", label: "비교", disabled: isNew },
         { id: "run", label: "실행", disabled: isNew },
-        { id: "history", label: "이력", disabled: true, badge: "준비 중" },
+        { id: "history", label: "이력", disabled: isNew },
         { id: "edit", label: "작업 설정" },
     ];
 }
@@ -94,8 +96,8 @@ export default function JobWorkspace() {
     const job = jobId === null ? null : (jobs.find((j) => j.id === jobId) ?? null);
     const isNew = jobId === null;
     const title = job?.name ?? (draft?.name.trim() || "새 작업");
-    // 새 작업에서는 비교·실행 탭을 열 수 없으므로 작업 설정으로 보인다
-    const activeTab: typJobTab = isNew && (tab === "compare" || tab === "run") ? "edit" : tab;
+    // 새 작업에서는 비교·실행·이력 탭을 열 수 없으므로 작업 설정으로 보인다
+    const activeTab: typJobTab = isNew && tab !== "edit" ? "edit" : tab;
     const running = runningCompare(compareActive, compareRunningJobId);
     const comparing = job !== null && running?.jobId === job.id;
     const runningJobId = runActive?.jobId ?? runStartingJobId;
@@ -261,7 +263,7 @@ export default function JobWorkspace() {
             <ZBCTabs
                 id="job-tabs"
                 tabs={f_Tabs(isNew)}
-                active={activeTab === "compare" || activeTab === "run" ? activeTab : "edit"}
+                active={activeTab}
                 onChange={setTab}
                 aria-label="작업 화면"
             />
@@ -273,6 +275,15 @@ export default function JobWorkspace() {
                     aria-labelledby="job-tabs-tab-run"
                 >
                     <RunView job={job} />
+                </div>
+            ) : activeTab === "history" && job ? (
+                <div
+                    className={styles.panel}
+                    role="tabpanel"
+                    id="job-tabs-panel-history"
+                    aria-labelledby="job-tabs-tab-history"
+                >
+                    <HistoryView job={job} />
                 </div>
             ) : activeTab === "compare" && job ? (
                 <div

@@ -1,0 +1,76 @@
+/**
+ * HistoryDetail 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .HistoryDetail {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: min(720px, 80vw);
+
+        .headline {
+            margin: 0;
+            padding-left: 8px;
+            border-left: 4px solid var(--accent);
+            font-weight: 600;
+        }
+
+        .headline[data-status="success"] {
+            border-left-color: var(--success);
+        }
+
+        .headline[data-status="partial"],
+        .headline[data-status="canceled"],
+        .headline[data-status="blocked"] {
+            border-left-color: var(--warning);
+        }
+
+        .headline[data-status="failed"],
+        .headline[data-status="interrupted"] {
+            border-left-color: var(--danger);
+        }
+
+        .meta {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 4px 12px;
+            margin: 0;
+            font-size: 13px;
+
+            dt {
+                color: var(--muted);
+            }
+
+            dd {
+                margin: 0;
+            }
+        }
+
+        .error {
+            padding: 8px 10px;
+            border-radius: var(--radius);
+            background: var(--danger-weak);
+        }
+
+        .errorMessage {
+            margin: 0;
+            color: var(--danger);
+        }
+
+        .detail {
+            margin: 6px 0 0;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+
+        .muted {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+    }
+}

@@ -57,7 +57,7 @@ export class clsHistoryStore {
             if (cur.records.some((r) => r.id === rec.id)) {
                 throw new clsAppError("VALIDATION", "이미 있는 실행 ID입니다.");
             }
-            return { version: 1, records: this.prune([rec, ...cur.records]) };
+            return { version: 1, records: this.pruneList([rec, ...cur.records]) };
         });
         return rec;
     }
@@ -106,16 +106,50 @@ export class clsHistoryStore {
         return changed;
     }
 
-    /** 이력 전체 삭제. 실행 중 레코드는 남긴다 */
-    async clear(): Promise<void> {
+    /**
+     * 이력 전체 삭제. 실행 중 레코드는 남긴다. 지운 레코드의 로그 파일 이름을 돌려준다
+     * (호출하는 쪽이 원하면 지운다).
+     */
+    async clear(): Promise<{ removed: number; logFiles: string[] }> {
+        const logFiles: string[] = [];
+        let removed = 0;
         await this.store.update((cur) => ({
             version: 1,
-            records: cur.records.filter((r) => r.status === "running"),
+            records: cur.records.filter((r) => {
+                if (r.status === "running") return true;
+                removed += 1;
+                if (r.logFile) logFiles.push(r.logFile);
+                return false;
+            }),
         }));
+        return { removed, logFiles };
+    }
+
+    /** 보관 수(설정)를 지금 적용한다(앱 시작·주기 정리). 지운 개수 */
+    async prune(): Promise<number> {
+        const before = this.store.get().records;
+        const kept = this.pruneList(before);
+        if (kept.length === before.length) return 0;
+        let removed = 0;
+        await this.store.update((cur) => {
+            const next = this.pruneList(cur.records);
+            removed = cur.records.length - next.length;
+            return { version: 1, records: next };
+        });
+        return removed;
+    }
+
+    /** 실행 중 레코드의 로그 파일 이름(로그 보관 정리에서 지우지 않음) */
+    runningLogFiles(): Set<string> {
+        const out = new Set<string>();
+        for (const r of this.store.get().records) {
+            if (r.status === "running" && r.logFile) out.add(r.logFile);
+        }
+        return out;
     }
 
     /** 최신순 limit개만 남기되, 실행 중 레코드는 지우지 않는다 */
-    private prune(records: typRunRecord[]): typRunRecord[] {
+    private pruneList(records: typRunRecord[]): typRunRecord[] {
         const limit = this.limit();
         let kept = 0;
         return records.filter((r) => {

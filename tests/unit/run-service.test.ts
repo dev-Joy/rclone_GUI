@@ -145,6 +145,10 @@ interface itfHarnessOptions {
     spawnError?: string;
     /** 취소했을 때 프로세스 결과 */
     cancelResult?: Partial<itfProcessResult>;
+    /** 자동 실행 비교 결과(기본: compare). Error면 실패, "hang"이면 취소될 때까지 기다린다 */
+    autoCompare?: itfCompareResult | Error | "hang";
+    /** rclone 감지 실패 */
+    requireError?: clsAppError;
 }
 
 let caseNo = 0;
@@ -164,6 +168,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
     const requirePlanCalls: string[] = [];
     const activeOps: string[] = [];
     const written: typActiveRunFile[] = [];
+    const autoCompareCalls: string[] = [];
     let idSeq = 0;
     const script = o.script === undefined ? { lines: fixtureLines("copy-dryrun") } : o.script;
 
@@ -211,10 +216,27 @@ function f_Harness(o: itfHarnessOptions = {}) {
             },
         },
         rcloneEnv: {
-            require: async () => ({ binaryPath: BIN, configPath: CONF }),
+            require: async () => {
+                if (o.requireError) throw o.requireError;
+                return { binaryPath: BIN, configPath: CONF };
+            },
             resolveConfigFor: async () => CONF,
         },
         compare: {
+            compareForAuto: (jobId, signal) => {
+                autoCompareCalls.push(jobId);
+                const ac = o.autoCompare === undefined ? compare : o.autoCompare;
+                if (ac === "hang") {
+                    return new Promise((_resolve, reject) => {
+                        signal.addEventListener("abort", () =>
+                            reject(new clsAppError("CANCELED", "비교를 취소했습니다.")),
+                        );
+                    });
+                }
+                if (ac instanceof Error) return Promise.reject(ac);
+                if (!ac) return Promise.reject(new clsAppError("INTERNAL"));
+                return Promise.resolve(ac);
+            },
             requirePlan: (jobId, token) => {
                 requirePlanCalls.push(token);
                 if (!compare || token !== compare.planToken) throw new clsAppError("PLAN_REQUIRED");
@@ -270,6 +292,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
         requirePlanCalls,
         activeOps,
         written,
+        autoCompareCalls,
         logsDir,
         finished: () => events.filter((e) => e.type === "finished"),
     };
@@ -535,6 +558,9 @@ describe("clsRunService 실제 실행 게이트", () => {
                 },
                 invalidate: () => undefined,
                 get: () => null,
+                compareForAuto: async () => {
+                    throw new clsAppError("INTERNAL");
+                },
             },
             history: { begin: async (r) => r, patch: async () => h.begun[0]! },
             activity: new clsActivityLock(),
@@ -810,5 +836,264 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
         expect(rec.status).toBe("failed");
         expect(rec.error?.code).toBe("MAX_DELETE_EXCEEDED");
         expect(rec.stats).toMatchObject({ deletes: 1, fatalError: true });
+    });
+});
+
+function f_AutoJob(
+    over: { mode?: "copy" | "sync"; allowDeletes?: boolean; preflight?: boolean } & Partial<
+        Pick<typJob, "rev">
+    > = {},
+): typJob {
+    const base = f_Job();
+    return f_Job({
+        mode: over.mode ?? "copy",
+        rev: over.rev ?? 0,
+        options: { ...base.options, preflightBeforeDestructive: over.preflight ?? true },
+        autoSync: {
+            ...base.autoSync,
+            enabled: true,
+            intervalMinutes: 1,
+            allowDeletes: over.allowDeletes ?? false,
+        },
+    });
+}
+
+/** 자동 실행을 끝까지 기다리고 finished 이벤트가 1번인지 확인한다 */
+async function f_Auto(h: ReturnType<typeof f_Harness>) {
+    const { runId, done } = await h.svc.startAuto(JOB_ID);
+    const o = await done;
+    expect(o.runId).toBe(runId);
+    expect(await h.svc.whenIdle(2000)).toBe(true);
+    expect(h.finished()).toHaveLength(1);
+    expect(h.activity.current()).toBeNull();
+    return o;
+}
+
+describe("clsRunService 자동 실행 (Phase 8)", () => {
+    it("copy: 비교(compareForAuto) → 실행, trigger scheduler, started는 비교 단계, lastRun·무효화", async () => {
+        const h = f_Harness({ job: f_AutoJob(), script: { lines: fixtureLines("copy-real") } });
+        const o = await f_Auto(h);
+        expect(o).toMatchObject({ status: "success", recorded: true, jobName: "실행 작업" });
+        expect(h.autoCompareCalls).toEqual([JOB_ID]);
+        expect(h.requirePlanCalls).toEqual([]);
+        expect(h.procs).toHaveLength(1);
+        expect(h.procs[0]!.args).not.toContain("--dry-run");
+        const started = h.events[0]!;
+        if (started.type !== "started") throw new Error("started 아님");
+        expect(started.snapshot).toMatchObject({ trigger: "scheduler", phase: "comparing" });
+        expect(h.begun).toHaveLength(1);
+        expect(h.begun[0]).toMatchObject({ trigger: "scheduler", dryRun: false });
+        expect(h.begun[0]!.plan).toMatchObject({ createFiles: 2, updateFiles: 2, deleteFiles: 0 });
+        expect(h.invalidated).toEqual([JOB_ID]);
+        expect(h.bookkeeping).toEqual([
+            expect.objectContaining({ lastRun: expect.objectContaining({ status: "success" }) }),
+        ]);
+    });
+
+    it("바꿀 것이 없으면 noop: 이력·프로세스 없음, lastRun{runId:null, noop}", async () => {
+        const h = f_Harness({
+            job: f_AutoJob(),
+            compare: f_Compare({
+                summary: f_Summary({ createFiles: 0, updateFiles: 0, deleteFiles: 0 }),
+            }),
+        });
+        const o = await f_Auto(h);
+        expect(o).toMatchObject({ status: "noop", recorded: false, error: null });
+        expect(h.begun).toEqual([]);
+        expect(h.procs).toEqual([]);
+        expect(h.invalidated).toEqual([]);
+        expect(h.bookkeeping).toEqual([
+            expect.objectContaining({
+                lastRun: expect.objectContaining({ runId: null, status: "noop" }),
+            }),
+        ]);
+    });
+
+    const BLOCKS: Array<{
+        name: string;
+        job: typJob;
+        compare: itfCompareResult;
+        safety?: Partial<ReturnType<typeof createDefaultSettings>["safety"]>;
+        text: string;
+    }> = [
+        {
+            name: "allowDeletes 꺼짐 + 삭제",
+            job: f_AutoJob({ mode: "sync" }),
+            compare: f_SyncCompare(),
+            text: "삭제를 허용하지 않아",
+        },
+        {
+            name: "autoMaxDeletes 초과",
+            job: f_AutoJob({ mode: "sync", allowDeletes: true }),
+            compare: f_SyncCompare(),
+            safety: { autoMaxDeletes: 1 },
+            text: "최대 삭제 수’(1개)를 넘어",
+        },
+        {
+            name: "autoMaxDeletes 0 = 자동 삭제 금지",
+            job: f_AutoJob({ mode: "sync", allowDeletes: true }),
+            compare: f_SyncCompare(),
+            safety: { autoMaxDeletes: 0 },
+            text: "0이라",
+        },
+        {
+            name: "대량 삭제",
+            job: f_AutoJob({ mode: "sync", allowDeletes: true }),
+            compare: f_SyncCompare({ destFiles: 3 }),
+            text: "대량 삭제",
+        },
+        {
+            name: "사전 확인 꺼짐 + 삭제",
+            job: f_AutoJob({ mode: "sync", allowDeletes: true, preflight: false }),
+            compare: f_SyncCompare(),
+            text: "사전 확인이 꺼져",
+        },
+        {
+            name: "S5 형식 충돌",
+            job: f_AutoJob(),
+            compare: f_Compare({ summary: f_Summary({ conflictFiles: 1 }) }),
+            text: "파일과 폴더 이름이 겹치는",
+        },
+        {
+            name: "S6 대소문자만 다름",
+            job: f_AutoJob(),
+            compare: f_Compare({ summary: f_Summary({ caseOnlyFiles: 1 }) }),
+            text: "대소문자만 다른",
+        },
+        {
+            name: "S7 빈 원본 sync",
+            job: f_AutoJob({ mode: "sync", allowDeletes: true }),
+            compare: f_SyncCompare({ sourceFiles: 0, createFiles: 0, updateFiles: 0 }),
+            text: "원본에 파일이 없어",
+        },
+        {
+            name: "S15 sync + 오류 무시",
+            job: {
+                ...f_AutoJob({ mode: "sync", allowDeletes: true }),
+                options: { ...f_AutoJob().options, ignoreErrors: true },
+            },
+            compare: f_SyncCompare(),
+            text: "--ignore-errors",
+        },
+    ];
+    for (const b of BLOCKS) {
+        it(`게이트 차단: ${b.name} → blocked 이력 1건, 프로세스·무효화 없음`, async () => {
+            const h = f_Harness({
+                job: b.job,
+                compare: b.compare,
+                ...(b.safety ? { safety: b.safety } : {}),
+            });
+            const o = await f_Auto(h);
+            expect(o.status).toBe("blocked");
+            expect(o.recorded).toBe(true);
+            expect(o.error?.message).toContain(b.text);
+            expect(h.procs).toEqual([]);
+            expect(h.invalidated).toEqual([]);
+            expect(h.begun).toHaveLength(1);
+            expect(h.begun[0]).toMatchObject({
+                status: "blocked",
+                trigger: "scheduler",
+                logFile: null,
+            });
+            expect(h.begun[0]!.finishedAt).not.toBeNull();
+            expect(h.bookkeeping).toEqual([
+                expect.objectContaining({
+                    lastRun: expect.objectContaining({ runId: o.runId, status: "blocked" }),
+                }),
+            ]);
+        });
+    }
+
+    it("삭제 허용 + 한도 이하 + 사전 확인 켜짐 → 사전 확인 dry-run 후 --max-delete 2", async () => {
+        const h = f_Harness({
+            job: f_AutoJob({ mode: "sync", allowDeletes: true }),
+            compare: f_SyncCompare(),
+            scripts: [{ lines: fixtureLines("sync-dryrun") }, { lines: fixtureLines("sync-real") }],
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("success");
+        expect(h.procs).toHaveLength(2);
+        expect(h.procs[0]!.args).toContain("--dry-run");
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("2");
+        expect(o.stats).not.toBeNull();
+    });
+
+    it("비교 실패 → failed 이력(오류 코드 유지), 프로세스 없음", async () => {
+        const h = f_Harness({
+            job: f_AutoJob(),
+            autoCompare: new clsAppError("PATH_NOT_FOUND", "원본: 경로가 없습니다."),
+        });
+        const o = await f_Auto(h);
+        expect(o).toMatchObject({ status: "failed", recorded: true });
+        expect(o.error?.code).toBe("PATH_NOT_FOUND");
+        expect(h.begun[0]).toMatchObject({ status: "failed", trigger: "scheduler" });
+        expect(h.procs).toEqual([]);
+    });
+
+    it("rclone 없음(실행 전) → failed 이력", async () => {
+        const h = f_Harness({
+            job: f_AutoJob(),
+            requireError: new clsAppError("RCLONE_NOT_FOUND"),
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("failed");
+        expect(o.error?.code).toBe("RCLONE_NOT_FOUND");
+        expect(h.autoCompareCalls).toEqual([]);
+        expect(h.begun).toHaveLength(1);
+    });
+
+    it("비교 중 취소 → canceled 이력, 프로세스 없음", async () => {
+        const h = f_Harness({ job: f_AutoJob(), autoCompare: "hang" });
+        const { runId, done } = await h.svc.startAuto(JOB_ID);
+        // 비교가 시작될 때까지 기다린다
+        for (let i = 0; i < 20 && h.autoCompareCalls.length === 0; i += 1) {
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        expect(h.svc.getActive()).toMatchObject({
+            runId,
+            phase: "comparing",
+            trigger: "scheduler",
+        });
+        h.svc.cancel(runId);
+        const o = await done;
+        expect(o.status).toBe("canceled");
+        expect(o.error?.message).toContain("비교 중에 취소");
+        expect(h.begun[0]).toMatchObject({ status: "canceled" });
+        expect(h.procs).toEqual([]);
+        expect(h.activity.current()).toBeNull();
+    });
+
+    it("비교하는 동안 작업 rev가 바뀌면 blocked PLAN_STALE", async () => {
+        const h = f_Harness({ job: f_AutoJob(), autoCompare: f_Compare({ jobRev: 1 }) });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("blocked");
+        expect(o.error?.code).toBe("PLAN_STALE");
+        expect(h.procs).toEqual([]);
+    });
+
+    it("락은 await 전에 동기로 잡는다: 같은 tick의 수동 시작은 BUSY", async () => {
+        const h = f_Harness({ job: f_AutoJob(), script: { lines: fixtureLines("copy-real") } });
+        const pending = h.svc.startAuto(JOB_ID);
+        expect(h.activity.current()).toMatchObject({ kind: "run", jobId: JOB_ID });
+        const e = await f_Err(h.svc.start({ jobId: JOB_ID, dryRun: true }));
+        expect(e.code).toBe("BUSY");
+        const { done } = await pending;
+        expect((await done).status).toBe("success");
+        expect(h.begun).toHaveLength(1);
+    });
+
+    it("락이 차 있으면 BUSY를 던지고 이력·작업 기록·이벤트가 없다", async () => {
+        const h = f_Harness({ job: f_AutoJob() });
+        const release = h.activity.acquire(
+            { kind: "compare", jobId: JOB_ID, startedAt: new Date(T0).toISOString() },
+            () => "busy",
+        );
+        const e = await f_Err(h.svc.startAuto(JOB_ID));
+        expect(e.code).toBe("BUSY");
+        expect(h.begun).toEqual([]);
+        expect(h.bookkeeping).toEqual([]);
+        expect(h.events).toEqual([]);
+        release();
     });
 });

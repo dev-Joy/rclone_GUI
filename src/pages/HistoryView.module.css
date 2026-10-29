@@ -1,0 +1,87 @@
+/**
+ * HistoryView 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .HistoryView {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+        padding-top: 4px;
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 10px;
+        }
+
+        .count {
+            margin-left: auto;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+        }
+
+        .empty {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        .tableWrap {
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+
+            th,
+            td {
+                padding: 6px 10px;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            th {
+                position: sticky;
+                top: 0;
+                background: var(--panel);
+                color: var(--muted);
+                font-weight: 600;
+            }
+        }
+
+        .counts {
+            color: var(--muted);
+        }
+
+        .open {
+            padding: 0;
+            border: 0;
+            background: none;
+            color: var(--accent);
+            font: inherit;
+            text-decoration: underline;
+            cursor: pointer;
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: 2px;
+            }
+        }
+    }
+}

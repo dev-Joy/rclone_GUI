@@ -5,6 +5,8 @@
  *   (lsjson은 파일 경로에 그 파일 1건을 돌려주므로 폴더인지 먼저 확인한다. 대상이 없으면 빈 목록)
  * - 목록: 원본·대상 lsjson을 병렬로 줄 단위로 읽는다(stdout을 모으지 않음). 한쪽이 실패하면 다른 쪽도 끝낸다.
  * - 결과는 작업별로 메모리에만 둔다. 실패·취소하면 그 작업의 이전 결과도 지운다(§7.4).
+ * - 자동 실행용 compareForAuto는 실행 서비스가 잡은 락 안에서 부른다: 락·캐시·진행 이벤트가 없고
+ *   수동 비교 결과(planToken)를 건드리지 않는다. 취소는 넘겨받은 signal로 한다.
  * - 로그에는 작업 id·수·코드만 남기고 경로·파일 이름은 쓰지 않는다.
  *
  * @author dev-Joy 2026-10-28
@@ -72,6 +74,8 @@ interface itfActiveCompare {
     destFiles: number;
     controller: AbortController;
     canceled: boolean;
+    /** 진행 이벤트를 보내지 않는다(자동 실행) */
+    silent: boolean;
 }
 
 interface itfCacheEntry {
@@ -113,15 +117,7 @@ export class clsCompareService {
         const release = this.deps.activity.acquire({ kind: "compare", jobId, startedAt }, (cur) =>
             busyMessageFor(cur, this.deps.jobs),
         );
-        const active: itfActiveCompare = {
-            jobId,
-            phase: "check",
-            startedAt,
-            sourceFiles: 0,
-            destFiles: 0,
-            controller: new AbortController(),
-            canceled: false,
-        };
+        const active = f_NewActive(jobId, startedAt, false);
         this.active = active;
         this.emitProgress(active, "check");
         const t0 = Date.now();
@@ -147,6 +143,35 @@ export class clsCompareService {
             if (this.active === active) this.active = null;
             release();
             this.emitProgress(active, end);
+        }
+    }
+
+    /**
+     * 자동 실행용 비교. 락(호출하는 실행 서비스가 잡음)·캐시·진행 이벤트 없이 결과만 돌려준다.
+     * 수동 비교 결과는 그대로 둔다. signal이 abort되면 lsjson을 끝내고 CANCELED를 던진다.
+     */
+    async compareForAuto(jobId: string, signal: AbortSignal): Promise<itfCompareResult> {
+        const job = this.deps.jobs.get(jobId);
+        const active = f_NewActive(jobId, this.deps.now().toISOString(), true);
+        const f_Abort = () => {
+            active.canceled = true;
+            active.controller.abort();
+        };
+        if (signal.aborted) f_Abort();
+        else signal.addEventListener("abort", f_Abort, { once: true });
+        try {
+            const { result } = await this.execute(job, active, Date.now());
+            this.deps.logger.info(
+                `자동 비교 완료: job=${jobId} files=${result.summary.sourceFiles}/${result.summary.destFiles} ms=${result.durationMs}`,
+            );
+            return result;
+        } catch (e) {
+            const err = active.canceled ? new clsAppError("CANCELED", "비교를 취소했습니다.") : e;
+            const code = err instanceof clsAppError ? err.code : "INTERNAL";
+            this.deps.logger.warn(`자동 비교 실패: job=${jobId} code=${code}`);
+            throw err;
+        } finally {
+            signal.removeEventListener("abort", f_Abort);
         }
     }
 
@@ -510,6 +535,7 @@ export class clsCompareService {
     }
 
     private emitProgress(active: itfActiveCompare, phase: typCompareEventPhase): void {
+        if (active.silent) return;
         try {
             this.deps.emit({
                 jobId: active.jobId,
@@ -532,6 +558,19 @@ export class clsCompareService {
             this.cache.delete(oldest);
         }
     }
+}
+
+function f_NewActive(jobId: string, startedAt: string, silent: boolean): itfActiveCompare {
+    return {
+        jobId,
+        phase: "check",
+        startedAt,
+        sourceFiles: 0,
+        destFiles: 0,
+        controller: new AbortController(),
+        canceled: false,
+        silent,
+    };
 }
 
 function f_ParseFailure(label: string, e: unknown): unknown {

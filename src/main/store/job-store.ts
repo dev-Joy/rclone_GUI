@@ -4,6 +4,7 @@
  * - 사용자 수정(create/update)은 rev +1, updatedAt 갱신, 경로 안전 규칙(S1~S4a) 검사.
  * - 실행 기록·스케줄 같은 관리 필드(lastRun, autoSync.nextRunAt/lastAutoRunAt)는
  *   setBookkeeping으로만 바꾸고 rev/updatedAt을 건드리지 않는다(비교 계획 토큰 보호).
+ *   단, 자동 실행을 켜고 끄거나 주기를 바꾸면 nextRunAt을 다시 정한다(nextRunAfterEdit, MVP_SPEC §10.2).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -18,6 +19,7 @@ import { nowIso } from "@/main/lib/time";
 import { clsJsonStore } from "@/main/store/json-store";
 import type { itfAppNotice } from "@/shared/ipc-contract";
 import { checkPathPair } from "@/shared/path-utils";
+import { nextRunAfterEdit } from "@/shared/schedule";
 import {
     zJobDraft,
     zJobPatch,
@@ -81,7 +83,11 @@ export class clsJobStore {
         const job: typJob = {
             ...draft,
             id: randomUUID(),
-            autoSync: { ...draft.autoSync, nextRunAt: null, lastAutoRunAt: null },
+            autoSync: {
+                ...draft.autoSync,
+                nextRunAt: nextRunAfterEdit(null, draft.autoSync, new Date(now)),
+                lastAutoRunAt: null,
+            },
             rev: 0,
             createdAt: now,
             updatedAt: now,
@@ -97,16 +103,22 @@ export class clsJobStore {
         await this.commit((jobs) =>
             jobs.map((job) => {
                 if (job.id !== id) return job;
+                const now = nowIso();
+                // 관리 필드(nextRunAt/lastAutoRunAt)는 화면 입력으로 바꾸지 않는다.
+                // 켜고 끄거나 주기를 바꾼 경우에만 nextRunAt을 다시 정한다
+                const autoSync = patch.autoSync
+                    ? { ...job.autoSync, ...patch.autoSync }
+                    : job.autoSync;
                 const next: typJob = {
                     ...job,
                     ...patch,
                     options: patch.options ?? job.options,
-                    // 관리 필드(nextRunAt/lastAutoRunAt)는 화면 입력으로 바꾸지 않는다
-                    autoSync: patch.autoSync
-                        ? { ...job.autoSync, ...patch.autoSync }
-                        : job.autoSync,
+                    autoSync: {
+                        ...autoSync,
+                        nextRunAt: nextRunAfterEdit(job.autoSync, autoSync, new Date(now)),
+                    },
                     rev: job.rev + 1,
-                    updatedAt: nowIso(),
+                    updatedAt: now,
                 };
                 this.assertPaths(next.source, next.destination);
                 updated = next;
@@ -130,7 +142,11 @@ export class clsJobStore {
             ...structuredClone(src),
             id: randomUUID(),
             name: `${base}${COPY_SUFFIX}`,
-            autoSync: { ...src.autoSync, nextRunAt: null, lastAutoRunAt: null },
+            autoSync: {
+                ...src.autoSync,
+                nextRunAt: nextRunAfterEdit(null, src.autoSync, new Date(now)),
+                lastAutoRunAt: null,
+            },
             rev: 0,
             createdAt: now,
             updatedAt: now,

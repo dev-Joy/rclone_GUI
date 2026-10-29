@@ -47,6 +47,20 @@ const api: itfRcloneGuiApi = {
         cancel: (runId) => ipcRenderer.invoke(C.runCancel, { runId }),
         getActive: () => ipcRenderer.invoke(C.runGetActive),
     },
+    history: {
+        list: (query) => ipcRenderer.invoke(C.historyList, query ?? {}),
+        get: (runId) => ipcRenderer.invoke(C.historyGet, { runId }),
+        readLog: (runId, tailBytes) =>
+            ipcRenderer.invoke(
+                C.historyReadLog,
+                tailBytes === undefined ? { runId } : { runId, tailBytes },
+            ),
+        clear: (deleteLogs) => ipcRenderer.invoke(C.historyClear, { deleteLogs }),
+    },
+    scheduler: {
+        getState: () => ipcRenderer.invoke(C.schedulerGetState),
+        setPaused: (paused) => ipcRenderer.invoke(C.schedulerSetPaused, { paused }),
+    },
     rclone: {
         detect: (force) => ipcRenderer.invoke(C.rcloneDetect, { force: force ?? false }),
         listRemotes: (configPath) =>
@@ -71,6 +85,8 @@ const api: itfRcloneGuiApi = {
         onJobsChanged: (cb) => f_Subscribe(E.jobsChanged, cb),
         onCompareProgress: (cb) => f_Subscribe(E.compareProgress, cb),
         onRunEvent: (cb) => f_Subscribe(E.runEvent, cb),
+        onSchedulerState: (cb) => f_Subscribe(E.schedulerState, cb),
+        onAppNotify: (cb) => f_Subscribe(E.appNotify, cb),
     },
 };
 

@@ -49,18 +49,23 @@ describe("settingsToPatch", () => {
             "safety",
             "ui",
         ]);
-        expect(patch.ui).toEqual({ theme: "system" });
+        expect(patch.ui).toEqual({ theme: "system", minimizeToTray: true, launchAtLogin: false });
         expect(patch).not.toHaveProperty("scheduler");
         expect(patch).not.toHaveProperty("version");
         expect(() => zSettingsPatch.parse(patch)).not.toThrow();
     });
 
-    it("isSettingsEqual은 노출된 값만 비교한다", () => {
+    it("isSettingsEqual은 노출된 값만 비교한다(일시정지는 제외, 트레이·로그인 시작은 포함)", () => {
         const a = createDefaultSettings();
         const b = createDefaultSettings();
         b.scheduler.paused = true;
-        b.ui.minimizeToTray = false;
         expect(isSettingsEqual(a, b)).toBe(true);
+        b.ui.minimizeToTray = false;
+        expect(isSettingsEqual(a, b)).toBe(false);
+        b.ui.minimizeToTray = true;
+        b.ui.launchAtLogin = true;
+        expect(isSettingsEqual(a, b)).toBe(false);
+        b.ui.launchAtLogin = false;
         b.ui.theme = "dark";
         expect(isSettingsEqual(a, b)).toBe(false);
     });

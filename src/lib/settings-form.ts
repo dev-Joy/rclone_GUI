@@ -68,14 +68,21 @@ export function validateSettingsDraft(s: typSettings): itfSettingsFormCheck {
     return { fieldErrors, ok: parsed.success };
 }
 
-/** 화면에 노출된 섹션만 patch로 (defaults, compare, safety, logs, ui.theme). scheduler·트레이·로그인 시작은 넣지 않는다 */
+/**
+ * 화면에 노출된 섹션만 patch로 (defaults, compare, safety, logs, ui).
+ * scheduler(일시정지)는 넣지 않는다: settings:update가 거부하며 scheduler:setPaused로만 바꾼다.
+ */
 export function settingsToPatch(s: typSettings): typSettingsPatch {
     return {
         defaults: { ...s.defaults, excludes: [...s.defaults.excludes] },
         compare: { ...s.compare },
         safety: { ...s.safety },
         logs: { ...s.logs },
-        ui: { theme: s.ui.theme },
+        ui: {
+            theme: s.ui.theme,
+            minimizeToTray: s.ui.minimizeToTray,
+            launchAtLogin: s.ui.launchAtLogin,
+        },
     };
 }
 

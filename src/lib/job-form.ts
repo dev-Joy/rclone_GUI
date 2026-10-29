@@ -66,7 +66,7 @@ const WARN_SYNC_NO_PREFLIGHT =
 const WARN_COPY_ALLOW_DELETES =
     "복사 모드에서는 삭제가 일어나지 않으므로 ‘자동 실행 때 삭제 허용’은 쓰이지 않습니다.";
 const WARN_AUTO_DELETES =
-    "자동 실행이 대상에만 있는 파일을 지울 수 있습니다(설정의 ‘자동 실행 최대 삭제 수’까지).";
+    "자동 실행이 대상에만 있는 파일을 지울 수 있습니다(설정의 ‘자동 실행 최대 삭제 수’ 이하·대량 삭제 아님·사전 확인 켜짐일 때만).";
 
 function f_Empty(): itfJobFormCheck {
     return { fieldErrors: {}, formErrors: [], fieldWarnings: {}, formWarnings: [], ok: true };

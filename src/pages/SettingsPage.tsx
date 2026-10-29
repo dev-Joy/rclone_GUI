@@ -1,7 +1,8 @@
 /**
- * 설정 화면: rclone 설정, 새 작업 기본값(제외 규칙·실행 옵션), 안전 임계값, 로그·이력, 테마, 앱 정보.
- * 아직 동작하지 않는 항목(스케줄러 일시정지·트레이·로그인 시 시작)은 보여 주지 않는다.
+ * 설정 화면: rclone 설정, 새 작업 기본값(제외 규칙·실행 옵션), 안전 임계값(자동 실행 삭제 한도 포함),
+ * 로그·이력(이력 비우기·로그 폴더), 테마, 창 닫기(트레이)·로그인 시 시작, 앱 정보.
  * 저장은 화면에 보이는 항목만 보낸다(settingsToPatch). 기본값은 새 작업에만 적용된다.
+ * 자동 실행 일시정지는 상단 막대·트레이에서 바꾼다(저장 대상 아님). 로그인 시 시작은 설치본에서만 바꿀 수 있다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -30,6 +31,7 @@ import type { typSettings, typThemeMode } from "@/shared/schemas/settings";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore } from "@/stores/ui-store";
+import ClearHistoryModal from "./ClearHistoryModal";
 import ExcludesEditor from "./ExcludesEditor";
 import JobOptionsFields from "./JobOptionsFields";
 import RcloneSetupPanel from "./RcloneSetupPanel";
@@ -76,7 +78,7 @@ const SAFETY_FIELDS: readonly typNumberSpec[] = [
         group: "safety",
         key: "autoMaxDeletes",
         label: "자동 실행 최대 삭제 수",
-        hint: "자동 실행이 이보다 많이 지워야 하면 멈춥니다. 0~1000000",
+        hint: "자동 실행이 이보다 많이 지워야 하면 아무것도 하지 않고 알립니다. 0이면 자동 실행은 삭제하지 않습니다. 0~1000000",
     },
     {
         field: "safety.compareMaxAgeMinutes",
@@ -118,6 +120,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
     const [showErrors, setShowErrors] = useState(false);
     const [saving, setSaving] = useState(false);
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [clearOpen, setClearOpen] = useState(false);
     const setSettingsDirty = useUiStore((s) => s.setSettingsDirty);
 
     // 저장소 값이 바뀌면(저장·rclone 지정 등) 고치지 않은 화면 값만 새 값으로 맞춘다
@@ -165,6 +168,11 @@ export default function SettingsPage(props: itfSettingsPageProps) {
         f_Patch((d) => ({ ...d, compare: { caseInsensitivePaths: v } }));
     const h_Theme = (v: string) =>
         f_Patch((d) => ({ ...d, ui: { ...d.ui, theme: v as typThemeMode } }));
+    const h_Tray = (v: boolean) => f_Patch((d) => ({ ...d, ui: { ...d.ui, minimizeToTray: v } }));
+    const h_LaunchAtLogin = (v: boolean) =>
+        f_Patch((d) => ({ ...d, ui: { ...d.ui, launchAtLogin: v } }));
+    const h_AskClear = () => setClearOpen(true);
+    const h_CloseClear = () => setClearOpen(false);
     const h_ToggleAdvanced = (e: SyntheticEvent<HTMLDetailsElement>) =>
         setAdvancedOpen(e.currentTarget.open);
     const h_Revert = () => {
@@ -256,6 +264,11 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                     안전
                 </h3>
                 <div className={styles.grid}>{SAFETY_FIELDS.map(f_NumberField)}</div>
+                <p className={styles.muted}>
+                    자동 실행은 삭제가 필요하면 작업의 ‘자동 실행 때 삭제 허용’이 켜져 있고, 삭제
+                    수가 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전
+                    확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다.
+                </p>
                 <details className={styles.details} open={advancedOpen} onToggle={h_ToggleAdvanced}>
                     <summary className={styles.summary}>고급</summary>
                     <div className={styles.detailsBody}>
@@ -275,8 +288,15 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                     로그·이력
                 </h3>
                 <div className={styles.grid}>{LOG_FIELDS.map(f_NumberField)}</div>
-                <div>
+                <p className={styles.muted}>
+                    앱을 시작할 때와 하루에 한 번, 보관 일수가 지난 실행 로그와 보관 수를 넘은
+                    이력을 지웁니다(진행 중인 실행은 남김).
+                </p>
+                <div className={styles.buttons}>
                     <ZBCButton onClick={h_OpenLogs}>로그 폴더 열기</ZBCButton>
+                    <ZBCButton variant="danger" onClick={h_AskClear}>
+                        이력 비우기…
+                    </ZBCButton>
                 </div>
             </section>
 
@@ -293,6 +313,33 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                         onChange={h_Theme}
                     />
                 </ZBCField>
+            </section>
+
+            <section className={styles.section} aria-labelledby="settings-app-title">
+                <h3 id="settings-app-title" className={styles.sectionTitle}>
+                    창·시작
+                </h3>
+                <ZBCCheckbox
+                    id="settings-minimize-to-tray"
+                    name="minimizeToTray"
+                    checked={draft.ui.minimizeToTray}
+                    onChange={h_Tray}
+                    label="창을 닫으면 알림 영역(트레이)으로 숨기기"
+                    description="켜면 창을 닫아도 앱이 트레이에서 계속 실행되고 자동 실행도 계속합니다. 끄면 창을 닫을 때 앱이 끝납니다."
+                />
+                <ZBCCheckbox
+                    id="settings-launch-at-login"
+                    name="launchAtLogin"
+                    checked={draft.ui.launchAtLogin}
+                    onChange={h_LaunchAtLogin}
+                    disabled={info?.isPackaged !== true}
+                    label="Windows에 로그인하면 트레이로 시작"
+                    description={
+                        info?.isPackaged === true
+                            ? "창을 띄우지 않고 트레이에서 시작해 자동 실행을 이어 갑니다."
+                            : "개발 실행에서는 바꿀 수 없습니다(설치본에서만 로그인 항목을 등록합니다)."
+                    }
+                />
             </section>
 
             <section className={styles.section} aria-labelledby="settings-about-title">
@@ -326,6 +373,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                     {saving ? "저장 중…" : "설정 저장"}
                 </ZBCButton>
             </footer>
+            <ClearHistoryModal open={clearOpen} onClose={h_CloseClear} />
         </div>
     );
 }

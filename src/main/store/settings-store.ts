@@ -39,8 +39,15 @@ export function deepMerge<T>(base: T, patch: unknown): T {
 
 export class clsSettingsStore {
     private readonly store: clsJsonStore<typSettings>;
+    private readonly onChange: ((s: typSettings, prev: typSettings) => void) | undefined;
 
-    constructor(userDataDir: string, onNotice?: (n: itfAppNotice) => void) {
+    /** onChange: 저장에 성공한 뒤 새 값·이전 값으로 부른다(트레이·테마·로그인 항목 반영) */
+    constructor(
+        userDataDir: string,
+        onNotice?: (n: itfAppNotice) => void,
+        onChange?: (s: typSettings, prev: typSettings) => void,
+    ) {
+        this.onChange = onChange;
         this.store = new clsJsonStore({
             file: join(userDataDir, "settings.json"),
             label: "설정",
@@ -62,6 +69,15 @@ export class clsSettingsStore {
 
     async update(patch: typSettingsPatch): Promise<typSettings> {
         const checked = zSettingsPatch.parse(patch);
-        return await this.store.update((current) => deepMerge(current, checked));
+        const prev = this.store.get();
+        const next = await this.store.update((current) => deepMerge(current, checked));
+        if (this.onChange) {
+            try {
+                this.onChange(next, prev);
+            } catch {
+                // 반영 실패로 저장 결과를 바꾸지 않는다
+            }
+        }
+        return next;
     }
 }

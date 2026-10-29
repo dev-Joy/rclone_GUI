@@ -4,9 +4,16 @@ import { describe, expect, it } from "vitest";
 // ========== Internal imports ==========
 import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
 import { zCompareJobInput } from "@/shared/schemas/compare";
+import {
+    zHistoryClearInput,
+    zHistoryGetInput,
+    zHistoryListInput,
+    zHistoryReadLogInput,
+} from "@/shared/schemas/history";
 import { zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
 import { zStartRunInput } from "@/shared/schemas/run";
+import { zSchedulerSetPausedInput } from "@/shared/schemas/scheduler";
 import { zSettings, zSettingsPatch } from "@/shared/schemas/settings";
 import { zOpenExternalInput, zPickDirectoryInput, zPickFileInput } from "@/shared/schemas/system";
 
@@ -160,5 +167,43 @@ describe("실행 IPC 입력", () => {
             false,
         );
         expect(zStartRunInput.safeParse({ ...base, confirmedDeletes: -1 }).success).toBe(false);
+    });
+});
+
+describe("이력·스케줄러 IPC 입력", () => {
+    const RUN = "00000000-0000-4000-8000-000000000001";
+
+    it("history:list: jobId uuid·limit 1..5000, 알 수 없는 키 거부", () => {
+        expect(zHistoryListInput.safeParse({}).success).toBe(true);
+        expect(zHistoryListInput.safeParse({ jobId: RUN, limit: 50 }).success).toBe(true);
+        expect(zHistoryListInput.safeParse({ jobId: "x" }).success).toBe(false);
+        expect(zHistoryListInput.safeParse({ limit: 0 }).success).toBe(false);
+        expect(zHistoryListInput.safeParse({ limit: 5001 }).success).toBe(false);
+        expect(zHistoryListInput.safeParse({ status: "failed" }).success).toBe(false);
+    });
+
+    it("history:get·readLog: runId uuid, tailBytes 1..1MB, 경로 같은 키 거부", () => {
+        expect(zHistoryGetInput.safeParse({ runId: RUN }).success).toBe(true);
+        expect(zHistoryGetInput.safeParse({ runId: "../x" }).success).toBe(false);
+        expect(zHistoryReadLogInput.safeParse({ runId: RUN }).success).toBe(true);
+        expect(zHistoryReadLogInput.safeParse({ runId: RUN, tailBytes: 1024 * 1024 }).success).toBe(
+            true,
+        );
+        expect(
+            zHistoryReadLogInput.safeParse({ runId: RUN, tailBytes: 1024 * 1024 + 1 }).success,
+        ).toBe(false);
+        expect(zHistoryReadLogInput.safeParse({ runId: RUN, file: "app.log" }).success).toBe(false);
+    });
+
+    it("history:clear: deleteLogs boolean 필수", () => {
+        expect(zHistoryClearInput.safeParse({ deleteLogs: false }).success).toBe(true);
+        expect(zHistoryClearInput.safeParse({}).success).toBe(false);
+        expect(zHistoryClearInput.safeParse({ deleteLogs: "yes" }).success).toBe(false);
+    });
+
+    it("scheduler:setPaused: paused boolean만", () => {
+        expect(zSchedulerSetPausedInput.safeParse({ paused: true }).success).toBe(true);
+        expect(zSchedulerSetPausedInput.safeParse({ paused: 1 }).success).toBe(false);
+        expect(zSchedulerSetPausedInput.safeParse({ paused: true, x: 1 }).success).toBe(false);
     });
 });

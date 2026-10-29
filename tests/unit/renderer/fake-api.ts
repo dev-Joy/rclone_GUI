@@ -3,6 +3,7 @@
  * 경로 검사는 main과 같은 checkPathPair로 SAFETY_BLOCKED 등을 돌려준다.
  * 비교(compare.*)는 응답을 테스트가 직접 제어한다(run·get resolver, active, 진행 이벤트).
  * 실행(run.*)은 start 응답·getActive 값을 테스트가 정하고, run:event를 직접 보낸다.
+ * 이력(history.*)은 테스트가 넣은 레코드·로그를 돌려주고, 스케줄러 상태·app:notify 이벤트도 직접 보낸다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -17,11 +18,14 @@ import type {
     itfCompareResult,
 } from "@/shared/types/compare";
 import { checkPathPair } from "@/shared/path-utils";
-import type { typApiResult } from "@/shared/schemas/common";
+import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft } from "@/shared/schemas/job";
-import type { typStartRunInput } from "@/shared/schemas/run";
+import type { typHistoryListInput } from "@/shared/schemas/history";
+import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
+import type { itfRunLogView } from "@/shared/types/history";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
+import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
 
 export interface itfFakeApi {
     api: itfRcloneGuiApi;
@@ -55,6 +59,17 @@ export interface itfFakeApi {
     setRunActive: (a: itfRunSnapshot | null) => void;
     /** main의 run:event 이벤트를 흉내 낸다 */
     emitRunEvent: (e: typRunEvent) => void;
+    /** history.list가 돌려줄 레코드(최신순) */
+    setHistory: (records: typRunRecord[]) => void;
+    /** history.list에 넘어온 조건 */
+    historyQueries: typHistoryListInput[];
+    /** history.readLog 응답(runId별). 없으면 NOT_FOUND */
+    setLogView: (runId: string, view: itfRunLogView) => void;
+    /** 다음 history.clear 응답 실패(예: BUSY) */
+    setHistoryClearError: (e: typAppErrorPayload | null) => void;
+    setSchedulerState: (s: itfSchedulerState) => void;
+    emitSchedulerState: (s: itfSchedulerState) => void;
+    emitAppNotify: (n: itfAppNotify) => void;
 }
 
 let uuidSeq = 0;
@@ -125,6 +140,13 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         data: { runId: fakeUuid(9001) },
     };
     let runActive: itfRunSnapshot | null = null;
+    let history: typRunRecord[] = [];
+    const historyQueries: typHistoryListInput[] = [];
+    const logViews = new Map<string, itfRunLogView>();
+    let historyClearError: typAppErrorPayload | null = null;
+    let schedulerState: itfSchedulerState = { paused: false, running: null, next: null };
+    const schedulerListeners = new Set<(e: itfSchedulerState) => void>();
+    const notifyListeners = new Set<(e: itfAppNotify) => void>();
     // 시드(fakeUuid(1~99))와 겹치지 않게 100부터
     let seq = 100;
 
@@ -250,6 +272,44 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 return f_Ok(runActive);
             },
         },
+        history: {
+            list: (query) => {
+                calls.push("history.list");
+                const q = query ?? {};
+                historyQueries.push(structuredClone(q));
+                const rows = q.jobId ? history.filter((r) => r.jobId === q.jobId) : history;
+                return f_Ok(structuredClone(q.limit ? rows.slice(0, q.limit) : rows));
+            },
+            get: (runId) => {
+                calls.push(`history.get:${runId}`);
+                return f_Ok(structuredClone(history.find((r) => r.id === runId) ?? null));
+            },
+            readLog: (runId) => {
+                calls.push(`history.readLog:${runId}`);
+                const v = logViews.get(runId);
+                return v ? f_Ok(structuredClone(v)) : f_Fail("NOT_FOUND");
+            },
+            clear: (deleteLogs) => {
+                calls.push(`history.clear:${deleteLogs}`);
+                if (historyClearError) {
+                    return Promise.resolve({ ok: false as const, error: historyClearError });
+                }
+                const removed = history.filter((r) => r.status !== "running").length;
+                history = history.filter((r) => r.status === "running");
+                return f_Ok({ removed, deletedLogs: deleteLogs ? removed : 0 });
+            },
+        },
+        scheduler: {
+            getState: () => {
+                calls.push("scheduler.getState");
+                return f_Ok(structuredClone(schedulerState));
+            },
+            setPaused: (paused) => {
+                calls.push(`scheduler.setPaused:${paused}`);
+                schedulerState = { ...schedulerState, paused };
+                return f_Ok(structuredClone(schedulerState));
+            },
+        },
         rclone: {
             detect: () => notImplemented("rclone.detect"),
             listRemotes: (configPath) => {
@@ -282,6 +342,14 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 runListeners.add(cb);
                 return () => runListeners.delete(cb);
             },
+            onSchedulerState: (cb) => {
+                schedulerListeners.add(cb);
+                return () => schedulerListeners.delete(cb);
+            },
+            onAppNotify: (cb) => {
+                notifyListeners.add(cb);
+                return () => notifyListeners.delete(cb);
+            },
         },
     };
 
@@ -311,6 +379,26 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         emitRunEvent: (e) => {
             for (const l of runListeners) l(e);
+        },
+        setHistory: (records) => {
+            history = structuredClone(records);
+        },
+        historyQueries,
+        setLogView: (runId, view) => {
+            logViews.set(runId, view);
+        },
+        setHistoryClearError: (e) => {
+            historyClearError = e;
+        },
+        setSchedulerState: (st) => {
+            schedulerState = st;
+        },
+        emitSchedulerState: (st) => {
+            schedulerState = st;
+            for (const l of schedulerListeners) l(st);
+        },
+        emitAppNotify: (n) => {
+            for (const l of notifyListeners) l(n);
         },
     };
 }

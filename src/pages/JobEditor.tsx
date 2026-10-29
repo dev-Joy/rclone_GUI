@@ -316,7 +316,7 @@ export default function JobEditor() {
                         checked={draft.autoSync.enabled}
                         onChange={h_AutoEnabled}
                         label="주기적으로 자동 실행"
-                        description="스케줄러는 다음 단계에서 동작합니다. 지금은 설정만 저장됩니다."
+                        description="앱이 켜져 있는 동안(트레이 포함) 주기마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
                     />
                     <ZBCField
                         label="실행 간격(분)"
@@ -343,10 +343,11 @@ export default function JobEditor() {
                         checked={draft.autoSync.allowDeletes}
                         onChange={h_AutoDeletes}
                         label="자동 실행 때 대상 파일 삭제 허용 (동기화 모드)"
-                        description="끄면 삭제가 필요한 자동 실행은 멈추고 알립니다."
+                        description="삭제가 필요하면 이 옵션이 켜져 있고, 삭제 수가 설정의 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전 확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다."
                     />
                     <p className={styles.muted}>
-                        다음 실행: {formatLocalDateTime(job?.autoSync.nextRunAt ?? null)}
+                        다음 실행: {formatLocalDateTime(job?.autoSync.nextRunAt ?? null)} · 마지막
+                        자동 실행: {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
                     </p>
                 </section>
 

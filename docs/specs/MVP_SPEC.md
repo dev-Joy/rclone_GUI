@@ -4,7 +4,7 @@
 - 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-10-28 (린트/포맷 도구를 oxlint·oxfmt로 확정)
-- 상태: **설계 확정안 — Phase 0~6 구현 완료 (2026-10-28, sync 실제 실행은 Phase 7), 아래 "구현 반영" 참고**
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -62,6 +62,20 @@
 | D7 삭제 0인 sync | - | 사전 확인 없이 `--max-delete 0`으로 실행(확인 창은 "삭제는 일어나지 않습니다") |
 | 실행 로그 (Phase 7) | - | 사전 확인과 실제 실행을 같은 로그 파일에 쓴다(머리말 1회, 단계마다 `# 단계:`·`# args:` 구획). active-run은 단계마다 그 PID로 다시 기록 |
 | 화면 (Phase 7) | 동기화 실행 비활성 | "동기화 실행" 활성. 삭제 ≥ 1이면 삭제 확인 모달(체크 1 필수, 대량이면 체크 2 필수, 버튼 "N개 삭제 포함 실행"), 그 밖은 기존 확인 창. PLAN_DRIFT는 PlanDriftModal("다시 비교" = compare-store `run`). 실행 탭은 단계 "사전 확인 중", PLAN_DRIFT 차이 목록 표시 |
+| Phase 8 파일 | `services/scheduler.ts`, `ipc/{scheduler,history}.ts`, `tray.ts`, `features/history/{HistoryView,HistoryDetail,LogViewer}`, `features/settings/{Safety,Appearance,Log}Settings`, `stores/{history,scheduler}.ts` | `shared/schedule.ts`(예약 계산 순수 함수), `shared/schemas/{history,scheduler}.ts`, `shared/types/{history,scheduler}.ts`, `main/services/{scheduler,log-retention}.ts`, `main/ipc/{history,scheduler}.ts`, `main/tray.ts`(아이콘 `main/assets/tray.png`, 직접 만듦), `main/window.ts`(hidden), `main/index.ts`, `pages/{HistoryView,HistoryDetail,ClearHistoryModal}.tsx`, `stores/{history,scheduler}-store.ts`, `lib/history-view.ts`. LogViewer는 `RunLogTail` 재사용, 설정은 `SettingsPage` 한 화면에 섹션 추가 |
+| D1 실제 전송 단일 시작점 (Phase 8) | - | AGENTS.md 안전 규칙 2: 실제 전송은 `spawnTransfer` 한 곳. 수동 = 비교 planToken + 확인한 삭제 수, 자동 = 같은 실행 안에서 새로 만든 비교 결과 + 자동 조건. `typRealGate`는 `f_CheckRealGate`(수동)·`f_CheckAutoGate`(자동)만 만든다 |
+| D2 창 닫기 | 트레이 최소화 옵션 | 창 X → 트레이로 숨김(`ui.minimizeToTray` 기본 켜짐), 세션당 처음 한 번 OS 알림으로 안내. 끄면 창 X가 종료 흐름(D6) |
+| D3/D4 자동 실행 삭제 (§9.3) | allowDeletes·autoMaxDeletes | **엄격**: 삭제가 있으면 job `allowDeletes`(기본 꺼짐) 켜짐 AND 삭제 ≤ `safety.autoMaxDeletes`(기본 50, **0 = 자동 삭제 금지**) AND `!isLargeDelete` AND 사전 확인 켜짐. 하나라도 어기면 아무것도 실행하지 않고 `blocked` 이력(trigger scheduler) + 알림. 일부만 실행하지 않음. 순서: `checkPlanSafety`(S5·S6·S7·S15) → 위 조건 → 바꿀 것 없으면 noop. 통과하면 수동과 같은 사전 확인·`--max-delete <계획 수>` |
+| 자동 실행 흐름 (§10.5) | startAuto: 락 → compare(storeForManualUi:false) → gates | `startAuto(jobId)`: 락을 await 전에 동기로 잡음(차 있으면 BUSY, 이력·예약 그대로) → 실행 1건(runId 1개) 안에서 phase `comparing`으로 `compareForAuto`(락·캐시·진행 이벤트 없음, 수동 planToken 미오염, 취소 연동) → job.rev 재확인(다르면 blocked PLAN_STALE) → 게이트 → 수동과 같은 execute/finalize. 비교 실패·rclone 없음·경로 오류는 `failed` 이력, 비교 중 취소는 `canceled` 이력 |
+| D5 로그인 시 시작 | `--hidden` args | 기본 꺼짐. 켜면 `app.setLoginItemSettings({openAtLogin, args:["--hidden"]})`로 트레이 시작. **설치본(`app.isPackaged`)에서만** 바꾼다. 개발 실행은 설정 화면에서 비활성+이유(`app:getInfo`의 `isPackaged`) |
+| D6 실행 중 종료 (§8.5) | 확인 다이얼로그 | 네이티브 확인 창 "실행 중인 작업을 취소하고 종료"/"앱 유지" → 취소 후 10초 안에 안 끝나면 "그래도 종료(다음 시작 때 정리)"/"앱 유지". 비교만(자동 실행의 비교 단계 포함) 진행 중이면 묻지 않고 취소. `session-end`(로그오프·PC 종료)는 묻지 않고 취소. 창 닫기·before-quit·트레이 종료가 한 흐름(`f_RequestQuit`)·하나의 quitting 상태를 쓴다. Phase 6의 "확인 창 없이 종료"를 대체 |
+| D7 단일 인스턴스 | - | 유지. `second-instance`면 숨겨진 창을 보임(없으면 다시 만듦) |
+| D8 보관 정리 | 시작 시 정리 | 로그 30일·이력 500건(설정). 앱 시작 시와 24시간마다 `history.prune()` + `pruneRunLogs`(실행 로그 이름 `run-…-<8hex>-<8hex>.log`만, running 이력의 로그는 남김). 이력 비우기는 확인 창, "로그 파일도 삭제" 기본 해제, 실행 중이면 BUSY |
+| D9/D10 자동 실행 기록·알림 | gate 실패 blocked + 알림, noop은 lastRun만 | blocked·failed·partial·canceled·success는 이력 + 알림. **noop은 이력·알림 없이** `lastRun{runId:null, noop}`·`lastAutoRunAt`만. 알림: 창이 보이고 포커스면 `app:notify` → 토스트, 아니면 Windows `Notification`(지원 시). 문구는 작업 이름·수만(경로 없음). 연속 실패 3회 시 경고 1회(메모리 카운터, 자동 실행은 끄지 않음). 수동 실행은 알림 없이 기존 토스트 |
+| 스케줄러 (§10) | 20초 tick, busy면 30초 후 재시도 | 20초 tick(겹침 방지·자기 실행 중이면 무시), 일시정지면 무시, 지난 예약 중 가장 이른 1건. BUSY면 예약 유지·다음 tick 재시도(로그 1회). 시작하자마자 `nextRunAt = 시작 + 주기` 선기록, 끝나면 `끝난 시각 + 주기`·`lastAutoRunAt`. 앱 시작·절전 재개(`powerMonitor resume`)는 지난 예약을 now + 60초, 일시정지 해제는 now + 30초. 편집: 켬 → now + 주기, 주기 변경 → now + 새 주기, 끔 → null, 복제(켜짐) → now + 주기(`job-store`가 `nextRunAfterEdit`로 계산, rev 규칙 유지) |
+| IPC (Phase 8) | - | `history:list{jobId?,limit?}`·`history:get{runId}`·`history:readLog{runId, tailBytes?(기본 256KB, 최대 1MB)}`·`history:clear{deleteLogs}`, `scheduler:getState`·`scheduler:setPaused{paused}`, 이벤트 `scheduler:state`·`app:notify{level,message}`. 모두 strict. `settings:update`에 `scheduler` 키가 오면 VALIDATION(일시정지는 `setPaused`로만). readLog는 이력 레코드의 파일 이름으로만 찾고 이름 정규식·basename·logs 폴더 안을 확인 |
+| 화면 (Phase 8) | 이력·설정 화면 | 작업 화면 "이력" 탭(시작·종류(수동/자동/미리보기)·모드·결과·걸린 시간·복사/삭제/크기/오류, 종류·결과 필터) → 상세(ZBCModal: 계획·사전 확인·통계·오류·로그 끝부분, 로그 폴더 열기). 상단 막대: 다음 자동 실행·일시정지 토글. 설정: 자동 실행 삭제 조건 안내, 이력 비우기, 창 닫기(트레이)·로그인 시 시작. 작업 편집기 자동 실행 영역에 삭제 조건 안내·마지막 자동 실행. 자동 실행 진행 중에는 실행 탭에 "비교 중(자동 실행)" |
+| 개발 확인용 환경 변수 | - | 개발 실행(`!app.isPackaged`)에서만: `RCLONEGUI_DEV_TICK_MS`(스케줄러 tick, 500ms 이상), `RCLONEGUI_DEV_QUIT_CHOICE`(`quit`·`keep`, 종료 확인 창 자동 응답). drive-app이 쓴다 |
 
 **Phase 7 전에 반영할 실측**: 내용이 같고 수정시간만 다른 파일은 diff에서 `modified(mtime)`이지만 rclone은
 복사하지 않고 시간만 갱신한다(dry-run `skipped: update modification time`). §8.4의

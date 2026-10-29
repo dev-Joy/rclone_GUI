@@ -76,6 +76,17 @@ describe("clsSettingsStore", () => {
         expect(loaded.scheduler).toEqual({ paused: false });
     });
 
+    it("onChange: 저장한 뒤 새 값과 이전 값으로 부른다(실패하면 부르지 않음)", async () => {
+        const calls: Array<[boolean, boolean]> = [];
+        const s = new clsSettingsStore(dir, undefined, (next, prev) =>
+            calls.push([next.ui.minimizeToTray, prev.ui.minimizeToTray]),
+        );
+        await s.load();
+        await s.update({ ui: { minimizeToTray: false } });
+        await expect(s.update({ logs: { retentionDays: 0 } })).rejects.toBeTruthy();
+        expect(calls).toEqual([[false, true]]);
+    });
+
     it("deepMerge는 배열을 통째로 바꾸고 undefined를 무시한다", () => {
         expect(
             deepMerge({ a: [1, 2], b: { c: 1, d: 2 } }, { a: [3], b: { c: undefined, d: 5 } }),
@@ -123,7 +134,9 @@ describe("clsJobStore", () => {
 
     it("update: rev +1, updatedAt 갱신, 관리 필드는 patch로 못 바꾼다", async () => {
         const jobs = await f_Jobs();
-        const job = await jobs.create(f_Draft());
+        const job = await jobs.create(
+            f_Draft({ autoSync: { enabled: true, intervalMinutes: 5, allowDeletes: false } }),
+        );
         await jobs.setBookkeeping(job.id, { nextRunAt: "2030-01-01T00:00:00.000Z" });
         const patch = {
             name: "새 이름",
@@ -136,6 +149,37 @@ describe("clsJobStore", () => {
             nextRunAt: "2030-01-01T00:00:00.000Z",
         });
         expect(updated.createdAt).toBe(job.createdAt);
+    });
+
+    it("자동 실행 예약: 만들 때 켬 → now+주기, 켬·주기 변경 → now+주기, 끔 → null, 복제 켜짐 → now+주기", async () => {
+        const jobs = await f_Jobs();
+        const t0 = Date.now();
+        const f_Mins = (iso: string | null) =>
+            iso === null ? null : (Date.parse(iso) - t0) / 60_000;
+        const off = await jobs.create(f_Draft());
+        expect(off.autoSync.nextRunAt).toBeNull();
+        const on = await jobs.update(off.id, {
+            autoSync: { enabled: true, intervalMinutes: 30, allowDeletes: false },
+        });
+        expect(f_Mins(on.autoSync.nextRunAt)).toBeCloseTo(30, 0);
+        await jobs.setBookkeeping(on.id, { nextRunAt: "2030-01-01T00:00:00.000Z" });
+        const renamed = await jobs.update(on.id, { name: "이름만" });
+        expect(renamed.autoSync.nextRunAt).toBe("2030-01-01T00:00:00.000Z");
+        const faster = await jobs.update(on.id, {
+            autoSync: { enabled: true, intervalMinutes: 2, allowDeletes: false },
+        });
+        expect(f_Mins(faster.autoSync.nextRunAt)).toBeCloseTo(2, 0);
+        const copy = await jobs.duplicate(on.id);
+        expect(f_Mins(copy.autoSync.nextRunAt)).toBeCloseTo(2, 0);
+        expect(copy.autoSync.lastAutoRunAt).toBeNull();
+        const disabled = await jobs.update(on.id, {
+            autoSync: { enabled: false, intervalMinutes: 2, allowDeletes: false },
+        });
+        expect(disabled.autoSync.nextRunAt).toBeNull();
+        const created = await jobs.create(
+            f_Draft({ autoSync: { enabled: true, intervalMinutes: 10, allowDeletes: false } }),
+        );
+        expect(f_Mins(created.autoSync.nextRunAt)).toBeCloseTo(10, 0);
     });
 
     it("update: 알 수 없는 키·잘못된 경로·없는 id는 거부", async () => {
@@ -253,6 +297,29 @@ describe("clsHistoryStore", () => {
         await h.clear();
         expect(h.list().map((r) => r.id)).toEqual([f_Uuid(3)]);
         await expect(h.begin(f_Record(f_Uuid(3)))).rejects.toMatchObject({ code: "VALIDATION" });
+    });
+
+    it("clear는 지운 레코드의 로그 파일 이름을 돌려주고 running(과 그 로그)은 남긴다", async () => {
+        const h = new clsHistoryStore(dir, () => 500);
+        await h.load();
+        await h.begin({ ...f_Record(f_Uuid(1)), logFile: "run-a.log" });
+        await h.begin(f_Record(f_Uuid(2)));
+        await h.begin({ ...f_Record(f_Uuid(3), "running"), logFile: "run-c.log" });
+        expect(h.runningLogFiles()).toEqual(new Set(["run-c.log"]));
+        expect(await h.clear()).toEqual({ removed: 2, logFiles: ["run-a.log"] });
+        expect(h.list().map((r) => r.id)).toEqual([f_Uuid(3)]);
+    });
+
+    it("prune: 보관 수를 줄이면 지금 적용한다(running 보존)", async () => {
+        let limit = 500;
+        const h = new clsHistoryStore(dir, () => limit);
+        await h.load();
+        await h.begin(f_Record(f_Uuid(1), "running"));
+        for (let i = 2; i <= 6; i += 1) await h.begin(f_Record(f_Uuid(i)));
+        expect(await h.prune()).toBe(0);
+        limit = 2;
+        expect(await h.prune()).toBe(3);
+        expect(h.list().map((r) => r.id)).toEqual([f_Uuid(6), f_Uuid(5), f_Uuid(1)]);
     });
 });
 

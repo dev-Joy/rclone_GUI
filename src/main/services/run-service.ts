@@ -11,6 +11,11 @@
  *   먼저 돌려 계획과 맞춰 본다(checkPreflight). 다르면 blocked + PLAN_DRIFT, 취소면 canceled, rclone 오류면
  *   failed로 끝내고 실제 실행은 하지 않는다. 옵션을 끄면 --max-delete만 백스톱이다.
  * - 실제 sync에는 항상 --max-delete <계획 삭제 수>(0 포함)를 준다.
+ * - 자동 실행(startAuto, 스케줄러): 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
+ *   수동 비교 결과는 건드리지 않음) → 작업 rev 재확인 → 자동 게이트(f_CheckAutoGate: checkPlanSafety → 삭제가
+ *   있으면 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 켜짐 모두 필요 → 바꿀 것 없으면 noop) → 수동과 같은
+ *   execute/finalize. 게이트에 걸리면 아무것도 실행하지 않고 blocked 이력, noop은 이력 없이 lastRun만 남긴다.
+ * - typRealGate는 f_CheckRealGate(수동)와 f_CheckAutoGate(자동)만 만든다.
  * - buildTransferArgs는 이 파일의 spawnTransfer에서만 부른다(실제 전송의 단일 시작점, AGENTS.md 안전 규칙 2).
  * - 실제 실행은 결과와 관계없이(취소·실패·차단 포함) 비교 결과를 무효화하고 job.lastRun을 갱신한다.
  *   dry-run은 이력에만 남긴다.
@@ -51,10 +56,16 @@ import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
 import { checkPreflight, planFromCompare } from "@/shared/run-plan";
-import type { typAppErrorPayload, typRunPhase } from "@/shared/schemas/common";
+import type {
+    typAppErrorPayload,
+    typRunPhase,
+    typRunStatus,
+    typRunTrigger,
+} from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
-import type { typRunPlan, typRunRecord, typStartRunInput } from "@/shared/schemas/run";
+import type { typRunPlan, typRunRecord, typRunStats, typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
+import type { itfCompareResult } from "@/shared/types/compare";
 import {
     RUN_TAIL_LINES,
     type itfRunLogLine,
@@ -66,7 +77,7 @@ export interface itfRunServiceDeps {
     jobs: Pick<clsJobStore, "get" | "setBookkeeping">;
     settings: { get(): typSettings };
     rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
-    compare: Pick<clsCompareService, "requirePlan" | "invalidate" | "get">;
+    compare: Pick<clsCompareService, "requirePlan" | "invalidate" | "get" | "compareForAuto">;
     history: Pick<clsHistoryStore, "begin" | "patch">;
     activity: clsActivityLock;
     activeRun: Pick<clsActiveRunStore, "write" | "clear">;
@@ -84,7 +95,7 @@ export interface itfRunServiceDeps {
 
 declare const REAL_GATE: unique symbol;
 
-/** 실제 실행 허가. f_CheckRealGate만 만든다 */
+/** 실제 실행 허가. f_CheckRealGate(수동)·f_CheckAutoGate(자동)만 만든다 */
 type typRealGate = {
     readonly [REAL_GATE]: true;
     readonly plan: typRunPlan;
@@ -117,7 +128,34 @@ interface itfActiveRun {
     /** 로그 파일 머리말을 썼는지(둘째 단계부터는 구획 머리말만) */
     logStarted: boolean;
     done: Promise<void>;
+    /** 마무리한 최종 이력 레코드 */
+    final: typRunRecord | null;
 }
+
+/** 자동 실행 결과(스케줄러가 예약·알림에 쓴다). recorded가 false면 이력에 없다(noop 등) */
+export interface itfAutoOutcome {
+    runId: string;
+    jobId: string;
+    jobName: string;
+    status: typRunStatus;
+    error: typAppErrorPayload | null;
+    plan: typRunPlan | null;
+    stats: typRunStats | null;
+    finishedAt: string;
+    recorded: boolean;
+}
+
+/** 자동 실행을 실제 전송 없이 끝내는 이유 */
+interface itfAutoStop {
+    status: "blocked" | "noop" | "failed" | "canceled";
+    error: typAppErrorPayload | null;
+    plan: typRunPlan | null;
+}
+
+const AUTO_CANCELED: typAppErrorPayload = {
+    code: "CANCELED",
+    message: "자동 실행을 비교 중에 취소했습니다. 대상은 바뀌지 않았습니다.",
+};
 
 /**
  * 실제 실행 게이트(Phase 7 D1). 통과하면 typRealGate를 돌려주고, 아니면 clsAppError를 던진다(락 전, 이력 없음).
@@ -154,6 +192,77 @@ function f_CheckRealGate(
         maxDelete: f_MaxDelete(job, expected),
         preflight: needsPreflight(plan, job),
     } as typRealGate;
+}
+
+/**
+ * 자동 실행 게이트(Phase 8 D3/D4, MVP_SPEC §9.3). 통과하면 typRealGate, 아니면 멈출 이유.
+ * 순서: checkPlanSafety(S5·S6·S7·S15) → 삭제가 있으면 allowDeletes 켜짐·autoMaxDeletes(0=금지) 이하·
+ * 대량 아님·사전 확인 켜짐을 모두 만족해야 한다(일부만 실행하지 않음) → 바꿀 것이 없으면 noop.
+ * 문구에는 수만 쓴다(경로 없음: 알림에도 쓴다).
+ */
+function f_CheckAutoGate(
+    job: typJob,
+    result: itfCompareResult,
+    safety: typSettings["safety"],
+): typRealGate | itfAutoStop {
+    const plan = planFromCompare(result.summary, job.mode);
+    const f_Block = (code: typAppErrorPayload["code"], message: string): itfAutoStop => ({
+        status: "blocked",
+        error: { code, message },
+        plan,
+    });
+    const block = checkPlanSafety(plan, job);
+    if (block) return f_Block(block.code, block.message);
+    const d = plan.deleteFiles;
+    if (d > 0) {
+        if (!job.autoSync.allowDeletes) {
+            return f_Block(
+                "SAFETY_BLOCKED",
+                `대상에서 ${d}개를 지워야 하지만 이 작업은 자동 실행 때 삭제를 허용하지 않아 실행하지 않았습니다.`,
+            );
+        }
+        if (safety.autoMaxDeletes === 0) {
+            return f_Block(
+                "SAFETY_BLOCKED",
+                `설정의 ‘자동 실행 최대 삭제 수’가 0이라 삭제(${d}개)가 필요한 자동 실행은 하지 않았습니다.`,
+            );
+        }
+        if (d > safety.autoMaxDeletes) {
+            return f_Block(
+                "SAFETY_BLOCKED",
+                `삭제 ${d}개가 설정의 ‘자동 실행 최대 삭제 수’(${safety.autoMaxDeletes}개)를 넘어 실행하지 않았습니다.`,
+            );
+        }
+        if (isLargeDelete(plan, safety)) {
+            return f_Block(
+                "SAFETY_BLOCKED",
+                `대상 파일 ${plan.destFiles}개 중 ${d}개를 지우는 대량 삭제라 자동으로 실행하지 않았습니다. 직접 비교한 뒤 실행하세요.`,
+            );
+        }
+        if (!needsPreflight(plan, job)) {
+            return f_Block(
+                "SAFETY_BLOCKED",
+                `실행 직전 사전 확인이 꺼져 있어 삭제(${d}개)가 필요한 자동 실행은 하지 않았습니다.`,
+            );
+        }
+    }
+    if (plan.createFiles + plan.updateFiles + d === 0) return { status: "noop", error: null, plan };
+    return {
+        plan,
+        maxDelete: f_MaxDelete(job, d),
+        preflight: needsPreflight(plan, job),
+    } as typRealGate;
+}
+
+/** 자동 실행이 전송 전에 끝난 이유(문맥 해석·비교 실패, 취소) */
+function f_AutoFailure(e: unknown, canceled: boolean): itfAutoStop {
+    if (canceled || (e instanceof clsAppError && e.code === "CANCELED")) {
+        return { status: "canceled", error: AUTO_CANCELED, plan: null };
+    }
+    if (e instanceof clsAppError && e.code === "PLAN_STALE") {
+        return { status: "blocked", error: { code: e.code, message: e.message }, plan: null };
+    }
+    return { status: "failed", error: f_StartFailure(e), plan: null };
 }
 
 /** 실제 sync만 --max-delete(계획 삭제 수, 0 포함)를 쓴다. copy는 null */
@@ -205,75 +314,49 @@ export class clsRunService {
 
         const runId = this.deps.newId();
         const startedAtDate = this.deps.now();
-        const startedAt = startedAtDate.toISOString();
         const release = this.deps.activity.acquire(
-            { kind: "run", jobId: job.id, runId, startedAt },
+            { kind: "run", jobId: job.id, runId, startedAt: startedAtDate.toISOString() },
             (cur) => busyMessageFor(cur, this.deps.jobs),
         );
-        const logFile = new clsRunLogFile(
-            this.deps.logsDir,
-            runLogFileName(startedAtDate, job.id, runId),
-        );
-        const record: typRunRecord = {
-            id: runId,
-            jobId: job.id,
-            jobName: job.name,
-            mode: job.mode,
+        const active = this.createActive(job, runId, startedAtDate, {
             dryRun: gate === null,
             trigger: "manual",
-            status: "running",
             phase: "validating",
-            startedAt,
-            finishedAt: null,
-            durationMs: null,
             plan: gate ? gate.plan : this.dryRunPlan(job),
-            preflight: null,
-            stats: null,
-            exitCode: null,
-            pid: null,
-            error: null,
-            logFile: logFile.fileName,
-        };
-        const active: itfActiveRun = {
-            snapshot: {
-                runId,
-                jobId: job.id,
-                jobName: job.name,
-                mode: job.mode,
-                dryRun: gate === null,
-                trigger: "manual",
-                status: "running",
-                phase: "validating",
-                startedAt,
-                stats: null,
-                logFile: logFile.fileName,
-                tail: [],
-                dryRunSummary: null,
-                cancelRequested: false,
-            },
-            record,
-            controller: new AbortController(),
-            pid: null,
-            errorLines: [],
-            collector: gate === null ? createDryRunCollector() : null,
-            logFile,
-            logStarted: false,
-            done: Promise.resolve(),
-        };
+        });
         this.active = active;
-        try {
-            await this.deps.history.begin(record);
-        } catch (e) {
-            if (this.active === active) this.active = null;
-            release();
-            throw e;
-        }
-        this.deps.logger.info(
-            `실행 시작: run=${runId} job=${job.id} mode=${job.mode} dryRun=${record.dryRun}`,
-        );
-        this.safeEmit({ type: "started", snapshot: this.snapshotOf(active) });
+        await this.beginRecord(active, release, true);
         active.done = this.execute(ctx, gate, active, release);
         return { runId };
+    }
+
+    /**
+     * 자동 실행(스케줄러, trigger "scheduler"). 전역 락은 첫 await 전에 동기로 잡는다
+     * (차 있으면 BUSY를 던지고 이력·예약은 바꾸지 않는다). 같은 runId 안에서 비교 → 자동 게이트 → 실행.
+     * done은 예외 없이 결과를 돌려준다(blocked·failed·canceled·success는 이력, noop은 lastRun만).
+     */
+    async startAuto(jobId: string): Promise<{ runId: string; done: Promise<itfAutoOutcome> }> {
+        const job = this.deps.jobs.get(jobId);
+        const runId = this.deps.newId();
+        const startedAtDate = this.deps.now();
+        const release = this.deps.activity.acquire(
+            { kind: "run", jobId: job.id, runId, startedAt: startedAtDate.toISOString() },
+            (cur) => busyMessageFor(cur, this.deps.jobs),
+        );
+        const active = this.createActive(job, runId, startedAtDate, {
+            dryRun: false,
+            trigger: "scheduler",
+            phase: "comparing",
+            plan: null,
+        });
+        this.active = active;
+        this.deps.logger.info(`자동 실행 시작: run=${runId} job=${job.id} mode=${job.mode}`);
+        this.safeEmit({ type: "started", snapshot: this.snapshotOf(active) });
+        const done = this.runAuto(job, active, release).catch((e: unknown) =>
+            this.finishEarly(active, f_AutoFailure(e, false), release, false),
+        );
+        active.done = done.then(() => undefined);
+        return { runId, done };
     }
 
     /** 진행 중인 실행을 취소한다. 없거나 다른 실행이거나 이미 요청했으면 아무것도 하지 않는다 */
@@ -307,6 +390,225 @@ export class clsRunService {
         } finally {
             if (timer) clearTimeout(timer);
         }
+    }
+
+    /** 실행 상태(스냅샷·이력 레코드)를 만든다. 로그 파일은 첫 rclone 실행 때 연다 */
+    private createActive(
+        job: typJob,
+        runId: string,
+        startedAtDate: Date,
+        o: { dryRun: boolean; trigger: typRunTrigger; phase: typRunPhase; plan: typRunPlan | null },
+    ): itfActiveRun {
+        const startedAt = startedAtDate.toISOString();
+        const logFile = new clsRunLogFile(
+            this.deps.logsDir,
+            runLogFileName(startedAtDate, job.id, runId),
+        );
+        const record: typRunRecord = {
+            id: runId,
+            jobId: job.id,
+            jobName: job.name,
+            mode: job.mode,
+            dryRun: o.dryRun,
+            trigger: o.trigger,
+            status: "running",
+            phase: o.phase,
+            startedAt,
+            finishedAt: null,
+            durationMs: null,
+            plan: o.plan,
+            preflight: null,
+            stats: null,
+            exitCode: null,
+            pid: null,
+            error: null,
+            logFile: logFile.fileName,
+        };
+        return {
+            snapshot: {
+                runId,
+                jobId: job.id,
+                jobName: job.name,
+                mode: job.mode,
+                dryRun: o.dryRun,
+                trigger: o.trigger,
+                status: "running",
+                phase: o.phase,
+                startedAt,
+                stats: null,
+                logFile: logFile.fileName,
+                tail: [],
+                dryRunSummary: null,
+                cancelRequested: false,
+            },
+            record,
+            controller: new AbortController(),
+            pid: null,
+            errorLines: [],
+            collector: o.dryRun ? createDryRunCollector() : null,
+            logFile,
+            logStarted: false,
+            done: Promise.resolve(),
+            final: null,
+        };
+    }
+
+    /** running 이력을 남기고 알린다. 기록에 실패하면 락을 풀고 던진다(수동·자동 공통) */
+    private async beginRecord(
+        active: itfActiveRun,
+        release: () => void,
+        emitStarted: boolean,
+    ): Promise<void> {
+        try {
+            await this.deps.history.begin(active.record);
+        } catch (e) {
+            if (this.active === active) this.active = null;
+            release();
+            throw e;
+        }
+        const { runId, jobId, mode } = active.snapshot;
+        this.deps.logger.info(
+            `실행 시작: run=${runId} job=${jobId} mode=${mode} dryRun=${active.record.dryRun} trigger=${active.record.trigger}`,
+        );
+        if (emitStarted) this.safeEmit({ type: "started", snapshot: this.snapshotOf(active) });
+    }
+
+    /** 자동 실행 본문: 문맥 → 비교 → rev 재확인 → 자동 게이트 → (통과) 실행 */
+    private async runAuto(
+        job: typJob,
+        active: itfActiveRun,
+        release: () => void,
+    ): Promise<itfAutoOutcome> {
+        let ctx: itfJobContext;
+        let result: itfCompareResult;
+        try {
+            ctx = await resolveJobContext(job, this.deps);
+            if (active.snapshot.cancelRequested) throw new clsAppError("CANCELED");
+            result = await this.deps.compare.compareForAuto(job.id, active.controller.signal);
+        } catch (e) {
+            return this.finishEarly(
+                active,
+                f_AutoFailure(e, active.snapshot.cancelRequested),
+                release,
+                true,
+            );
+        }
+        // 비교하는 동안 작업이 바뀌었거나 지워졌으면 실행하지 않는다
+        let cur: typJob | null = null;
+        try {
+            cur = this.deps.jobs.get(job.id);
+        } catch {
+            cur = null;
+        }
+        if (!cur || cur.rev !== result.jobRev) {
+            return this.finishEarly(
+                active,
+                {
+                    status: "blocked",
+                    error: {
+                        code: "PLAN_STALE",
+                        message: "비교하는 동안 작업 설정이 바뀌어 실행하지 않았습니다.",
+                    },
+                    plan: null,
+                },
+                release,
+                true,
+            );
+        }
+        const gate = f_CheckAutoGate(cur, result, this.deps.settings.get().safety);
+        if ("status" in gate)
+            return this.finishEarly(active, gate, release, gate.status !== "noop");
+        if (active.snapshot.cancelRequested) {
+            return this.finishEarly(
+                active,
+                { status: "canceled", error: AUTO_CANCELED, plan: gate.plan },
+                release,
+                true,
+            );
+        }
+        active.record.plan = gate.plan;
+        try {
+            await this.beginRecord(active, release, false);
+        } catch (e) {
+            return this.finishEarly(
+                active,
+                { status: "failed", error: f_StartFailure(e), plan: gate.plan },
+                release,
+                false,
+            );
+        }
+        await this.execute(ctx, gate, active, release);
+        const rec = active.final ?? active.record;
+        return {
+            runId: rec.id,
+            jobId: rec.jobId,
+            jobName: rec.jobName,
+            status: rec.status,
+            error: rec.error,
+            plan: rec.plan,
+            stats: rec.stats,
+            finishedAt: rec.finishedAt ?? this.deps.now().toISOString(),
+            recorded: true,
+        };
+    }
+
+    /**
+     * rclone 전송 없이 끝난 자동 실행 마무리. recorded면 이력 1건(최종 상태)을 남긴다.
+     * lastRun은 항상 갱신한다(이력이 없으면 runId null). 비교 결과·active-run은 건드리지 않는다.
+     */
+    private async finishEarly(
+        active: itfActiveRun,
+        stop: itfAutoStop,
+        release: () => void,
+        recorded: boolean,
+    ): Promise<itfAutoOutcome> {
+        const { runId, jobId, jobName } = active.snapshot;
+        const finished = this.deps.now();
+        const finishedAt = finished.toISOString();
+        const record: typRunRecord = {
+            ...active.record,
+            status: stop.status,
+            phase: "finalizing",
+            finishedAt,
+            durationMs: Math.max(0, finished.getTime() - Date.parse(active.record.startedAt)),
+            plan: stop.plan,
+            error: stop.error,
+            logFile: null,
+        };
+        let saved = recorded;
+        try {
+            if (recorded) {
+                await this.deps.history.begin(record).catch((e: unknown) => {
+                    saved = false;
+                    this.warn(`이력 저장 실패: run=${runId}`, e);
+                });
+            }
+            await this.deps.jobs
+                .setBookkeeping(jobId, {
+                    lastRun: { runId: saved ? runId : null, at: finishedAt, status: stop.status },
+                })
+                .catch((e: unknown) => this.warn(`작업 기록 실패: run=${runId}`, e));
+            this.deps.logger.info(
+                `자동 실행 종료: run=${runId} job=${jobId} status=${stop.status} code=${stop.error?.code ?? "-"} recorded=${saved}`,
+            );
+        } finally {
+            if (this.active === active) this.active = null;
+            release();
+            active.snapshot.status = stop.status;
+            active.final = record;
+            this.safeEmit({ type: "finished", runId, record, dryRunSummary: null });
+        }
+        return {
+            runId,
+            jobId,
+            jobName,
+            status: stop.status,
+            error: stop.error,
+            plan: stop.plan,
+            stats: null,
+            finishedAt,
+            recorded: saved,
+        };
     }
 
     /** dry-run 이력의 계획: 유효한 비교 결과가 있으면 그것, 없으면 null */
@@ -608,6 +910,7 @@ export class clsRunService {
         } finally {
             if (this.active === active) this.active = null;
             release();
+            active.final = record;
             this.safeEmit({
                 type: "finished",
                 runId,

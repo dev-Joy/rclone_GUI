@@ -32,7 +32,7 @@ import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { createDefaultSettings } from "@/shared/defaults";
 import type { typRunMode } from "@/shared/schemas/common";
-import type { typJob, typJobRunOptions } from "@/shared/schemas/job";
+import type { typJob, typJobDraft, typJobRunOptions } from "@/shared/schemas/job";
 import type { typRunRecord } from "@/shared/schemas/run";
 import type { itfDryRunSummary, typRunEvent } from "@/shared/types/run";
 
@@ -89,6 +89,8 @@ export interface itfEnvOptions {
     destination: string;
     mode: typRunMode;
     options?: Partial<typJobRunOptions>;
+    /** 자동 실행 설정(기본: 꺼짐) */
+    autoSync?: Partial<typJobDraft["autoSync"]>;
     /** runRclone을 감싸 출력·취소 시점을 조작할 때 */
     wrapRun?: (run: typRunRclone, runs: () => clsRunService) => typRunRclone;
 }
@@ -113,7 +115,7 @@ export async function makeEnv(o: itfEnvOptions) {
         excludes: [...excludes, "*.tmp"],
         options: { ...defaults, ...o.options },
         configPathOverride: null,
-        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
+        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, ...o.autoSync },
     });
     const history = new clsHistoryStore(userData, () => 500);
     await history.load();
@@ -165,6 +167,8 @@ export async function makeEnv(o: itfEnvOptions) {
     };
 
     return {
+        /** 테스트가 고칠 수 있는 설정(안전 임계값 등) */
+        settings,
         userData,
         logsDir,
         job,

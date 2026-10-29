@@ -614,3 +614,47 @@ describe("clsCompareService 캐시·requirePlan", () => {
         expect(h.svc.get(JOB_ID)).toBeNull();
     });
 });
+
+describe("clsCompareService.compareForAuto (자동 실행)", () => {
+    it("락·캐시·진행 이벤트 없이 결과만, 수동 비교 결과(planToken)는 그대로", async () => {
+        const h = f_Harness();
+        const manual = await h.svc.run(JOB_ID);
+        const eventsBefore = h.events.length;
+        const auto = await h.svc.compareForAuto(JOB_ID, new AbortController().signal);
+        expect(auto.summary).toEqual(manual.summary);
+        expect(h.events).toHaveLength(eventsBefore);
+        expect(h.svc.get(JOB_ID)).toBe(manual);
+        expect(h.deps.activity.current()).toBeNull();
+        expect(h.svc.getActive()).toBeNull();
+    });
+
+    it("수동 결과가 없으면 자동 비교 뒤에도 없다(캐시에 넣지 않음)", async () => {
+        const h = f_Harness();
+        await h.svc.compareForAuto(JOB_ID, new AbortController().signal);
+        expect(h.svc.get(JOB_ID)).toBeNull();
+    });
+
+    it("signal abort → lsjson 종료, CANCELED. 실패해도 수동 결과는 지우지 않는다", async () => {
+        const h = f_Harness({ script: null });
+        const first = h.svc.run(JOB_ID);
+        await h.waitProcs(2);
+        for (const p of h.procs) p.finish(f_Lines([]));
+        const manual = await first;
+        const ac = new AbortController();
+        const pending = h.svc.compareForAuto(JOB_ID, ac.signal);
+        await h.waitProcs(4);
+        ac.abort();
+        const e = await f_Err(pending);
+        expect(e.code).toBe("CANCELED");
+        expect(h.procs.slice(2).every((p) => p.aborted)).toBe(true);
+        expect(h.svc.get(JOB_ID)).toBe(manual);
+    });
+
+    it("이미 abort된 signal이면 rclone을 실행하지 않고 CANCELED", async () => {
+        const h = f_Harness();
+        const ac = new AbortController();
+        ac.abort();
+        const e = await f_Err(h.svc.compareForAuto(JOB_ID, ac.signal));
+        expect(e.code).toBe("CANCELED");
+    });
+});

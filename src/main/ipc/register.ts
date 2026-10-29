@@ -12,8 +12,10 @@ import { clsAppError } from "@/main/lib/app-error";
 import { registerCompareIpc, type itfCompareIpcDeps } from "@/main/ipc/compare";
 import { registerDialogIpc, type itfDialogIpcDeps } from "@/main/ipc/dialog";
 import { handle } from "@/main/ipc/handle";
+import { registerHistoryIpc, type itfHistoryIpcDeps } from "@/main/ipc/history";
 import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
 import { registerRunIpc, type itfRunIpcDeps } from "@/main/ipc/run";
+import { registerSchedulerIpc, type itfSchedulerIpcDeps } from "@/main/ipc/scheduler";
 import { registerSystemIpc } from "@/main/ipc/system";
 import { registerWslIpc, type itfWslIpcDeps } from "@/main/ipc/wsl";
 import type { clsJobStore } from "@/main/store/job-store";
@@ -23,7 +25,14 @@ import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
 export interface itfIpcServices
-    extends itfRcloneIpcDeps, itfWslIpcDeps, itfDialogIpcDeps, itfCompareIpcDeps, itfRunIpcDeps {
+    extends
+        itfRcloneIpcDeps,
+        itfWslIpcDeps,
+        itfDialogIpcDeps,
+        itfCompareIpcDeps,
+        itfRunIpcDeps,
+        itfHistoryIpcDeps,
+        itfSchedulerIpcDeps {
     settings: clsSettingsStore;
     jobs: clsJobStore;
     paths: { userData: string; logs: string };
@@ -48,6 +57,7 @@ export function registerIpc(s: itfIpcServices): void {
         platform: process.platform,
         userDataPath: s.paths.userData,
         logsPath: s.paths.logs,
+        isPackaged: app.isPackaged,
     }));
     handle(s, IPC_CHANNELS.appGetNotices, () => s.notices());
     handle(s, IPC_CHANNELS.appOpenLogsFolder, async () => {
@@ -56,7 +66,21 @@ export function registerIpc(s: itfIpcServices): void {
     });
 
     handle(s, IPC_CHANNELS.settingsGet, () => s.settings.get());
-    handle(s, IPC_CHANNELS.settingsUpdate, (patch) => s.settings.update(patch), zSettingsPatch);
+    handle(
+        s,
+        IPC_CHANNELS.settingsUpdate,
+        (patch) => {
+            // 일시정지는 scheduler:setPaused로만 바꾼다(해제할 때 지난 예약을 다시 정해야 한다)
+            if (patch.scheduler !== undefined) {
+                throw new clsAppError(
+                    "VALIDATION",
+                    "자동 실행 일시정지는 설정 저장으로 바꿀 수 없습니다.",
+                );
+            }
+            return s.settings.update(patch);
+        },
+        zSettingsPatch,
+    );
 
     handle(s, IPC_CHANNELS.jobsList, () => s.jobs.list());
     handle(s, IPC_CHANNELS.jobsCreate, (draft) => s.jobs.create(draft), zJobCreateInput);
@@ -82,6 +106,8 @@ export function registerIpc(s: itfIpcServices): void {
 
     registerCompareIpc(s);
     registerRunIpc(s);
+    registerHistoryIpc(s);
+    registerSchedulerIpc(s);
     registerRcloneIpc(s);
     registerWslIpc(s);
     registerDialogIpc(s);

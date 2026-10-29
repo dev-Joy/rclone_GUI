@@ -90,6 +90,16 @@
 - 테스트: 단위 run-store recompareDrift 4건, drive-app "다시 비교" 시나리오(다른 작업 고친 채 → 변경 버리기 확인 → 막힌 작업·비교 탭) + 종료 시나리오 4건 + 3회차 실행
 - 검증: check(unit 607), format:check, test:int 31(+1 skip), build, drive-app 빌드본 77 통과
 
+[TASK_010] : (2026-10-29) INT-001 Phase 8 — 스케줄러, 이력/로그 UI, 트레이/테마/로그인 (관련 Intent: INT-001, T-10·T-11·T-13·T-14 완료)
+- 결정(사용자 승인 D1~D10): 실제 전송은 spawnTransfer 한 곳(수동 = planToken+확인한 삭제 수, 자동 = 같은 실행 안 새 비교 + 자동 조건), 창 X → 트레이(세션당 1회 안내), 자동 삭제 엄격(allowDeletes·autoMaxDeletes(0=금지)·대량 아님·사전 확인, 하나라도 어기면 blocked 이력+알림), 로그인 시 --hidden(설치본만), 실행 중 종료 확인 창·10초 후 재질문·session-end 무확인 취소, 단일 인스턴스 show, 로그 30일·이력 500건 정리(시작·24시간), noop은 이력·알림 없이 lastRun만
+- shared: `schedule.ts`(nextRunAfterEdit·reconcileNextRun·rescheduleOnUnpause·pickDue·nextAutoRun·nextAfterFinish), `schemas/{history,scheduler}.ts`(strict), `types/{history,scheduler}.ts`, ipc-contract(history·scheduler 채널, scheduler:state·app:notify 이벤트, appInfo.isPackaged)
+- main: run-service `startAuto`(락 동기 획득 → comparing → compareForAuto → rev 재확인 → `f_CheckAutoGate` → 수동과 같은 execute/finalize, `finishEarly`), start는 createActive·beginRecord로 공통화(동작 불변), compare-service `compareForAuto`(락·캐시·이벤트 없음), `scheduler.ts`(tick·선기록·BUSY 유지·일시정지·onResume·알림·연속 실패 3회), `log-retention.ts`(이름 정규식·경로 탈출 방지·보관 정리·끝부분 읽기), `tray.ts`+`assets/tray.png`(직접 만듦), window hidden, index.ts(종료 흐름 f_RequestQuit·session-end·트레이 숨김·nativeTheme·로그인 항목·powerMonitor·보관 정리), ipc history·scheduler, settings:update의 scheduler 키 거부, history-store prune/clear(로그 이름 반환)/runningLogFiles, settings-store onChange, job-store nextRunAfterEdit
+- 화면: HistoryView(종류·결과 필터)·HistoryDetail·ClearHistoryModal, stores history·scheduler, lib/history-view, TopBar 다음 자동 실행·일시정지 토글, JobWorkspace 이력 탭, SettingsPage(자동 삭제 조건 안내·이력 비우기·트레이·로그인 시작), JobEditor 자동 실행 안내, run-store 자동 실행 토스트 생략(app:notify → 토스트), RunView "비교 중(자동 실행)"
+- 테스트: 단위 schedule·scheduler·log-retention·history-view·renderer history/scheduler-store + run-service 자동 실행 18건·compareForAuto 4건·stores(예약·prune·clear·onChange)·schemas·settings-form·run-store, 통합 `auto-run`(4)·`history-log`(1), drive-app 94항목(이력 탭·상세·비우기, 설정 토글, 일시정지·재시작 유지, 1분 주기 자동 실행 copy·blocked, 트레이 숨김·second-instance 표시·종료 확인 뒤 취소 종료, 재시작 후 예약 유지·중복 0, --hidden 미표시)
+- 문서: AGENTS.md 안전 규칙 2, CHANGELOG, MVP_SPEC 구현 반영(Phase 8 파일·D1~D10·스케줄러·IPC·화면·개발 환경 변수), intent T-10·T-11·T-13·T-14 체크, INDEX 13/15. rclone-notes는 새로 안 rclone 동작이 없어 그대로
+- 검증: check(unit 678), format:check, test:int 36(+1 skip), build, drive-app 빌드본 94 통과
+- 설계와 다름: compare-service는 기존 private `execute`를 공통 core로 그대로 쓰고 `silent` 플래그로 이벤트만 막음. launch 대신 `createActive`·`beginRecord`로 공통화. 자동 실행의 비교 단계에서 종료하면 묻지 않고 취소. 개발 전용 환경 변수 `RCLONEGUI_DEV_TICK_MS`·`RCLONEGUI_DEV_QUIT_CHOICE` 추가. 화면의 `window.close()`는 페이지만 닫아 종료 흐름을 타지 않으므로 drive-app은 `taskkill`(/F 없음, WM_CLOSE)과 두 번째 실행으로 확인
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

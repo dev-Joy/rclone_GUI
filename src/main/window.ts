@@ -1,6 +1,7 @@
 /**
  * 메인 창 생성과 보안 설정.
  * contextIsolation·sandbox를 켜고 nodeIntegration·webview를 끈다. 새 창·외부 탐색은 막는다.
+ * hidden이면(로그인 시 시작 `--hidden`) 준비돼도 보이지 않고 트레이에만 있는다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -11,7 +12,12 @@ import { BrowserWindow, shell } from "electron";
 
 const DEV_URL = process.env.ELECTRON_RENDERER_URL;
 
-export function createMainWindow(): BrowserWindow {
+export interface itfMainWindowOptions {
+    /** 준비돼도 창을 보이지 않는다 */
+    hidden?: boolean;
+}
+
+export function createMainWindow(opts: itfMainWindowOptions = {}): BrowserWindow {
     const win = new BrowserWindow({
         width: 1280,
         height: 860,
@@ -30,7 +36,7 @@ export function createMainWindow(): BrowserWindow {
         },
     });
 
-    win.once("ready-to-show", () => win.show());
+    if (!opts.hidden) win.once("ready-to-show", () => win.show());
 
     win.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith("https://")) void shell.openExternal(url);
