@@ -7,6 +7,8 @@
  *   취소 후 최대 10초 대기 → 안 끝나면 다시 묻는다. 비교(자동 실행의 비교 단계 포함)만 진행 중이면 묻지 않고 취소.
  *   로그오프·PC 종료(session-end)는 묻지 않고 취소한다.
  * - `--hidden`(로그인 시 시작)이면 창을 보이지 않고 트레이로 시작한다. 로그인 항목은 설치본에서만 바꾼다.
+ * - 저장소(SQLite, INT-002 T-01)는 창을 띄우기 전에 한 번 연다(무결성 검사·복구·마이그레이션·JSON 이전·일일 백업).
+ *   will-quit에서 닫는다. 열지 못하면 오류 창을 보이고 끝낸다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -41,9 +43,11 @@ import { clsActiveRunStore, recoverActiveRun } from "@/main/services/run-recover
 import { clsRunService } from "@/main/services/run-service";
 import { clsScheduler } from "@/main/services/scheduler";
 import { clsWslService } from "@/main/services/wsl";
+import { openAppDb } from "@/main/store/app-db";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { clsSettingsStore } from "@/main/store/settings-store";
+import type { clsSqliteDb } from "@/main/store/sqlite-db";
 import { createTray, type itfAppTray } from "@/main/tray";
 import { createMainWindow, isAppUrl } from "@/main/window";
 import { IPC_EVENTS, type itfAppNotice } from "@/shared/ipc-contract";
@@ -87,6 +91,8 @@ let allowQuit = false;
 let quitPending = false;
 let trayHintShown = false;
 let retentionTimer: NodeJS.Timeout | null = null;
+/** 저장소 DB. will-quit에서 닫는다 */
+let appDb: clsSqliteDb | null = null;
 
 /** f_Start가 만든 서비스. 만들기 전에는 null */
 interface itfServices {
@@ -323,6 +329,20 @@ async function f_Retention(): Promise<void> {
     logger.info(`보관 정리: history=${records} logs=${logs}`);
 }
 
+/** 시작 실패 오류 창(E2E는 창이 테스트를 멈추므로 띄우지 않는다) */
+function f_ShowStartError(e: unknown): void {
+    if (E2E) return;
+    const message = e instanceof Error ? e.message : String(e);
+    try {
+        dialog.showErrorBox(
+            "rcloneGUI를 시작하지 못했습니다",
+            `${message}\n\n데이터 폴더: ${paths.userData}\n자세한 내용은 로그 폴더의 app.log를 확인하세요.`,
+        );
+    } catch {
+        // 오류 창도 못 띄우면 로그만 남긴다
+    }
+}
+
 function f_IsTrustedSender(event: IpcMainInvokeEvent): boolean {
     const frame = event.senderFrame;
     return (
@@ -360,14 +380,24 @@ async function f_Start(): Promise<void> {
     );
     f_ApplySecurityPolicy();
 
+    const { db } = await openAppDb({ userDataDir: paths.userData, logger, onNotice: f_AddNotice });
+    appDb = db;
+    // 늦게 끝난 이력 갱신은 닫힌 뒤 STORE_ERROR로 실패한다(다음 시작 때 markInterrupted가 정리)
+    app.on("will-quit", () => {
+        try {
+            appDb?.close();
+        } catch (e) {
+            logger.warn("저장소를 닫지 못함", e);
+        }
+        appDb = null;
+    });
+
     let scheduler: clsScheduler | null = null;
-    const settings = new clsSettingsStore(paths.userData, f_AddNotice, (s, prev) =>
-        f_ApplySettings(s, prev),
-    );
+    const settings = new clsSettingsStore(db, f_AddNotice, (s, prev) => f_ApplySettings(s, prev));
     await settings.load();
     f_ApplySettings(settings.get(), null);
     const jobs = new clsJobStore({
-        userDataDir: paths.userData,
+        db,
         caseInsensitive: () => settings.get().compare.caseInsensitivePaths,
         onNotice: f_AddNotice,
         onChange: (list) => {
@@ -376,11 +406,7 @@ async function f_Start(): Promise<void> {
         },
     });
     await jobs.load();
-    const history = new clsHistoryStore(
-        paths.userData,
-        () => settings.get().logs.historyLimit,
-        f_AddNotice,
-    );
+    const history = new clsHistoryStore(db, () => settings.get().logs.historyLimit, f_AddNotice);
     await history.load();
     // 지난번 실행 중 비정상 종료로 남은 rclone을 먼저 정리하고, 남은 running 이력을 중단됨으로 바꾼다
     const activeRun = new clsActiveRunStore(paths.userData);
@@ -521,6 +547,7 @@ if (!app.requestSingleInstanceLock()) {
         .then(f_Start)
         .catch((e: unknown) => {
             logger.error("시작 실패", e);
+            f_ShowStartError(e);
             allowQuit = true;
             app.quit();
         });

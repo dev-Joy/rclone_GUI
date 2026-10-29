@@ -175,7 +175,8 @@ export interface itfRcloneGuiApi {
         getActive(): Promise<typApiResult<itfRunSnapshot | null>>;
     };
     history: {
-        /** 실행 이력(최신순). jobId로 거르고 limit개까지 */
+        /** 실행 이력(최신순). jobId로 거르고 limit개까지
+         *  offset: 앞에서 건너뛸 개수(페이지, 기본 0) */
         list(query?: typHistoryListInput): Promise<typApiResult<typRunRecord[]>>;
         /** 없으면 null */
         get(runId: string): Promise<typApiResult<typRunRecord | null>>;

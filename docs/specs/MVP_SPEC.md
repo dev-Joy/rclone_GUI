@@ -686,17 +686,36 @@ export interface RunSnapshot {
 
 ```
 %APPDATA%\rcloneGUI\
-├─ settings.json (+ .bak)
-├─ jobs.json (+ .bak)
-├─ history.json (+ .bak)
-├─ active-run.json (+ .bak)      # 비정상 종료 복구용
+├─ rclonegui-store.sqlite (+ -wal, -shm)   # 설정·작업·실행 이력 (INT-002 T-01, SQLite WAL)
+├─ db-backups/
+│  ├─ rclonegui-store-daily-YYYYMMDD-HHmmss.sqlite    # 하루 한 번, 최근 5개
+│  └─ rclonegui-store-pre-vN-YYYYMMDD-HHmmss.sqlite   # 스키마 변경 전, 지우지 않음
+├─ settings.json.migrated, jobs.json.migrated, history.json.migrated (+ .bak.migrated)  # 이전한 예전 JSON
+├─ active-run.json (+ .bak)      # 비정상 종료 복구용 (JSON 유지)
 ├─ logs/
 │  ├─ app.log
 │  └─ run-YYYYMMDD-HHmmss-<job8>-<run8>.log
 └─ tmp/                           # 필요 시 임시 파일 (현재 MVP 미사용)
 ```
 
-**원자적 쓰기**
+**SQLite 저장소 (INT-002 T-01)**
+
+- `node:sqlite`(DatabaseSync)는 `src/main/store/sqlite-db.ts` 한 파일에서만 import한다. 쓰기 연결은
+  `journal_mode=WAL`·`synchronous=FULL`·`foreign_keys=ON`, 스키마 버전은 `PRAGMA user_version`.
+- 테이블(v1): `meta`, `settings`(id=1 한 행, data JSON), `jobs`(seq·id·name·rev·시각·data JSON),
+  `run_records`(seq·id·job_id·status·started_at·log_file·data JSON, FK 없음), 다음 단계용 `remotes`·
+  `exclude_patterns`·`schedules`(jobs ON DELETE CASCADE). 이력 최신순 = `seq DESC`, 목록은 `LIMIT/OFFSET`
+  (`history:list`의 `offset`).
+- 시작 순서(창 전 1회, `openAppDb`): 열기 → 무결성 검사 → 손상이면 db·-wal·-shm을 `.corrupt-<시각>`으로 옮기고
+  최신 정상 백업 복사(없으면 새 DB) → 스키마 마이그레이션(기존 데이터면 먼저 `pre-vN` 백업, 버전마다 한 트랜잭션,
+  더 새 버전이면 거부) → 예전 JSON 1회 이전 → daily 백업. 백업은 `VACUUM INTO`(WAL 파일 복사 금지).
+- JSON 이전: `meta.json_import`가 있으면 다시 가져오지 않는다. 읽기는 기존 JSON 저장소 동작(.bak 복구·
+  .corrupt·.unsupported) 그대로, 쓰기는 한 트랜잭션(개수 확인 후 marker). 커밋 뒤 있던 파일만 `.migrated`로 rename.
+  `active-run.json`·`*.corrupt-*`·`*.unsupported-*`·`rclonegui.db`(이 앱 파일 아님)는 건드리지 않는다.
+- 작업·설정은 메모리 캐시(커밋 성공 뒤에만 갱신), 이력은 매번 조회. 읽을 수 없는 행은 건너뛰고 알린다(지우지 않음).
+- 종료(`will-quit`)에서 DB를 닫는다. 닫은 뒤 늦은 이력 갱신은 STORE_ERROR, 다음 시작의 markInterrupted가 정리한다.
+
+**원자적 쓰기 (active-run.json, 예전 JSON 읽기용)**
 
 ```
 writeJsonAtomic(file, value):

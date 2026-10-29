@@ -7,22 +7,36 @@ import { ZodError } from "zod";
 
 // ========== Internal imports ==========
 import { redactSecrets } from "@/main/lib/logger";
+import { migrateSchema } from "@/main/store/db-schema";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore, COPY_SUFFIX, MAX_JOB_NAME } from "@/main/store/job-store";
 import { clsSettingsStore, deepMerge } from "@/main/store/settings-store";
+import { clsSqliteDb } from "@/main/store/sqlite-db";
+import type { itfAppNotice } from "@/shared/ipc-contract";
 import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
 import type { typJobDraft } from "@/shared/schemas/job";
 import type { typRunRecord } from "@/shared/schemas/run";
 
 let dir = "";
+const opened: clsSqliteDb[] = [];
 
 beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "rclonegui-stores-"));
 });
 
 afterEach(() => {
+    // Windows는 열린 DB 파일을 지울 수 없으므로 먼저 닫는다
+    for (const db of opened.splice(0)) db.close();
     rmSync(dir, { recursive: true, force: true });
 });
+
+/** 같은 임시 DB 파일을 새 연결로 연다(재시작 흉내) */
+function f_Db(): clsSqliteDb {
+    const db = clsSqliteDb.open({ file: join(dir, "store.sqlite") });
+    opened.push(db);
+    migrateSchema(db, () => undefined);
+    return db;
+}
 
 function f_Draft(over: Partial<typJobDraft> = {}): typJobDraft {
     return {
@@ -36,7 +50,7 @@ function f_Draft(over: Partial<typJobDraft> = {}): typJobDraft {
 
 async function f_Jobs(onChange?: () => void) {
     const store = new clsJobStore({
-        userDataDir: dir,
+        db: f_Db(),
         caseInsensitive: () => true,
         ...(onChange ? { onChange } : {}),
     });
@@ -46,15 +60,15 @@ async function f_Jobs(onChange?: () => void) {
 
 describe("clsSettingsStore", () => {
     it("파일이 없으면 기본값", async () => {
-        const s = new clsSettingsStore(dir);
+        const s = new clsSettingsStore(f_Db());
         expect(await s.load()).toEqual(createDefaultSettings());
     });
 
     it("patch를 병합해 저장하고 재시작 후 유지한다", async () => {
-        const s = new clsSettingsStore(dir);
+        const s = new clsSettingsStore(f_Db());
         await s.load();
         await s.update({ ui: { theme: "dark" }, defaults: { excludes: ["a/**"] } });
-        const again = new clsSettingsStore(dir);
+        const again = new clsSettingsStore(f_Db());
         const loaded = await again.load();
         expect(loaded.ui).toEqual({ theme: "dark", minimizeToTray: true, launchAtLogin: false });
         expect(loaded.defaults.excludes).toEqual(["a/**"]);
@@ -62,7 +76,7 @@ describe("clsSettingsStore", () => {
     });
 
     it("병합 결과가 범위를 벗어나면 거부하고 기존 값을 유지한다", async () => {
-        const s = new clsSettingsStore(dir);
+        const s = new clsSettingsStore(f_Db());
         await s.load();
         await expect(s.update({ logs: { historyLimit: 1 } })).rejects.toThrow(ZodError);
         expect(s.get().logs.historyLimit).toBe(500);
@@ -71,14 +85,17 @@ describe("clsSettingsStore", () => {
     it("예전 파일에 없는 새 항목은 기본값으로 채운다", async () => {
         const old = createDefaultSettings() as unknown as Record<string, unknown>;
         delete old.scheduler;
-        writeFileSync(join(dir, "settings.json"), JSON.stringify(old));
-        const loaded = await new clsSettingsStore(dir).load();
+        const db = f_Db();
+        db.run("INSERT INTO settings (id, data, updated_at) VALUES (1, $data, 'x')", {
+            data: JSON.stringify(old),
+        });
+        const loaded = await new clsSettingsStore(db).load();
         expect(loaded.scheduler).toEqual({ paused: false });
     });
 
     it("onChange: 저장한 뒤 새 값과 이전 값으로 부른다(실패하면 부르지 않음)", async () => {
         const calls: Array<[boolean, boolean]> = [];
-        const s = new clsSettingsStore(dir, undefined, (next, prev) =>
+        const s = new clsSettingsStore(f_Db(), undefined, (next, prev) =>
             calls.push([next.ui.minimizeToTray, prev.ui.minimizeToTray]),
         );
         await s.load();
@@ -266,7 +283,7 @@ function f_Uuid(n: number): string {
 
 describe("clsHistoryStore", () => {
     it("최신순 저장, limit 초과분 삭제하되 running은 남긴다", async () => {
-        const h = new clsHistoryStore(dir, () => 2);
+        const h = new clsHistoryStore(f_Db(), () => 2);
         await h.load();
         await h.begin(f_Record(f_Uuid(1), "running"));
         for (let i = 2; i <= 5; i += 1) await h.begin(f_Record(f_Uuid(i)));
@@ -274,10 +291,10 @@ describe("clsHistoryStore", () => {
     });
 
     it("앱 재시작 시 running → interrupted", async () => {
-        const h = new clsHistoryStore(dir, () => 500);
+        const h = new clsHistoryStore(f_Db(), () => 500);
         await h.load();
         await h.begin(f_Record(f_Uuid(1), "running"));
-        const again = new clsHistoryStore(dir, () => 500);
+        const again = new clsHistoryStore(f_Db(), () => 500);
         await again.load();
         const changed = await again.markInterrupted();
         expect(changed).toHaveLength(1);
@@ -286,7 +303,7 @@ describe("clsHistoryStore", () => {
     });
 
     it("patch·clear·jobId 필터", async () => {
-        const h = new clsHistoryStore(dir, () => 500);
+        const h = new clsHistoryStore(f_Db(), () => 500);
         await h.load();
         await h.begin(f_Record(f_Uuid(1), "running"));
         await h.begin(f_Record(f_Uuid(2)));
@@ -300,7 +317,7 @@ describe("clsHistoryStore", () => {
     });
 
     it("clear는 지운 레코드의 로그 파일 이름을 돌려주고 running(과 그 로그)은 남긴다", async () => {
-        const h = new clsHistoryStore(dir, () => 500);
+        const h = new clsHistoryStore(f_Db(), () => 500);
         await h.load();
         await h.begin({ ...f_Record(f_Uuid(1)), logFile: "run-a.log" });
         await h.begin(f_Record(f_Uuid(2)));
@@ -312,7 +329,7 @@ describe("clsHistoryStore", () => {
 
     it("prune: 보관 수를 줄이면 지금 적용한다(running 보존)", async () => {
         let limit = 500;
-        const h = new clsHistoryStore(dir, () => limit);
+        const h = new clsHistoryStore(f_Db(), () => limit);
         await h.load();
         await h.begin(f_Record(f_Uuid(1), "running"));
         for (let i = 2; i <= 6; i += 1) await h.begin(f_Record(f_Uuid(i)));
@@ -330,10 +347,131 @@ describe("로그 비밀값 가리기", () => {
         expect(out).not.toContain("hunter2");
     });
 
-    it("settings.json 에는 rclone.conf 내용이 들어가지 않는다 (경로만)", async () => {
-        const s = new clsSettingsStore(dir);
+    it("저장소 DB에는 rclone.conf 내용이 들어가지 않는다 (경로만)", async () => {
+        const conf = join(dir, "rclone.conf");
+        writeFileSync(conf, "[test-remote]\ntype = alias\npass = SECRET-CONF-VALUE\n");
+        const db = f_Db();
+        const s = new clsSettingsStore(db);
         await s.load();
-        await s.update({ configPath: "C:\\tmp\\rclone.conf" });
-        expect(readFileSync(join(dir, "settings.json"), "utf8")).toContain("rclone.conf");
+        await s.update({ configPath: conf });
+        const jobs = new clsJobStore({ db, caseInsensitive: () => true });
+        await jobs.load();
+        await jobs.create(f_Draft({ configPathOverride: conf }));
+        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+        const row = db.get("SELECT data FROM settings WHERE id = 1");
+        expect(String(row?.data)).toContain("rclone.conf");
+        const bytes = readFileSync(join(dir, "store.sqlite")).toString("latin1");
+        expect(bytes).toContain("rclone.conf");
+        expect(bytes).not.toContain("SECRET-CONF-VALUE");
+    });
+});
+
+describe("SQLite 저장소 동작 (INT-002 T-01)", () => {
+    it("작업: 재시작(새 연결) 후 순서·내용 유지, 수정·삭제 반영", async () => {
+        const jobs = await f_Jobs();
+        const a = await jobs.create(f_Draft({ name: "가" }));
+        const b = await jobs.create(f_Draft({ name: "나" }));
+        const c = await jobs.duplicate(a.id);
+        const a2 = await jobs.update(a.id, { name: "가2" });
+        await jobs.remove(b.id);
+        const again = await f_Jobs();
+        expect(again.list()).toEqual([a2, c]);
+    });
+
+    it("작업: 읽을 수 없는 행은 건너뛰고 알리되 지우지 않는다", async () => {
+        const db = f_Db();
+        const notices: itfAppNotice[] = [];
+        const jobs = new clsJobStore({ db, caseInsensitive: () => true });
+        await jobs.load();
+        const ok = await jobs.create(f_Draft());
+        db.run(
+            "INSERT INTO jobs (id, name, rev, created_at, updated_at, data) VALUES ('bad', 'x', 0, 'x', 'x', $data)",
+            { data: JSON.stringify({ id: "bad" }) },
+        );
+        const again = new clsJobStore({
+            db,
+            caseInsensitive: () => true,
+            onNotice: (n) => notices.push(n),
+        });
+        expect(await again.load()).toEqual([ok]);
+        expect(notices).toHaveLength(1);
+        expect(notices[0]?.message).toContain("1개");
+        expect(db.get("SELECT COUNT(*) AS n FROM jobs")).toEqual({ n: 2 });
+    });
+
+    it("작업: DB 쓰기가 실패하면 캐시와 onChange는 그대로다", async () => {
+        let changes = 0;
+        const jobs = await f_Jobs(() => {
+            changes += 1;
+        });
+        const job = await jobs.create(f_Draft());
+        opened[opened.length - 1]?.close();
+        await expect(jobs.update(job.id, { name: "바뀜" })).rejects.toMatchObject({
+            code: "STORE_ERROR",
+        });
+        expect(jobs.get(job.id).name).toBe("작업");
+        expect(changes).toBe(1);
+    });
+
+    it("설정: 저장된 값이 깨졌으면 알리고 기본값으로 시작한다", async () => {
+        const db = f_Db();
+        db.run("INSERT INTO settings (id, data, updated_at) VALUES (1, $data, 'x')", {
+            data: JSON.stringify({ logs: { historyLimit: "많이" } }),
+        });
+        const notices: itfAppNotice[] = [];
+        const s = new clsSettingsStore(db, (n) => notices.push(n));
+        expect(await s.load()).toEqual(createDefaultSettings());
+        expect(notices).toHaveLength(1);
+    });
+
+    it("이력: offset 페이지, jobId 필터, 최신순", async () => {
+        const h = new clsHistoryStore(f_Db(), () => 500);
+        await h.load();
+        for (let i = 1; i <= 5; i += 1) {
+            const rec = f_Record(f_Uuid(i));
+            await h.begin(
+                i % 2 === 0 ? { ...rec, jobId: "22222222-2222-4222-8222-222222222222" } : rec,
+            );
+        }
+        expect(h.list({ limit: 2 }).map((r) => r.id)).toEqual([f_Uuid(5), f_Uuid(4)]);
+        expect(h.list({ limit: 2, offset: 2 }).map((r) => r.id)).toEqual([f_Uuid(3), f_Uuid(2)]);
+        expect(h.list({ offset: 4 }).map((r) => r.id)).toEqual([f_Uuid(1)]);
+        expect(h.list({ limit: 2, offset: 10 })).toEqual([]);
+        expect(
+            h.list({ jobId: "22222222-2222-4222-8222-222222222222", offset: 1 }).map((r) => r.id),
+        ).toEqual([f_Uuid(2)]);
+    });
+
+    it("이력: patch는 상태 열도 갱신해 running 조회·정리에 반영한다", async () => {
+        const db = f_Db();
+        const h = new clsHistoryStore(db, () => 500);
+        await h.begin({ ...f_Record(f_Uuid(1), "running"), logFile: "run-a.log" });
+        expect(h.runningLogFiles()).toEqual(new Set(["run-a.log"]));
+        await h.patch(f_Uuid(1), { status: "success" });
+        expect(h.runningLogFiles()).toEqual(new Set());
+        expect(db.get("SELECT status FROM run_records WHERE id = $id", { id: f_Uuid(1) })).toEqual({
+            status: "success",
+        });
+        await expect(h.patch(f_Uuid(9), { status: "success" })).rejects.toMatchObject({
+            code: "NOT_FOUND",
+        });
+    });
+
+    it("이력: 읽을 수 없는 행은 목록에서 빼고 시작 때 한 번 알린다", async () => {
+        const db = f_Db();
+        const h = new clsHistoryStore(db, () => 500);
+        await h.begin(f_Record(f_Uuid(1)));
+        db.run(
+            "INSERT INTO run_records (id, job_id, status, started_at, data) VALUES ('bad', 'j', 'success', 'x', '{}')",
+        );
+        const notices: itfAppNotice[] = [];
+        const again = new clsHistoryStore(
+            db,
+            () => 500,
+            (n) => notices.push(n),
+        );
+        expect((await again.load()).map((r) => r.id)).toEqual([f_Uuid(1)]);
+        expect(again.list().map((r) => r.id)).toEqual([f_Uuid(1)]);
+        expect(notices).toHaveLength(1);
     });
 });

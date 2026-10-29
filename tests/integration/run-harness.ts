@@ -1,6 +1,7 @@
 /**
  * 실행 통합 테스트 공용 준비. 임시 폴더와 임시 rclone.conf(alias remote)만 쓰고,
  * 실제 저장소(작업·이력·active-run)와 비교·실행 서비스를 임시 userData로 만든다.
+ * 저장소 DB(SQLite)는 openAppDb로 열고, 테스트가 끝나면 닫는다(Windows는 열린 파일을 지울 수 없다).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -18,7 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { expect } from "vitest";
+import { expect, onTestFinished } from "vitest";
 
 // ========== Internal imports ==========
 import { clsRcloneEnv } from "@/main/rclone/detect";
@@ -28,6 +29,7 @@ import { clsCompareService } from "@/main/services/compare-service";
 import { clsPathService } from "@/main/services/path-service";
 import { clsActiveRunStore } from "@/main/services/run-recovery";
 import { clsRunService } from "@/main/services/run-service";
+import { openAppDb } from "@/main/store/app-db";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -103,7 +105,9 @@ export async function makeEnv(o: itfEnvOptions) {
     mkdirSync(userData, { recursive: true });
     const settings = createDefaultSettings();
     const settingsSource = { get: () => settings };
-    const jobs = new clsJobStore({ userDataDir: userData, caseInsensitive: () => true });
+    const { db } = await openAppDb({ userDataDir: userData });
+    onTestFinished(() => db.close());
+    const jobs = new clsJobStore({ db, caseInsensitive: () => true });
     await jobs.load();
     const { excludes, ...defaults } = settings.defaults;
     const job: typJob = await jobs.create({
@@ -117,7 +121,7 @@ export async function makeEnv(o: itfEnvOptions) {
         configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, ...o.autoSync },
     });
-    const history = new clsHistoryStore(userData, () => 500);
+    const history = new clsHistoryStore(db, () => 500);
     await history.load();
     const rcloneEnv = new clsRcloneEnv({
         getSettings: () => ({ rclonePath: MANUAL_BIN, configPath: o.conf }),
@@ -170,6 +174,7 @@ export async function makeEnv(o: itfEnvOptions) {
         /** 테스트가 고칠 수 있는 설정(안전 임계값 등) */
         settings,
         userData,
+        db,
         logsDir,
         job,
         jobs,

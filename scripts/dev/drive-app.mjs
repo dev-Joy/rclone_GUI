@@ -45,6 +45,7 @@ import {
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -63,6 +64,19 @@ if (PACKAGED && (DEV || !existsSync(EXE))) {
 if (LOGIN_ITEM && !PACKAGED) {
     console.error("--login-item은 --exe(설치본)와 함께만 씁니다.");
     process.exit(2);
+}
+
+/** 앱이 끝난 뒤 저장소 DB(rclonegui-store.sqlite)에서 실행 이력 하나를 읽는다. 없으면 null */
+function f_ReadRunRecord(userData, runId) {
+    const file = join(userData, "rclonegui-store.sqlite");
+    if (!runId || !existsSync(file)) return null;
+    const db = new DatabaseSync(file, { readOnly: true });
+    try {
+        const row = db.prepare("SELECT data FROM run_records WHERE id = ?").get(runId);
+        return row ? JSON.parse(String(row.data)) : null;
+    } finally {
+        db.close();
+    }
 }
 
 function f_Sleep(ms) {
@@ -1249,11 +1263,7 @@ try {
         b.ws.close();
         if (!quitOk) await f_Close(b);
         const rcloneLeft = activeRec ? await f_PidAlive(activeRec.pid) : true;
-        const quitHist = existsSync(join(userData, "history.json"))
-            ? JSON.parse(readFileSync(join(userData, "history.json"), "utf8")).records.find(
-                  (r) => r.id === activeRec?.runId,
-              )
-            : null;
+        const quitHist = f_ReadRunRecord(userData, activeRec?.runId);
         const copiedCount = readdirSync(quitDst).length;
         f_Check(
             "트레이 끈 채 실행 중 창 닫기 → 종료 확인(종료) → 실행 취소 후 앱 종료",

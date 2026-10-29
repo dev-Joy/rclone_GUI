@@ -115,13 +115,18 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
 
 | 항목 | 경로 |
 | :--- | :--- |
-| 작업·설정·이력 | `%APPDATA%\rcloneGUI\` (`jobs.json`, `settings.json`, `history.json` 등) |
+| 작업·설정·이력 | `%APPDATA%\rcloneGUI\rclonegui-store.sqlite` (+ `-wal`·`-shm`, SQLite) |
+| 저장소 백업 | `%APPDATA%\rcloneGUI\db-backups\rclonegui-store-<daily·pre-vN>-<시각>.sqlite` |
 | 실행 로그 | `%APPDATA%\rcloneGUI\logs\run-*.log` |
 | 앱 로그 | `%APPDATA%\rcloneGUI\logs\app.log` |
 | 진행 중 실행 표시 | `%APPDATA%\rcloneGUI\active-run.json` (정상 종료 시 삭제) |
 
-- 저장 파일은 임시 파일 → `fsync` → 백업(`.bak`) → 이름 바꾸기 순서로 씁니다. JSON이 손상되면
-  `.bak`으로 복구하고, 둘 다 손상되면 기본값으로 시작하며 시작 알림에 남깁니다.
+- 작업·설정·이력은 SQLite 파일 하나에 트랜잭션으로 저장합니다. 시작할 때마다 무결성을 검사하고,
+  손상되면 파일을 `rclonegui-store.sqlite.corrupt-<시각>`으로 옮긴 뒤 `db-backups\`의 가장 최근 정상 백업으로
+  복구합니다(백업이 없으면 빈 저장소). 복구한 사실과 백업 시각은 시작 알림에 남깁니다.
+- 백업은 하루 한 번(`daily`, 최근 5개 보관)과 저장 구조를 바꾸기 전(`pre-vN`, 지우지 않음)에 만듭니다.
+- 더 새 버전 앱이 만든 저장소는 열지 않고 오류 창을 띄운 뒤 끝냅니다(파일은 그대로 둡니다).
+- `rclonegui.db`라는 파일이 있다면 이 앱이 만든 파일이 아닙니다. 앱은 열지도 옮기지도 않습니다.
 - 로그에는 **파일 경로·파일명**이 포함될 수 있습니다. 공유 전에 내용을 확인하세요. 앱은 rclone.conf
   내용과 자격 증명을 로그에 남기지 않도록 경로를 가립니다.
 - 실행 로그는 기본 30일, 이력은 500건까지 보관하며 시작할 때와 하루에 한 번 정리합니다.
@@ -130,6 +135,22 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
   `종료`를 쓰세요. 실행 중에 끝내면 취소 후 최대 10초 기다리고, 끝나지 않으면 다시 확인합니다.
 - 비정상 종료로 남은 rclone은 다음 시작 때 이미지 이름과 PID를 확인해 정리합니다. 확인하지 못하면
   PID를 안내합니다.
+
+### SQLite 이전과 되돌리기
+
+예전 버전(JSON 저장)에서 올리면 처음 시작할 때 `settings.json`·`jobs.json`·`history.json`을 SQLite로 한 번
+옮기고, 원본은 `*.json.migrated`(백업은 `*.json.bak.migrated`)로 이름만 바꿔 남깁니다. 옮기다 실패하면
+아무것도 바꾸지 않고(JSON은 원래 이름 그대로) 오류 창을 띄운 뒤 끝냅니다.
+
+예전 버전으로 되돌리려면:
+
+1. 앱을 완전히 끝냅니다(트레이 메뉴의 `종료`).
+2. `%APPDATA%\rcloneGUI`에서 `X.json.migrated` → `X.json`, `X.json.bak.migrated` → `X.json.bak`으로
+   이름을 바꿉니다(`X` = `settings`·`jobs`·`history`).
+3. 예전 버전을 설치해 실행합니다. 내용은 **이전한 시점** 상태이며, 그 뒤 새 버전에서 바꾼 내용은 없습니다.
+
+다시 새 버전으로 올려도 저장소에 이전 기록이 있으므로 JSON을 다시 가져오지 않습니다(알림만 띄웁니다).
+JSON을 다시 가져오려면 앱을 끝내고 `rclonegui-store.sqlite*`(`-wal`·`-shm` 포함)를 다른 곳으로 옮긴 뒤 시작하세요.
 
 ### 데이터 초기화
 

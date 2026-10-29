@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "name": "이전 작업 가",
+      "notes": "이전 fixture",
+      "source": "C:\\tmp\\src-a",
+      "destination": "test-remote:dst-a",
+      "mode": "copy",
+      "excludes": [
+        "*.tmp"
+      ],
+      "options": {
+        "checkers": 8,
+        "transfers": 4,
+        "fastList": true,
+        "skipLinks": true,
+        "ignoreErrors": false,
+        "checkHashes": false,
+        "modtimeToleranceMs": 2000,
+        "preflightBeforeDestructive": true
+      },
+      "configPathOverride": null,
+      "autoSync": {
+        "enabled": false,
+        "intervalMinutes": 60,
+        "allowDeletes": false,
+        "nextRunAt": null,
+        "lastAutoRunAt": null
+      },
+      "id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "rev": 1,
+      "createdAt": "2026-10-01T00:00:01Z",
+      "updatedAt": "2026-10-02T00:00:01Z",
+      "lastRun": {
+        "runId": "bbbbbbbb-0000-4000-8000-000000000004",
+        "at": "2026-10-20T00:00:04.000Z",
+        "status": "success"
+      }
+    },
+    {
+      "name": "이전 작업 나",
+      "notes": "이전 fixture",
+      "source": "C:\\tmp\\src-b",
+      "destination": "C:\\tmp\\dst-b",
+      "mode": "sync",
+      "excludes": [
+        "*.tmp"
+      ],
+      "options": {
+        "checkers": 8,
+        "transfers": 4,
+        "fastList": true,
+        "skipLinks": true,
+        "ignoreErrors": false,
+        "checkHashes": false,
+        "modtimeToleranceMs": 2000,
+        "preflightBeforeDestructive": true
+      },
+      "configPathOverride": null,
+      "autoSync": {
+        "enabled": false,
+        "intervalMinutes": 60,
+        "allowDeletes": false,
+        "nextRunAt": null,
+        "lastAutoRunAt": null
+      },
+      "id": "aaaaaaaa-0000-4000-8000-000000000002",
+      "rev": 2,
+      "createdAt": "2026-10-01T00:00:02Z",
+      "updatedAt": "2026-10-02T00:00:02Z",
+      "lastRun": null
+    }
+  ]
+}

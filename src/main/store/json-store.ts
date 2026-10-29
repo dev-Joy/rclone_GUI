@@ -51,6 +51,19 @@ function f_ErrCode(e: unknown): string | undefined {
         : undefined;
 }
 
+/** rename. Windows에서 잠깐 잠긴 파일(EPERM/EBUSY/EACCES)이면 50ms 간격으로 3회까지 다시 시도한다 */
+export async function renameWithRetry(from: string, to: string): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            await rename(from, to);
+            return;
+        } catch (e) {
+            if (attempt >= RENAME_RETRY - 1 || !RETRYABLE.has(f_ErrCode(e) ?? "")) throw e;
+            await f_Sleep(RENAME_BACKOFF_MS * (attempt + 1));
+        }
+    }
+}
+
 /** tmp → fsync → .bak 복사 → rename. 실패하면 tmp를 지우고 STORE_ERROR */
 export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
     const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
@@ -66,15 +79,7 @@ export async function writeJsonAtomic(file: string, value: unknown): Promise<voi
         }
         // .bak은 best-effort. 첫 저장(본 파일 없음)이나 복사 실패여도 본 파일 쓰기는 계속한다
         await copyFile(file, `${file}.bak`).catch(() => undefined);
-        for (let attempt = 0; ; attempt += 1) {
-            try {
-                await rename(tmp, file);
-                return;
-            } catch (e) {
-                if (attempt >= RENAME_RETRY - 1 || !RETRYABLE.has(f_ErrCode(e) ?? "")) throw e;
-                await f_Sleep(RENAME_BACKOFF_MS * (attempt + 1));
-            }
-        }
+        await renameWithRetry(tmp, file);
     } catch (e) {
         await rm(tmp, { force: true }).catch(() => undefined);
         throw new clsAppError("STORE_ERROR", undefined, e instanceof Error ? e.message : String(e));

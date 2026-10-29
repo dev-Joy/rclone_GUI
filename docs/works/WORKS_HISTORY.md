@@ -119,6 +119,14 @@
 - 설계와 다름: electron-builder 출력은 계획의 `release/` 대신 기존 `dist/`; 트레이 아이콘은 루트 `resources/tray.png` 대신 `src/main/assets/tray.png`를 `?asset`으로 asar에 번들; README 명령은 계획의 npm이 아니라 실제 pnpm; `test:e2e`가 `build`를 먼저 실행
 - 오류/해결: E2E 설정 화면 제목 셀렉터가 'rclone 설정'과 겹쳐 strict mode 실패 → `exact: true`. 기존 rcloneGUI 설치로 installer-smoke가 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행해 통과
 
+[TASK_013] : (2026-10-29) INT-002 Phase 1 — T-01 SQLite 저장 계층과 JSON 이전 (관련 Intent: INT-002, T-01)
+- probe: (a) vitest(Windows Node 24.20)에서 `node:sqlite` 해석·동작, ExperimentalWarning 없음. Electron 45 런타임(Node 24.22, SQLite 3.53.4)에서도 `DatabaseSync` 동작 (b) `pnpm run build` 결과 `out/main/index.js`에 `require("node:sqlite")` 유지 → electron.vite 설정 변경 불필요 (c) `VACUUM INTO $target` 바인딩 동작, `wal_autocheckpoint=0`으로 체크포인트 전 WAL 내용도 사본에 포함(사본은 journal_mode delete, -wal 없음), 대상이 있으면 "output file already exists", 트랜잭션 안에서는 거부 → backup() 대신 VACUUM INTO 사용
+- 신규: `src/main/store/sqlite-db.ts`(clsSqliteDb, 이름 있는 파라미터, statement 캐시, BEGIN IMMEDIATE 트랜잭션·중첩/Promise 거부, clsSqliteError(sqliteCode)·isSqliteCorruption), `db-schema.ts`(MIGRATIONS v1·SCHEMA_VERSION·migrateSchema), `json-import.ts`(importLegacyJson: marker·clsJsonStore 재사용·중복 정리·단일 트랜잭션·개수 확인·.migrated rename), `app-db.ts`(openAppDb·backupAppDb, 손상 격리·백업 복구, daily 5개 회전)
+- 변경: job/settings/history store 내부를 DB로(public API 유지, 생성자 db), `json-store.ts` `renameWithRetry` export, `zHistoryListInput.offset`, `index.ts`(창 전 openAppDb·will-quit close·시작 실패 오류 창, E2E는 창 생략), `run-harness.ts`(openAppDb + onTestFinished close), `drive-app.mjs`(이력 확인을 DB 읽기 전용 조회로)
+- 테스트: 단위 sqlite-db 8·db-schema 5·json-import 10·app-db 7·stores +7(재오픈·offset·손상 행·쓰기 실패 시 캐시 유지·rclone.conf 내용 없음)·shared-boundary node:sqlite 경계 1, fixture `tests/fixtures/store-v1/`(가짜 경로), E2E `migration.spec.ts` 2
+- 검증: `pnpm run check`(unit 50파일 745), `format:check`, `test:int` 36(+1 skip, WSL), `build`(node:sqlite external 유지), `test:e2e` 5 통과. build:win·smoke:installer·drive-app은 검증 단계에서 실행
+- 설계와 다름: 손상과 다른 열기 오류(권한 등)를 구분하려고 `clsSqliteError`(sqliteCode)·`isSqliteCorruption` 추가(SQLITE_CORRUPT/NOTADB만 격리·복구). `transaction()`은 본문 예외(ZodError 등)를 감싸지 않고 그대로 다시 던진다(VALIDATION 유지). daily 백업의 "마지막 백업 시각"은 파일 mtime이 아니라 파일 이름의 시각으로 판단(now 주입 테스트). 이력 UPDATE는 job_id도 함께 쓴다
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

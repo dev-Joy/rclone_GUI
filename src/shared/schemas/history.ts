@@ -14,6 +14,8 @@ export const zHistoryListInput = z
     .object({
         jobId: z.uuid().optional(),
         limit: z.number().int().min(1).max(5000).optional(),
+        /** 앞에서 건너뛸 개수(페이지). 없으면 0 */
+        offset: z.number().int().min(0).max(1_000_000).optional(),
     })
     .strict();
 export type typHistoryListInput = z.infer<typeof zHistoryListInput>;

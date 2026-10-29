@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000004",
+      "jobId": "aaaaaaaa-0000-4000-8000-000000000001",
+      "jobName": "이전 작업 가",
+      "mode": "copy",
+      "dryRun": false,
+      "trigger": "manual",
+      "status": "success",
+      "phase": "finalizing",
+      "startedAt": "2026-10-20T00:00:04.000Z",
+      "finishedAt": "2026-10-20T00:01:04.000Z",
+      "durationMs": 60000,
+      "plan": null,
+      "preflight": null,
+      "stats": null,
+      "exitCode": 0,
+      "pid": null,
+      "error": null,
+      "logFile": "run-fixture-4.log"
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000003",
+      "jobId": "aaaaaaaa-0000-4000-8000-000000000002",
+      "jobName": "이전 작업 나",
+      "mode": "sync",
+      "dryRun": true,
+      "trigger": "manual",
+      "status": "failed",
+      "phase": "finalizing",
+      "startedAt": "2026-10-20T00:00:03.000Z",
+      "finishedAt": "2026-10-20T00:01:03.000Z",
+      "durationMs": 60000,
+      "plan": null,
+      "preflight": null,
+      "stats": null,
+      "exitCode": 1,
+      "pid": null,
+      "error": {
+        "code": "RCLONE_FAILED",
+        "message": "rclone 실패"
+      },
+      "logFile": null
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000002",
+      "jobId": "aaaaaaaa-0000-4000-8000-000000000001",
+      "jobName": "이전 작업 가",
+      "mode": "copy",
+      "dryRun": false,
+      "trigger": "manual",
+      "status": "canceled",
+      "phase": "finalizing",
+      "startedAt": "2026-10-20T00:00:02.000Z",
+      "finishedAt": "2026-10-20T00:01:02.000Z",
+      "durationMs": 60000,
+      "plan": null,
+      "preflight": null,
+      "stats": null,
+      "exitCode": 1,
+      "pid": null,
+      "error": {
+        "code": "RCLONE_FAILED",
+        "message": "rclone 실패"
+      },
+      "logFile": null
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000001",
+      "jobId": "aaaaaaaa-0000-4000-8000-000000000003",
+      "jobName": "이전 작업 다",
+      "mode": "copy",
+      "dryRun": true,
+      "trigger": "manual",
+      "status": "success",
+      "phase": "finalizing",
+      "startedAt": "2026-10-20T00:00:01.000Z",
+      "finishedAt": "2026-10-20T00:01:01.000Z",
+      "durationMs": 60000,
+      "plan": null,
+      "preflight": null,
+      "stats": null,
+      "exitCode": 0,
+      "pid": null,
+      "error": null,
+      "logFile": null
+    }
+  ]
+}
