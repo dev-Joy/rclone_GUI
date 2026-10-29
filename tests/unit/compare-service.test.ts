@@ -1,5 +1,8 @@
 // ========== External imports ==========
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
@@ -11,6 +14,7 @@ import {
 } from "@/main/rclone/process";
 import { clsActivityLock } from "@/main/services/activity-lock";
 import { clsCompareService, type itfCompareServiceDeps } from "@/main/services/compare-service";
+import { resolveEffectiveExcludes } from "@/main/services/effective-excludes";
 import { createDefaultSettings } from "@/shared/defaults";
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import type { typJob } from "@/shared/schemas/job";
@@ -23,6 +27,13 @@ const CONF = "C:\\fake\\rclone.conf";
 const SRC = "C:\\fake\\src";
 const DST = "C:\\fake\\dst";
 const JOB_ID = "00000000-0000-4000-8000-000000000001";
+const LIB_ID = "00000000-0000-4000-8000-0000000000b1";
+const EXCL_ROOT = mkdtempSync(join(tmpdir(), "rclonegui-cmp-excl-"));
+let exclSeq = 0;
+
+afterAll(() => {
+    rmSync(EXCL_ROOT, { recursive: true, force: true });
+});
 const JOB2_ID = "00000000-0000-4000-8000-000000000002";
 const T0 = Date.parse("2026-10-28T00:00:00.000Z");
 
@@ -36,6 +47,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         destination: DST,
         mode: "sync",
         excludes: [...excludes],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
@@ -133,6 +145,17 @@ function f_Harness(o: itfHarnessOptions = {}) {
             ? { lines: f_Lines([f_Item("a.txt", 1, T0), f_Item("same.txt", 2, T0)]) }
             : { lines: f_Lines([f_Item("same.txt", 2, T0), f_Item("old.txt", 3, T0)]) };
     const script = o.script === undefined ? defaultScript : o.script;
+    const library = new Map<string, string>([[LIB_ID, "lib/**"]]);
+    exclSeq += 1;
+    const excludeFileDir = join(EXCL_ROOT, String(exclSeq));
+    const excludes: itfCompareServiceDeps["excludes"] = {
+        patternsFor: (ids) =>
+            ids.map((id) => {
+                const p = library.get(id);
+                if (p === undefined) throw new clsAppError("VALIDATION", "없는 제외 패턴");
+                return p;
+            }),
+    };
 
     const run: typRunRclone = (_bin, args, opts) =>
         new Promise((resolve, reject) => {
@@ -181,6 +204,8 @@ function f_Harness(o: itfHarnessOptions = {}) {
             },
         },
         activity: new clsActivityLock(),
+        excludes,
+        excludeFileDir,
         logger: {
             info: (m) => logs.push(m),
             warn: (m) => logs.push(m),
@@ -194,6 +219,9 @@ function f_Harness(o: itfHarnessOptions = {}) {
     return {
         svc,
         deps,
+        library,
+        excludes,
+        excludeFileDir,
         jobs,
         settings,
         procs,
@@ -587,24 +615,88 @@ describe("clsCompareService 캐시·requirePlan", () => {
 
     it("requirePlan: 없음/토큰 불일치 → PLAN_REQUIRED, rev 변경·나이 초과 → PLAN_STALE", async () => {
         const h = f_Harness();
-        expect(() => h.svc.requirePlan(JOB_ID, "x")).toThrow(
+        expect(() => h.svc.requirePlan(JOB_ID, "x", "h")).toThrow(
             expect.objectContaining({ code: "PLAN_REQUIRED" }),
         );
         const r = await h.svc.run(JOB_ID);
-        expect(h.svc.requirePlan(JOB_ID, r.planToken)).toBe(r);
-        expect(() => h.svc.requirePlan(JOB_ID, "0".repeat(32))).toThrow(
+        expect(h.svc.requirePlan(JOB_ID, r.planToken, r.excludeHash)).toBe(r);
+        expect(() => h.svc.requirePlan(JOB_ID, "0".repeat(32), r.excludeHash)).toThrow(
             expect.objectContaining({ code: "PLAN_REQUIRED" }),
         );
         h.setNow(T0 + 11 * 60_000);
-        expect(() => h.svc.requirePlan(JOB_ID, r.planToken)).toThrow(
+        expect(() => h.svc.requirePlan(JOB_ID, r.planToken, r.excludeHash)).toThrow(
             expect.objectContaining({ code: "PLAN_STALE" }),
         );
         h.setNow(T0);
         h.jobs.set(JOB_ID, f_Job({ rev: 5 }));
-        expect(() => h.svc.requirePlan(JOB_ID, r.planToken)).toThrow(
+        expect(() => h.svc.requirePlan(JOB_ID, r.planToken, r.excludeHash)).toThrow(
             expect.objectContaining({ code: "PLAN_STALE" }),
         );
         expect(h.svc.get(JOB_ID)).toBeNull();
+    });
+
+    it("requirePlan: 제외 패턴 해시가 다르면 PLAN_STALE·캐시 삭제", async () => {
+        const h = f_Harness();
+        const r = await h.svc.run(JOB_ID);
+        expect(() => h.svc.requirePlan(JOB_ID, r.planToken, "0".repeat(32))).toThrow(
+            expect.objectContaining({
+                code: "PLAN_STALE",
+                message: expect.stringContaining("제외 패턴"),
+            }),
+        );
+        expect(h.svc.get(JOB_ID)).toBeNull();
+    });
+
+    it("get: 연결된 공용 패턴이 바뀌거나 지워지면 null(작업 rev는 그대로)", async () => {
+        const h = f_Harness({ jobs: [f_Job({ excludePatternIds: [LIB_ID] })] });
+        const r = await h.svc.run(JOB_ID);
+        expect(r.excludeHash).toBe(
+            resolveEffectiveExcludes(f_Job({ excludePatternIds: [LIB_ID] }), h.excludes)
+                .snapshotHash,
+        );
+        expect(h.procs[0]?.args).toContain("lib/**");
+        expect(h.svc.get(JOB_ID)).toBe(r);
+        h.library.set(LIB_ID, "changed/**");
+        expect(h.svc.get(JOB_ID)).toBeNull();
+        const r2 = await h.svc.run(JOB_ID);
+        expect(r2.planToken).not.toBe(r.planToken);
+        h.library.delete(LIB_ID);
+        expect(h.svc.get(JOB_ID)).toBeNull();
+    });
+
+    it("패턴이 많으면 두 lsjson이 같은 --exclude-from 파일을 쓰고, #·; 패턴은 인자로, 끝나면 지운다", async () => {
+        const many = Array.from({ length: 70 }, (_v, i) => `p${i}/**`);
+        const h = f_Harness({
+            jobs: [f_Job({ excludes: [...many, "#a"], excludePatternIds: [LIB_ID] })],
+            script: null,
+        });
+        const p = h.svc.run(JOB_ID);
+        await h.waitProcs(2);
+        const files = h.procs.map((x) => x.args[x.args.indexOf("--exclude-from") + 1]);
+        expect(files[0]).toBeDefined();
+        expect(files[0]).toBe(files[1]);
+        const content = readFileSync(files[0]!, "utf8");
+        expect(content).toBe(`lib/**\n${many.join("\n")}\n`);
+        for (const x of h.procs) {
+            const i = x.args.indexOf("--exclude");
+            expect(x.args.slice(i, i + 2)).toEqual(["--exclude", "#a"]);
+            expect(x.args.filter((a) => a === "--exclude")).toHaveLength(1);
+            expect(x.args.indexOf("--exclude-from")).toBeLessThan(x.args.indexOf("--"));
+        }
+        for (const x of h.procs) x.finish(f_Lines([]));
+        await p;
+        expect(existsSync(files[0]!)).toBe(false);
+        expect(readdirSync(h.excludeFileDir)).toEqual([]);
+    });
+
+    it("비교가 실패해도 제외 파일을 지운다", async () => {
+        const many = Array.from({ length: 70 }, (_v, i) => `p${i}`);
+        const h = f_Harness({
+            jobs: [f_Job({ excludes: many })],
+            script: () => ({ lines: [], over: { exitCode: 1 } }),
+        });
+        await f_Err(h.svc.run(JOB_ID));
+        expect(readdirSync(h.excludeFileDir)).toEqual([]);
     });
 
     it("invalidate는 결과를 지운다", async () => {

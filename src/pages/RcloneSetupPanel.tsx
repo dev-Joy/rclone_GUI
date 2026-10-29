@@ -32,6 +32,7 @@ export default function RcloneSetupPanel() {
     const pickRclone = useRcloneEnvStore((s) => s.pickRclone);
     const pickConfig = useRcloneEnvStore((s) => s.pickConfig);
     const resetToAuto = useRcloneEnvStore((s) => s.resetToAuto);
+    const pathError = useRcloneEnvStore((s) => s.pathError);
 
     // ========== 내부 변수 (_V) ==========
     const ok = env !== null && env.problem === null;
@@ -89,6 +90,11 @@ export default function RcloneSetupPanel() {
                     ))}
                     {driveLetterWarning && <li>{driveLetterWarning}</li>}
                 </ul>
+            )}
+            {pathError && (
+                <p className={styles.pathError} role="alert">
+                    {pathError}
+                </p>
             )}
             <div className={styles.actions}>
                 <button

@@ -190,8 +190,27 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
             get().close();
             return;
         }
-        // 같거나 오래된 rev(늦게 온 이벤트)는 무시한다
-        if (s.baseRev !== null && job.rev <= s.baseRev) return;
+        // 같거나 오래된 rev(늦게 온 이벤트)는 무시한다. 단 공용 제외 패턴이 지워져 연결만 바뀐 경우
+        // (rev 그대로)는 저장본과 초안에서 지워진 id를 뺀다
+        if (s.baseRev !== null && job.rev <= s.baseRev) {
+            if (job.rev === s.baseRev && s.baseline && s.draft) {
+                const removed = s.baseline.excludePatternIds.filter(
+                    (x) => !job.excludePatternIds.includes(x),
+                );
+                if (removed.length > 0) {
+                    set({
+                        baseline: { ...s.baseline, excludePatternIds: [...job.excludePatternIds] },
+                        draft: {
+                            ...s.draft,
+                            excludePatternIds: s.draft.excludePatternIds.filter(
+                                (x) => !removed.includes(x),
+                            ),
+                        },
+                    });
+                }
+            }
+            return;
+        }
         if (selectDirty(s)) {
             set({ externalChange: true });
             return;

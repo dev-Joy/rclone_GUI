@@ -1,6 +1,7 @@
 /**
  * 제외 규칙 편집 (한 줄에 하나, rclone --exclude 형식). 입력 중 빈 줄이 사라지지 않도록
  * 입력란 문자열은 따로 두고, 바뀔 때마다 정리한 목록을 올려 보낸다.
+ * commentNote를 켜면 #·;로 시작하는 줄이 공용으로 둘 수 없어 이 작업 전용으로만 적용된다고 알린다(INT-002 T-03).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -12,6 +13,7 @@ import { useState } from "react";
 import ZBCButton from "@/components/ZBCButton";
 import ZBCField from "@/components/ZBCField";
 import ZBCTextarea from "@/components/ZBCTextarea";
+import { jobOnlyCommentLike } from "@/lib/exclude-view";
 import { excludesToText, parseExcludesText } from "@/lib/job-form";
 import styles from "./ExcludesEditor.module.css";
 
@@ -26,11 +28,17 @@ export interface itfExcludesEditorProps {
     defaultsLabel?: string;
     error?: string | null;
     hint?: string;
+    /** 입력란 이름 앞부분. 뒤에 개수가 붙는다 */
+    label?: string;
+    /** #·; 시작 줄 안내 */
+    commentNote?: boolean;
 }
 
 const propsDefault = {
     defaultsLabel: "기본값 불러오기",
     error: null,
+    label: "제외 규칙",
+    commentNote: false,
     hint: "한 줄에 하나씩, rclone --exclude 형식으로 씁니다 (예: node_modules/**). 빈 줄은 무시합니다.",
 } satisfies Partial<itfExcludesEditorProps>;
 
@@ -47,6 +55,8 @@ export default function ExcludesEditor(props: itfExcludesEditorProps) {
         defaultsLabel = propsDefault.defaultsLabel,
         error = propsDefault.error,
         hint = propsDefault.hint,
+        label = propsDefault.label,
+        commentNote = propsDefault.commentNote,
     } = props;
 
     // ========== hook & state 변수 선언 ==========
@@ -58,6 +68,15 @@ export default function ExcludesEditor(props: itfExcludesEditorProps) {
         setPrevValue(value);
         if (!f_SameList(parseExcludesText(text), value)) setText(excludesToText(value));
     }
+
+    // ========== 내부 변수 (_V) ==========
+    const commentLike = commentNote ? jobOnlyCommentLike(value).length : 0;
+    const warnings =
+        commentLike > 0
+            ? [
+                  `#·;로 시작하는 줄 ${commentLike}개는 다른 작업과 공유할 수 없어 이 작업 전용으로만 적용됩니다.`,
+              ]
+            : [];
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Change = (next: string) => {
@@ -74,9 +93,10 @@ export default function ExcludesEditor(props: itfExcludesEditorProps) {
     return (
         <div className={styles.ExcludesEditor}>
             <ZBCField
-                label={`제외 규칙 (${value.length}개)`}
+                label={`${label} (${value.length}개)`}
                 htmlFor={id}
                 error={error}
+                warnings={warnings}
                 hint={hint}
             >
                 <ZBCTextarea

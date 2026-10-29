@@ -4,11 +4,14 @@
  * 순서: [명령, ...플래그, "--", 원본, 대상] — "--" 뒤의 경로는 플래그로 해석되지 않는다.
  *
  * 차단 목록을 줄이는 변경은 docs/adr/ 에 ADR이 필요하다.
+ * 제외 패턴은 --exclude 인자와 --exclude-from 파일만 쓴다(--filter·--filter-from·--include*는 만들지 않음).
  *
  * @author dev-Joy 2026-10-28
  */
 
 // ========== Internal imports ==========
+import { clsAppError } from "@/main/lib/app-error";
+import { CMDLINE_SAFETY_MARGIN, WIN_CMDLINE_MAX } from "@/shared/option-limits";
 import type { typJobRunOptions } from "@/shared/schemas/job";
 import type { typRunMode } from "@/shared/schemas/common";
 
@@ -134,10 +137,16 @@ export function buildProbeListArgs(input: itfProbeListArgsInput): string[] {
     return f_Finish(args);
 }
 
+/** 제외 패턴 전달: 인자 패턴과 (있으면) --exclude-from 파일 경로 */
+export interface itfExcludeArgs {
+    patterns: readonly string[];
+    fromFile: string | null;
+}
+
 export interface itfLsjsonArgsInput {
     path: string;
     configPath: string | null;
-    excludes: readonly string[];
+    excludes: itfExcludeArgs;
     withHash: boolean;
     /** withHash일 때만. 예: ["md5", "sha1"] → --hash-type md5 --hash-type sha1 */
     hashTypes: readonly string[];
@@ -155,7 +164,8 @@ export const COMPARE_HASH_TYPES: readonly string[] = ["md5", "sha1"];
 /**
  * 비교용 전체 목록:
  * lsjson --recursive --files-only --no-mimetype --ask-password=false
- *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--exclude P]... -- <path>
+ *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--exclude P]...
+ *        [--exclude-from F] -- <path>
  */
 export function buildLsjsonArgs(input: itfLsjsonArgsInput): string[] {
     const args = ["lsjson", "--recursive", "--files-only", "--no-mimetype", NO_ASK_PASSWORD];
@@ -175,7 +185,7 @@ export interface itfTransferArgsInput {
     source: string;
     destination: string;
     configPath: string | null;
-    excludes: readonly string[];
+    excludes: itfExcludeArgs;
     options: typJobRunOptions;
     dryRun: boolean;
     /**
@@ -212,11 +222,28 @@ export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     return f_Finish(args);
 }
 
-function f_PushCommon(
-    args: string[],
-    configPath: string | null,
-    excludes: readonly string[],
-): void {
+/** --config → --exclude P… → (파일이 있으면) --exclude-from F */
+function f_PushCommon(args: string[], configPath: string | null, excludes: itfExcludeArgs): void {
     if (configPath) args.push("--config", configPath);
-    for (const pattern of excludes) args.push("--exclude", pattern);
+    for (const pattern of excludes.patterns) args.push("--exclude", pattern);
+    if (excludes.fromFile !== null) args.push("--exclude-from", excludes.fromFile);
+}
+
+/** Windows 명령줄 한 인자의 추정 길이: 값 + 따옴표·공백 3 + 이스케이프될 " 와 \ */
+function f_ArgLength(arg: string): number {
+    let extra = 0;
+    for (const ch of arg) if (ch === '"' || ch === "\\") extra += 1;
+    return arg.length + 3 + extra;
+}
+
+/** 명령줄이 Windows 한도(여유 포함)를 넘으면 VALIDATION */
+export function assertCommandLength(binaryPath: string, args: readonly string[]): void {
+    const total = [binaryPath, ...args].reduce((sum, a) => sum + f_ArgLength(a), 0);
+    const limit = WIN_CMDLINE_MAX - CMDLINE_SAFETY_MARGIN;
+    if (total > limit) {
+        throw new clsAppError(
+            "VALIDATION",
+            `rclone 명령이 너무 깁니다(${total}자, 한도 ${limit}자). 제외 패턴이나 경로를 줄이세요.`,
+        );
+    }
 }

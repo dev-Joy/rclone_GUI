@@ -20,6 +20,7 @@ import { fileStamp } from "@/main/lib/time";
 export const MASK_SOURCE = "<원본>";
 export const MASK_DEST = "<대상>";
 export const MASK_CONFIG = "<설정 파일>";
+export const MASK_EXCLUDE_FILE = "<제외 파일>";
 
 /** 실행 로그 파일 이름. 예: run-20261028-173500-1a2b3c4d-5e6f7a8b.log */
 export function runLogFileName(at: Date, jobId: string, runId: string): string {
@@ -27,7 +28,7 @@ export function runLogFileName(at: Date, jobId: string, runId: string): string {
 }
 
 /**
- * 로그 머리말용 인자. "--" 뒤의 원본·대상과 --config 값을 가린다.
+ * 로그 머리말용 인자. "--" 뒤의 원본·대상과 --config·--exclude-from 값을 가린다.
  * 제외 패턴·옵션 값은 그대로 둔다.
  */
 export function maskArgsForLog(
@@ -42,6 +43,7 @@ export function maskArgsForLog(
             return a;
         }
         if (i > 0 && args[i - 1] === "--config") return MASK_CONFIG;
+        if (i > 0 && args[i - 1] === "--exclude-from") return MASK_EXCLUDE_FILE;
         if (a.startsWith("--config=")) return `--config=${MASK_CONFIG}`;
         return a;
     });

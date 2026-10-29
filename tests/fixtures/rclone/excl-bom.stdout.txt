@@ -1,0 +1,9 @@
+[
+{"Path":" b ","Name":" b ","Size":3,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"#a","Name":"#a","Size":2,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":";a","Name":";a","Size":2,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"a","Name":"a","Size":1,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"{p,q}","Name":"{p,q}","Size":5,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"한글.txt","Name":"한글.txt","Size":10,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"x/y","Name":"y","Size":3,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false}
+]

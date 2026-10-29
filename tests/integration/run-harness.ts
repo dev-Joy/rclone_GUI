@@ -26,10 +26,12 @@ import { clsRcloneEnv } from "@/main/rclone/detect";
 import { runRclone, type typRunRclone } from "@/main/rclone/process";
 import { clsActivityLock } from "@/main/services/activity-lock";
 import { clsCompareService } from "@/main/services/compare-service";
+import { EXCLUDE_FILE_DIR } from "@/main/services/exclude-file";
 import { clsPathService } from "@/main/services/path-service";
 import { clsActiveRunStore } from "@/main/services/run-recovery";
 import { clsRunService } from "@/main/services/run-service";
 import { openAppDb } from "@/main/store/app-db";
+import { clsExcludeStore } from "@/main/store/exclude-store";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -93,6 +95,10 @@ export interface itfEnvOptions {
     options?: Partial<typJobRunOptions>;
     /** 자동 실행 설정(기본: 꺼짐) */
     autoSync?: Partial<typJobDraft["autoSync"]>;
+    /** 작업 전용 제외 패턴(기본: 설정 기본값 + "*.tmp") */
+    excludes?: string[];
+    /** 작업을 만들기 전에 공용 라이브러리에 넣고 연결할 패턴 */
+    libraryPatterns?: string[];
     /** runRclone을 감싸 출력·취소 시점을 조작할 때 */
     wrapRun?: (run: typRunRclone, runs: () => clsRunService) => typRunRclone;
 }
@@ -109,6 +115,10 @@ export async function makeEnv(o: itfEnvOptions) {
     onTestFinished(() => db.close());
     const jobs = new clsJobStore({ db, caseInsensitive: () => true });
     await jobs.load();
+    const excludeStore = new clsExcludeStore({ db });
+    excludeStore.load();
+    const libraryIds = (o.libraryPatterns ?? []).map((p) => excludeStore.create(p).item.id);
+    const excludeFileDir = join(userData, EXCLUDE_FILE_DIR);
     const { excludes, ...defaults } = settings.defaults;
     const job: typJob = await jobs.create({
         name: "실행 통합",
@@ -116,7 +126,8 @@ export async function makeEnv(o: itfEnvOptions) {
         source: o.source,
         destination: o.destination,
         mode: o.mode,
-        excludes: [...excludes, "*.tmp"],
+        excludes: o.excludes ?? [...excludes, "*.tmp"],
+        excludePatternIds: libraryIds,
         options: { ...defaults, ...o.options },
         configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, ...o.autoSync },
@@ -136,6 +147,8 @@ export async function makeEnv(o: itfEnvOptions) {
         rcloneEnv,
         pathService,
         activity,
+        excludes: excludeStore,
+        excludeFileDir,
         logger: LOGGER,
     });
     const activeRun = new clsActiveRunStore(userData);
@@ -152,6 +165,8 @@ export async function makeEnv(o: itfEnvOptions) {
         activity,
         activeRun,
         logsDir,
+        excludes: excludeStore,
+        excludeFileDir,
         logger: LOGGER,
         run: runFn,
         emit: (e) => events.push(e),
@@ -182,6 +197,8 @@ export async function makeEnv(o: itfEnvOptions) {
         compare,
         runs,
         events,
+        excludeStore,
+        excludeFileDir,
         activeRunFile: join(userData, "active-run.json"),
         waitFinished,
     };

@@ -95,6 +95,30 @@ describe("validateJobDraft 기본", () => {
 });
 
 describe("validateJobDraft 경로", () => {
+    it("경로 1024자 초과는 해당 필드 오류(저장 한도)", () => {
+        const long = `C:\\${"a".repeat(1100)}`;
+        const r = validateJobDraft(f_Draft({ source: long }), true);
+        expect(r.fieldErrors.source).toBe("경로는 1024자 이내로 입력하세요.");
+        const c = validateJobDraft(f_Draft({ configPathOverride: long }), true);
+        expect(c.fieldErrors.configPathOverride).toBe("경로는 1024자 이내로 입력하세요.");
+    });
+
+    it("공용 + 작업 전용 합계 500 초과는 제외 필드 오류", () => {
+        const ids = Array.from(
+            { length: 450 },
+            (_v, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+        );
+        const r = validateJobDraft(
+            f_Draft({
+                excludePatternIds: ids,
+                excludes: Array.from({ length: 51 }, (_v, i) => `p${i}`),
+            }),
+            true,
+        );
+        expect(r.ok).toBe(false);
+        expect(r.fieldErrors.excludes).toContain("500개");
+    });
+
     it("WSL 리눅스 경로·상대 경로는 해당 필드 오류", () => {
         const r = validateJobDraft(f_Draft({ source: "/home/x", destination: "work\\src" }), true);
         expect(r.fieldErrors.source).toContain("WSL 리눅스 경로");
@@ -184,7 +208,17 @@ describe("초안 변환·비교", () => {
         }
         expect(d.autoSync).not.toHaveProperty("nextRunAt");
         expect(d.autoSync).not.toHaveProperty("lastAutoRunAt");
-        expect(() => zJobDraft.strict().parse(d)).not.toThrow();
+        expect(() => zJobDraft.parse(d)).not.toThrow();
+    });
+
+    it("jobToDraft는 공용 제외 패턴 연결을 복사한다(다른 배열)", () => {
+        const job = {
+            ...f_Job("00000000-0000-4000-8000-000000000001", "a"),
+            excludePatternIds: ["x"],
+        };
+        const d = jobToDraft(job);
+        expect(d.excludePatternIds).toEqual(["x"]);
+        expect(d.excludePatternIds).not.toBe(job.excludePatternIds);
     });
 
     it("isDraftEqual: 순서 바뀐 excludes·옵션 변경은 다르다", () => {

@@ -25,6 +25,7 @@ function f_Result(jobId: string, sourceFiles = 1): itfCompareResult {
         entries: [],
         warnings: [],
         planToken: "0".repeat(32),
+        excludeHash: "0".repeat(32),
     };
 }
 

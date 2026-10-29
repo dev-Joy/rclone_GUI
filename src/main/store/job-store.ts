@@ -7,6 +7,9 @@
  *   단, 자동 실행을 켜고 끄거나 주기를 바꾸면 nextRunAt을 다시 정한다(nextRunAfterEdit, MVP_SPEC §10.2).
  * - 목록은 메모리 캐시로 동기 조회한다. 쓰기는 행 단위 SQL이고, 커밋에 성공한 뒤에만
  *   캐시를 바꾸고 onChange를 부른다. 읽을 수 없는 행은 건너뛰되 지우지 않는다.
+ * - 공용 제외 패턴 연결(excludePatternIds)은 job_exclude_patterns가 원본이다(INT-002 T-03).
+ *   jobs.data에는 넣지 않고, 읽을 때 연결 테이블로 채운다(pattern_id 정렬). 작업 행과 연결은 한 트랜잭션.
+ * - 저장 입력은 병합 뒤 zJobDraft(새 한도)로 다시 검사한다. 읽기·관리 필드 기록은 zJob(읽기 한도).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -18,7 +21,7 @@ import { z } from "zod";
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
 import { nowIso } from "@/main/lib/time";
-import type { clsSqliteDb } from "@/main/store/sqlite-db";
+import { clsSqliteError, type clsSqliteDb } from "@/main/store/sqlite-db";
 import type { itfAppNotice } from "@/shared/ipc-contract";
 import { checkPathPair } from "@/shared/path-utils";
 import { nextRunAfterEdit } from "@/shared/schedule";
@@ -56,17 +59,69 @@ const SQL_INSERT =
 const SQL_UPDATE =
     "UPDATE jobs SET name = $name, rev = $rev, created_at = $createdAt, updated_at = $updatedAt, data = $data WHERE id = $id";
 const SQL_DELETE = "DELETE FROM jobs WHERE id = $id";
+const SQL_SELECT_LINKS = "SELECT job_id, pattern_id FROM job_exclude_patterns ORDER BY pattern_id";
+const SQL_DELETE_LINKS = "DELETE FROM job_exclude_patterns WHERE job_id = $jobId";
+const SQL_INSERT_LINK =
+    "INSERT INTO job_exclude_patterns (job_id, pattern_id) VALUES ($jobId, $patternId)";
 
-/** DB 행 값. 전체 작업은 data(JSON)에, 조회용 열은 따로 둔다 */
+/** SQLITE_CONSTRAINT_FOREIGNKEY(확장), SQLITE_CONSTRAINT(기본) */
+const SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+const SQLITE_CONSTRAINT = 19;
+
+const zLinkRow = z.object({ job_id: z.string(), pattern_id: z.string() });
+
+/** DB 행 값. 전체 작업은 data(JSON)에(연결 제외), 조회용 열은 따로 둔다 */
 function f_Row(job: typJob): Record<string, string | number> {
+    const { excludePatternIds: _links, ...data } = job;
     return {
         id: job.id,
         name: job.name,
         rev: job.rev,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
-        data: JSON.stringify(job),
+        data: JSON.stringify(data),
     };
+}
+
+/** 연결 id 정규화: 중복 제거·정렬(읽을 때 순서와 같게) */
+function f_NormalizeIds(ids: readonly string[]): string[] {
+    return [...new Set(ids)].toSorted();
+}
+
+/** 저장 입력 재검사용 초안(편집 가능한 필드만) */
+function f_DraftOf(job: typJob): typJobDraft {
+    return {
+        name: job.name,
+        notes: job.notes,
+        source: job.source,
+        destination: job.destination,
+        mode: job.mode,
+        excludes: job.excludes,
+        excludePatternIds: job.excludePatternIds,
+        options: job.options,
+        configPathOverride: job.configPathOverride,
+        autoSync: {
+            enabled: job.autoSync.enabled,
+            intervalMinutes: job.autoSync.intervalMinutes,
+            allowDeletes: job.autoSync.allowDeletes,
+        },
+    };
+}
+
+/** 없는 공용 패턴을 연결하려던 FK 오류면 VALIDATION으로 바꾼다 */
+function f_MapLinkError(e: unknown): unknown {
+    const fk =
+        e instanceof clsSqliteError &&
+        (e.sqliteCode === SQLITE_CONSTRAINT_FOREIGNKEY ||
+            (e.sqliteCode === SQLITE_CONSTRAINT && /FOREIGN KEY/i.test(e.detail ?? "")));
+    if (fk) {
+        return new clsAppError(
+            "VALIDATION",
+            "없는 제외 패턴을 고른 작업은 저장할 수 없습니다. 목록을 새로 고친 뒤 다시 저장하세요.",
+            e.detail,
+        );
+    }
+    return e;
 }
 
 /** data 열 → 작업. JSON·스키마가 맞지 않으면 null */
@@ -100,6 +155,8 @@ export class clsJobStore {
             if (job) jobs.push(job);
             else skipped += 1;
         }
+        const links = this.readLinks();
+        for (const job of jobs) job.excludePatternIds = links.get(job.id) ?? [];
         if (skipped > 0) {
             this.opts.onNotice?.({
                 level: "error",
@@ -114,6 +171,13 @@ export class clsJobStore {
         return this.jobs;
     }
 
+    /** 연결 테이블을 다시 읽어 캐시를 맞추고 onChange를 부른다(rev는 그대로). 공용 패턴을 지운 뒤 부른다 */
+    refreshExcludeLinks(): void {
+        const links = this.readLinks();
+        this.jobs = this.jobs.map((j) => ({ ...j, excludePatternIds: links.get(j.id) ?? [] }));
+        this.opts.onChange?.(this.jobs);
+    }
+
     get(id: string): typJob {
         const job = this.list().find((j) => j.id === id);
         if (!job) throw new clsAppError("NOT_FOUND", "작업을 찾을 수 없습니다.");
@@ -126,6 +190,7 @@ export class clsJobStore {
         const now = nowIso();
         const job: typJob = {
             ...draft,
+            excludePatternIds: f_NormalizeIds(draft.excludePatternIds),
             id: randomUUID(),
             autoSync: {
                 ...draft.autoSync,
@@ -150,6 +215,7 @@ export class clsJobStore {
         const next: typJob = {
             ...job,
             ...patch,
+            excludePatternIds: f_NormalizeIds(patch.excludePatternIds ?? job.excludePatternIds),
             options: patch.options ?? job.options,
             autoSync: {
                 ...autoSync,
@@ -158,8 +224,10 @@ export class clsJobStore {
             rev: job.rev + 1,
             updatedAt: now,
         };
+        // 저장할 때만 새 한도로 막는다(예전 값이 한도를 넘어도 읽기·관리 기록은 계속된다)
+        zJobDraft.parse(f_DraftOf(next));
         this.assertPaths(next.source, next.destination);
-        return this.replace(next);
+        return this.replace(next, true);
     }
 
     async remove(id: string): Promise<void> {
@@ -217,20 +285,58 @@ export class clsJobStore {
         }
     }
 
-    /** 검증 → INSERT → 캐시 → onChange (DB 실패 시 캐시는 그대로) */
+    /** 연결 테이블 → 작업 id별 패턴 id(정렬) */
+    private readLinks(): Map<string, string[]> {
+        const links = new Map<string, string[]>();
+        for (const row of this.db.all(SQL_SELECT_LINKS)) {
+            const r = zLinkRow.safeParse(row);
+            if (!r.success) continue;
+            const list = links.get(r.data.job_id) ?? [];
+            list.push(r.data.pattern_id);
+            links.set(r.data.job_id, list);
+        }
+        return links;
+    }
+
+    /** 트랜잭션 안에서 부른다: 작업의 연결을 job.excludePatternIds로 바꾼다 */
+    private writeLinks(job: typJob): void {
+        this.db.run(SQL_DELETE_LINKS, { jobId: job.id });
+        for (const patternId of job.excludePatternIds) {
+            this.db.run(SQL_INSERT_LINK, { jobId: job.id, patternId });
+        }
+    }
+
+    /** 검증 → INSERT + 연결(한 트랜잭션) → 캐시 → onChange (DB 실패 시 캐시는 그대로) */
     private insert(jobInput: typJob): typJob {
         const job = zJob.parse(jobInput);
-        this.db.run(SQL_INSERT, f_Row(job));
+        try {
+            this.db.transaction(() => {
+                this.db.run(SQL_INSERT, f_Row(job));
+                this.writeLinks(job);
+            });
+        } catch (e) {
+            throw f_MapLinkError(e);
+        }
         this.jobs = [...this.jobs, job];
         this.opts.onChange?.(this.jobs);
         return job;
     }
 
-    /** 검증 → UPDATE(id) → 캐시 → onChange (DB 실패 시 캐시는 그대로) */
-    private replace(jobInput: typJob): typJob {
+    /**
+     * 검증 → UPDATE(id) (+ links면 연결도 같은 트랜잭션) → 캐시 → onChange (DB 실패 시 캐시는 그대로).
+     * 관리 필드 기록(links=false)은 연결을 건드리지 않는다
+     */
+    private replace(jobInput: typJob, links = false): typJob {
         const job = zJob.parse(jobInput);
-        const { changes } = this.db.run(SQL_UPDATE, f_Row(job));
-        if (changes === 0) throw new clsAppError("NOT_FOUND", "작업을 찾을 수 없습니다.");
+        try {
+            this.db.transaction(() => {
+                const { changes } = this.db.run(SQL_UPDATE, f_Row(job));
+                if (changes === 0) throw new clsAppError("NOT_FOUND", "작업을 찾을 수 없습니다.");
+                if (links) this.writeLinks(job);
+            });
+        } catch (e) {
+            throw f_MapLinkError(e);
+        }
         this.jobs = this.jobs.map((j) => (j.id === job.id ? job : j));
         this.opts.onChange?.(this.jobs);
         return job;

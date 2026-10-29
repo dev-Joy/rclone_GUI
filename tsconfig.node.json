@@ -23,6 +23,7 @@
         "src/preload/**/*",
         "src/shared/**/*",
         "src/lib/compare-view.ts",
+        "src/lib/exclude-view.ts",
         "src/lib/form-utils.ts",
         "src/lib/history-view.ts",
         "src/lib/job-form.ts",

@@ -1,5 +1,7 @@
 /**
  * 빌드본(out/) 스모크 확인. 임시 userData로 앱을 두 번 띄워 원격 디버깅(CDP)으로 화면을 조작한다.
+ * 0단계: 임시 userData에 v1 저장소(빈 DB, user_version 1)를 만들어 두고, 1회차 시작 때 v2로 올라가는지 본다
+ *        (pre-v2 백업·연결 테이블). 공용 제외 패턴 IPC(추가·중복·#거부·삭제)도 1회차에서 확인한다.
  * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
@@ -74,6 +76,56 @@ function f_ReadRunRecord(userData, runId) {
     try {
         const row = db.prepare("SELECT data FROM run_records WHERE id = ?").get(runId);
         return row ? JSON.parse(String(row.data)) : null;
+    } finally {
+        db.close();
+    }
+}
+
+/**
+ * v1 저장소를 만든다(db-schema.ts의 V1과 같은 테이블, user_version 1). 시작 때 v2 이전을 확인하는 용도
+ */
+function f_SeedV1Db(userData) {
+    const db = new DatabaseSync(join(userData, "rclonegui-store.sqlite"));
+    try {
+        db.exec(`
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+            CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK (id = 1),
+                data TEXT NOT NULL CHECK (json_valid(data)), updated_at TEXT NOT NULL) STRICT;
+            CREATE TABLE jobs (seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+                rev INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                data TEXT NOT NULL CHECK (json_valid(data))) STRICT;
+            CREATE TABLE run_records (seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, job_id TEXT NOT NULL,
+                status TEXT NOT NULL, started_at TEXT NOT NULL, log_file TEXT,
+                data TEXT NOT NULL CHECK (json_valid(data))) STRICT;
+            CREATE INDEX run_records_job_seq ON run_records (job_id, seq DESC);
+            CREATE INDEX run_records_running ON run_records (status) WHERE status = 'running';
+            CREATE TABLE remotes (id TEXT PRIMARY KEY, alias TEXT NOT NULL UNIQUE, remote_name TEXT NOT NULL,
+                base_path TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL) STRICT;
+            CREATE TABLE exclude_patterns (id TEXT PRIMARY KEY, pattern TEXT NOT NULL UNIQUE CHECK (
+                length(pattern) BETWEEN 1 AND 512 AND instr(pattern, char(10)) = 0
+                AND instr(pattern, char(13)) = 0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL) STRICT;
+            CREATE TABLE schedules (job_id TEXT PRIMARY KEY REFERENCES jobs (id) ON DELETE CASCADE,
+                kind TEXT NOT NULL CHECK (kind IN ('interval', 'daily', 'weekly')), interval_minutes INTEGER,
+                time_of_day TEXT, weekdays INTEGER, enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                next_run_at TEXT, last_run_at TEXT, updated_at TEXT NOT NULL) STRICT;
+            PRAGMA user_version = 1;
+        `);
+    } finally {
+        db.close();
+    }
+}
+
+/** 앱이 끝난 뒤 저장소 스키마 버전과 연결 테이블 유무 */
+function f_ReadSchema(userData) {
+    const db = new DatabaseSync(join(userData, "rclonegui-store.sqlite"), { readOnly: true });
+    try {
+        const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
+        const link = db
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'job_exclude_patterns'",
+            )
+            .get();
+        return { version, hasLinks: link !== undefined };
     } finally {
         db.close();
     }
@@ -358,6 +410,7 @@ writeFileSync(
     smokeConf,
     `[x]\ntype = alias\nremote = ${smokeSrc}\n\n[smoke-alias]\ntype = alias\nremote = ${smokeDst}\n`,
 );
+f_SeedV1Db(userData);
 try {
     const a = await f_Launch(userData);
     f_Check(
@@ -371,7 +424,8 @@ try {
     const keys = await a.evaluate("Object.keys(window.rclonegui).join(',')");
     f_Check(
         "window.rclonegui API",
-        keys === "app,settings,jobs,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
+        keys ===
+            "app,settings,jobs,excludes,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -382,7 +436,7 @@ try {
     );
     f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
     const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy",
-        excludes: ["node_modules/**"], configPathOverride: null,
+        excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
         options: { checkers: 8, transfers: 4, fastList: true, skipLinks: true, ignoreErrors: false,
             checkHashes: false, modtimeToleranceMs: 2000, preflightBeforeDestructive: true } } })`;
@@ -1046,10 +1100,46 @@ try {
             `window.rclonegui.scheduler.getState().then((r) => r.data?.paused === true)`,
         )) && (await ui.until(`document.body.innerText.includes("자동 실행 일시정지됨")`)),
     );
+    // 공용 제외 패턴 IPC: 추가 → 같은 패턴은 기존 행 → #시작 거부 → 쓰는 작업 없이 삭제
+    const exA = await a.evaluate(`window.rclonegui.excludes.create("  smoke-tmp/**  ")`);
+    const exB = await a.evaluate(`window.rclonegui.excludes.create("smoke-tmp/**")`);
+    const exBad = await a.evaluate(`window.rclonegui.excludes.create("#주석")`);
+    f_Check(
+        "excludes:create 공백 정리·중복은 기존 패턴(created:false)·#시작 거부",
+        exA.ok &&
+            exA.data.created === true &&
+            exA.data.item.pattern === "smoke-tmp/**" &&
+            exB.ok &&
+            exB.data.created === false &&
+            exB.data.item.id === exA.data.item.id &&
+            !exBad.ok &&
+            exBad.error.code === "VALIDATION",
+    );
+    const exDel = exA.ok
+        ? await a.evaluate(
+              `window.rclonegui.excludes.remove({ id: ${JSON.stringify(exA.data.item.id)}, confirmedJobIds: [] })`,
+          )
+        : { ok: false };
+    const exList = await a.evaluate("window.rclonegui.excludes.list()");
+    f_Check(
+        "excludes:delete(쓰는 작업 없음) → 목록에서 빠짐",
+        exDel.ok && exList.ok && exList.data.length === 0,
+    );
     const errors1 = [...a.consoleErrors];
     let errorsB = [];
     let errorsC = [];
     await f_Close(a);
+    const schema = f_ReadSchema(userData);
+    const backups = existsSync(join(userData, "db-backups"))
+        ? readdirSync(join(userData, "db-backups"))
+        : [];
+    f_Check(
+        "v1 저장소 → v2(연결 테이블)·pre-v2 백업",
+        schema.version === 2 &&
+            schema.hasLinks &&
+            backups.some((n) => /^rclonegui-store-pre-v2-\d{8}-\d{6}\.sqlite$/.test(n)),
+        `${JSON.stringify(schema)} ${backups.join(",")}`,
+    );
 
     // 2회차는 개발 실행 전용 환경 변수로 tick을 1초로 줄이고 종료 확인 창에 "종료"로 답한다
     const b = await f_Launch(userData, {

@@ -13,7 +13,7 @@ import { create } from "zustand";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfRcloneEnvironment } from "@/shared/ipc-contract";
 import { createLatestGate, type itfLatestGate } from "@/shared/latest-request";
-import type { typSettingsPatch } from "@/shared/schemas/settings";
+import { zSettingsPathInput, type typSettingsPatch } from "@/shared/schemas/settings";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 
@@ -34,6 +34,8 @@ interface itfRcloneEnvState {
     wslError: string | null;
     /** key = 작업에 지정한 rclone.conf 경로 원문 */
     remotesByConfig: Record<string, itfRemoteList>;
+    /** 고른 rclone.exe·rclone.conf 경로가 저장 한도를 넘는 등 저장 전에 막은 이유. 없으면 null */
+    pathError: string | null;
     detect: (force?: boolean) => Promise<void>;
     loadDistros: () => Promise<void>;
     /** configPath가 null이면 감지 결과(env.remotes)를 쓰므로 IPC를 부르지 않는다. 경로별로 마지막 요청만 반영 */
@@ -79,6 +81,19 @@ export const useRcloneEnvStore = create<itfRcloneEnvState>((set, get) => {
         set((s) => ({ remotesByConfig: { ...s.remotesByConfig, [configPath]: value } }));
     }
 
+    /** 고른 경로를 저장 전에 검사한다(1024자 등). 통과하면 true */
+    function f_CheckPath(path: string): boolean {
+        const r = zSettingsPathInput.safeParse(path);
+        if (r.success) {
+            set({ pathError: null });
+            return true;
+        }
+        const message = r.error.issues[0]?.message ?? "경로를 확인하세요.";
+        set({ pathError: message });
+        useToastStore.getState().push("error", message);
+        return false;
+    }
+
     /** 설정을 바꾸고 성공하면 다시 감지한다 */
     async function f_UpdateAndDetect(patch: typSettingsPatch): Promise<void> {
         const saved = await useSettingsStore.getState().update(patch);
@@ -98,6 +113,7 @@ export const useRcloneEnvStore = create<itfRcloneEnvState>((set, get) => {
         distros: null,
         wslError: null,
         remotesByConfig: {},
+        pathError: null,
         detect: async (force = false) => {
             const isLatest = detectGate.next();
             set({ detecting: true });
@@ -145,7 +161,7 @@ export const useRcloneEnvStore = create<itfRcloneEnvState>((set, get) => {
         pickRclone: async () => {
             try {
                 const path = await f_PickFile("rclone.exe 고르기", "rclone", ["exe"]);
-                if (path) await f_UpdateAndDetect({ rclonePath: path });
+                if (path && f_CheckPath(path)) await f_UpdateAndDetect({ rclonePath: path });
             } catch (e) {
                 f_Toast(e);
             }
@@ -153,12 +169,13 @@ export const useRcloneEnvStore = create<itfRcloneEnvState>((set, get) => {
         pickConfig: async () => {
             try {
                 const path = await f_PickFile("rclone.conf 고르기", "rclone 설정", ["conf", "*"]);
-                if (path) await f_UpdateAndDetect({ configPath: path });
+                if (path && f_CheckPath(path)) await f_UpdateAndDetect({ configPath: path });
             } catch (e) {
                 f_Toast(e);
             }
         },
         resetToAuto: async (target) => {
+            set({ pathError: null });
             await f_UpdateAndDetect(
                 target === "rclonePath" ? { rclonePath: null } : { configPath: null },
             );

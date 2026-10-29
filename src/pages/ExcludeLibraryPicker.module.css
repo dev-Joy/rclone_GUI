@@ -1,0 +1,95 @@
+/**
+ * ExcludeLibraryPicker 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .ExcludeLibraryPicker {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+
+        .legend {
+            margin-bottom: 2px;
+            padding: 0;
+            font-weight: 600;
+        }
+
+        .hint {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            max-height: 260px;
+            margin: 0;
+            padding: 0;
+            overflow-y: auto;
+            list-style: none;
+        }
+
+        .item {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 2px 4px;
+            border-radius: var(--radius);
+
+            &:hover {
+                background: var(--accent-weak);
+            }
+        }
+
+        .pattern {
+            font-family: var(--font-mono);
+            word-break: break-all;
+        }
+
+        .actions {
+            display: flex;
+            flex-shrink: 0;
+            gap: 4px;
+        }
+
+        .edit {
+            display: flex;
+            flex: 1;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+
+            :global(.zbcInput) {
+                flex: 1;
+                min-width: 200px;
+            }
+        }
+
+        .add {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+
+            :global(.zbcInput) {
+                flex: 1;
+                min-width: 0;
+            }
+        }
+    }
+}

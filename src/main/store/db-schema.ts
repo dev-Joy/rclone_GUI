@@ -81,7 +81,41 @@ const V1: readonly string[] = [
     ) STRICT`,
 ];
 
-export const MIGRATIONS: readonly itfMigration[] = [{ version: 1, statements: V1 }];
+/**
+ * v2 (INT-002 T-03): 공용 제외 패턴에 #·; 시작·앞뒤 공백 금지 CHECK를 더하고(테이블 재생성),
+ * 작업 ↔ 패턴 연결 테이블을 만든다. 연결 테이블이 원본이고 jobs.data에는 연결을 넣지 않는다.
+ * 패턴을 쓰는 작업이 있으면 패턴을 지울 수 없다(RESTRICT), 작업을 지우면 연결도 지운다(CASCADE).
+ */
+const V2: readonly string[] = [
+    `CREATE TABLE exclude_patterns_v2 (
+        id TEXT PRIMARY KEY,
+        pattern TEXT NOT NULL UNIQUE CHECK (
+            length(pattern) BETWEEN 1 AND 512
+            AND instr(pattern, char(10)) = 0
+            AND instr(pattern, char(13)) = 0
+            AND substr(pattern, 1, 1) NOT IN ('#', ';')
+            AND pattern = trim(pattern)
+        ),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    ) STRICT`,
+    `INSERT INTO exclude_patterns_v2 (id, pattern, created_at, updated_at)
+        SELECT id, pattern, created_at, updated_at FROM exclude_patterns
+        WHERE substr(pattern, 1, 1) NOT IN ('#', ';') AND pattern = trim(pattern)`,
+    "DROP TABLE exclude_patterns",
+    "ALTER TABLE exclude_patterns_v2 RENAME TO exclude_patterns",
+    `CREATE TABLE job_exclude_patterns (
+        job_id TEXT NOT NULL REFERENCES jobs (id) ON DELETE CASCADE,
+        pattern_id TEXT NOT NULL REFERENCES exclude_patterns (id) ON DELETE RESTRICT,
+        PRIMARY KEY (job_id, pattern_id)
+    ) STRICT`,
+    "CREATE INDEX job_exclude_patterns_pattern ON job_exclude_patterns (pattern_id)",
+];
+
+export const MIGRATIONS: readonly itfMigration[] = [
+    { version: 1, statements: V1 },
+    { version: 2, statements: V2 },
+];
 
 export const SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
 

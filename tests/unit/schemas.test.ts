@@ -10,7 +10,7 @@ import {
     zHistoryListInput,
     zHistoryReadLogInput,
 } from "@/shared/schemas/history";
-import { zJobDraft, zJobPatch } from "@/shared/schemas/job";
+import { zJob, zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
 import { zStartRunInput } from "@/shared/schemas/run";
 import { zSchedulerSetPausedInput } from "@/shared/schemas/scheduler";
@@ -78,6 +78,74 @@ describe("Job 검증 범위", () => {
         expect(zJobPatch.safeParse({ name: "x" }).success).toBe(true);
         expect(zJobPatch.safeParse({ rev: 9 }).success).toBe(false);
         expect(zJobPatch.safeParse({ id: "x" }).success).toBe(false);
+    });
+
+    it("patch에 excludePatternIds가 없으면 기본값을 채우지 않는다(연결 유지)", () => {
+        const r = zJobPatch.parse({ name: "x" });
+        expect("excludePatternIds" in r).toBe(false);
+    });
+});
+
+const f_Ids = (n: number) =>
+    Array.from({ length: n }, (_v, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+
+function f_Stored(over: Record<string, unknown> = {}) {
+    return {
+        ...f_Draft(),
+        id: "00000000-0000-4000-8000-0000000000aa",
+        autoSync: { ...f_Draft().autoSync, nextRunAt: null, lastAutoRunAt: null },
+        rev: 0,
+        createdAt: "2026-10-29T00:00:00.000Z",
+        updatedAt: "2026-10-29T00:00:00.000Z",
+        lastRun: null,
+        ...over,
+    };
+}
+
+describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
+    it("경로 4096자는 읽을 때 통과하고 저장 입력에서는 거부한다", () => {
+        const long = `C:\\${"a".repeat(4090)}`;
+        expect(zJob.safeParse(f_Stored({ source: long })).success).toBe(true);
+        expect(zJobDraft.safeParse({ ...f_Draft(), source: long }).success).toBe(false);
+        expect(zJobPatch.safeParse({ destination: long }).success).toBe(false);
+        expect(
+            zJobDraft.safeParse({ ...f_Draft(), source: `C:\\${"a".repeat(1000)}` }).success,
+        ).toBe(true);
+    });
+
+    it("excludePatternIds가 없는 예전 저장 값은 []로 읽는다", () => {
+        const { excludePatternIds: _x, ...old } = f_Stored();
+        expect(zJob.parse(old).excludePatternIds).toEqual([]);
+    });
+
+    it("공용 + 작업 전용 합계 501은 거부, 500은 통과", () => {
+        const jobOnly = Array.from({ length: 100 }, (_v, i) => `p${i}`);
+        expect(
+            zJobDraft.safeParse({ ...f_Draft(), excludes: jobOnly, excludePatternIds: f_Ids(400) })
+                .success,
+        ).toBe(true);
+        const r = zJobDraft.safeParse({
+            ...f_Draft(),
+            excludes: jobOnly,
+            excludePatternIds: f_Ids(401),
+        });
+        expect(r.success).toBe(false);
+        expect(r.error?.issues[0]?.path).toEqual(["excludes"]);
+    });
+
+    it("excludePatternIds 600개·uuid 아님은 거부", () => {
+        expect(zJobDraft.safeParse({ ...f_Draft(), excludePatternIds: f_Ids(600) }).success).toBe(
+            false,
+        );
+        expect(zJobDraft.safeParse({ ...f_Draft(), excludePatternIds: ["x"] }).success).toBe(false);
+    });
+
+    it("설정 patch 경로는 1024자까지, 읽기는 4096자까지", () => {
+        const long = `C:\\${"a".repeat(2000)}`;
+        expect(zSettingsPatch.safeParse({ configPath: long }).success).toBe(false);
+        expect(zSettings.safeParse({ ...createDefaultSettings(), configPath: long }).success).toBe(
+            true,
+        );
     });
 });
 

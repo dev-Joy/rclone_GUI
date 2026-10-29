@@ -80,6 +80,8 @@ export interface itfCompareResult {
     entries: itfDiffEntry[];
     warnings: string[];
     planToken: string;
+    /** 비교에 쓴 제외 패턴·전달 방식 해시. 실행 시점 값과 다르면 PLAN_STALE */
+    excludeHash: string;
 }
 
 /** 비교 진행 단계: 경로 확인 → 목록 읽기 → 차이 계산 */

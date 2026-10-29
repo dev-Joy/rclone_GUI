@@ -181,13 +181,15 @@ export async function importLegacyJson(
     db.transaction(() => {
         db.run(SQL_SETTINGS, { data: JSON.stringify(settings), updatedAt: at });
         for (const job of jobs.kept) {
+            // 공용 제외 패턴 연결은 연결 테이블이 원본이라 data에 넣지 않는다(예전 JSON에는 연결 없음)
+            const { excludePatternIds: _links, ...data } = job;
             db.run(SQL_JOB, {
                 id: job.id,
                 name: job.name,
                 rev: job.rev,
                 createdAt: job.createdAt,
                 updatedAt: job.updatedAt,
-                data: JSON.stringify(job),
+                data: JSON.stringify(data),
             });
         }
         // 오래된 것부터 넣어 seq 내림차순이 기존 최신순과 같게 한다

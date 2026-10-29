@@ -54,6 +54,7 @@ export function createJobDraft(settings: typSettings): typJobDraft {
         destination: "",
         mode: "copy",
         excludes: [...excludes],
+        excludePatternIds: [],
         options: { ...options },
         configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },

@@ -13,7 +13,11 @@ import { execFile, spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
 // ========== Internal imports ==========
-import { assertAllowedCommand, assertNoBlockedFlags } from "@/main/rclone/command-builder";
+import {
+    assertAllowedCommand,
+    assertCommandLength,
+    assertNoBlockedFlags,
+} from "@/main/rclone/command-builder";
 
 export interface itfRunProcessOptions {
     /** 시간 제한(ms). null이면 제한 없음(실행은 사용자가 취소할 때까지 기다린다) */
@@ -285,9 +289,10 @@ export function buildRcloneEnv(base: NodeJS.ProcessEnv): {
     return { env, removed: removed.toSorted() };
 }
 
-/** rclone 실행. 허용 명령·차단 목록을 다시 확인하고 정리한 환경 변수로 실행한다 */
+/** rclone 실행. 허용 명령·차단 목록·명령줄 길이를 다시 확인하고 정리한 환경 변수로 실행한다 */
 export const runRclone: typRunRclone = async (binary, args, opts) => {
     assertAllowedCommand(args);
     assertNoBlockedFlags(args);
+    assertCommandLength(binary, args);
     return runProcess(binary, args, { ...opts, env: buildRcloneEnv(process.env).env });
 };

@@ -23,6 +23,7 @@ import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
+import ExcludeLibraryPicker from "./ExcludeLibraryPicker";
 import ExcludesEditor from "./ExcludesEditor";
 import JobOptionsFields from "./JobOptionsFields";
 import PathField from "./PathField";
@@ -111,6 +112,7 @@ export default function JobEditor() {
     const h_Source = (v: string) => setField("source", v);
     const h_Destination = (v: string) => setField("destination", v);
     const h_Excludes = (v: string[]) => setField("excludes", v);
+    const h_ExcludeIds = (v: string[]) => setField("excludePatternIds", v);
     const h_Notes = (v: string) => setField("notes", v);
     const h_AutoEnabled = (v: boolean) => setAutoSync({ enabled: v });
     const h_AutoInterval = (t: string) => setAutoSync({ intervalMinutes: toNumber(t) });
@@ -233,13 +235,20 @@ export default function JobEditor() {
                     <h3 id="job-excludes-title" className={styles.sectionTitle}>
                         제외
                     </h3>
+                    <ExcludeLibraryPicker
+                        id="job-exclude-library"
+                        value={draft.excludePatternIds}
+                        onChange={h_ExcludeIds}
+                    />
                     <ExcludesEditor
                         id="job-excludes"
+                        label="이 작업에만 쓰는 제외 패턴"
                         value={draft.excludes}
                         onChange={h_Excludes}
                         defaults={settings?.defaults.excludes}
                         defaultsLabel="설정 기본값 불러오기"
                         error={err("excludes")}
+                        commentNote
                     />
                 </section>
 
@@ -274,8 +283,7 @@ export default function JobEditor() {
                     {otherConfig && (
                         <div className={styles.configPath}>
                             <span className={styles.mono} title={override ?? undefined}>
-                                {override ??
-                                    "아직 고르지 않음 — 고르기 전까지는 기본 설정 파일을 씁니다."}
+                                {override ?? "아직 고르지 않음 — 비워 두면 기본 rclone.conf 사용"}
                             </span>
                             <ZBCButton onClick={h_PickConfig}>
                                 {override === null ? "rclone.conf 파일 고르기" : "다른 파일 고르기"}

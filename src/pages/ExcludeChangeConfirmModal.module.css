@@ -1,0 +1,72 @@
+/**
+ * ExcludeChangeConfirmModal 스타일
+ *
+ * @author dev-Joy 2026-10-29
+ */
+
+@layer pages {
+    .ExcludeChangeConfirmModal {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 600px;
+
+        p {
+            margin: 0;
+        }
+
+        .pattern {
+            padding: 0 4px;
+            border-radius: var(--radius);
+            background: var(--bg);
+            font-family: var(--font-mono);
+            word-break: break-all;
+        }
+
+        .message {
+            padding: 6px 10px;
+            border-left: 4px solid var(--warning);
+            border-radius: var(--radius);
+            background: var(--warning-weak);
+        }
+
+        .users {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 240px;
+            margin: 0;
+            padding: 0;
+            overflow-y: auto;
+            list-style: none;
+
+            li {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 8px;
+                border-radius: var(--radius);
+            }
+
+            li[data-auto] {
+                border-left: 4px solid var(--danger);
+                background: var(--danger-weak);
+            }
+        }
+
+        .name {
+            font-weight: 600;
+        }
+
+        .auto {
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 13px;
+        }
+    }
+}

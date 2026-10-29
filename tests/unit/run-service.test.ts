@@ -1,5 +1,5 @@
 // ========== External imports ==========
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import {
     type typRunRclone,
 } from "@/main/rclone/process";
 import { clsActivityLock } from "@/main/services/activity-lock";
+import { resolveEffectiveExcludes } from "@/main/services/effective-excludes";
 import type { itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunService, type itfRunServiceDeps } from "@/main/services/run-service";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -45,6 +46,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         destination: DST,
         mode: "copy",
         excludes: [...excludes],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
@@ -83,6 +85,13 @@ function f_Summary(over: Partial<itfCompareSummary> = {}): itfCompareSummary {
     };
 }
 
+/** 공용 패턴 없는 작업의 제외 해시(테스트 작업은 기본 excludes만 쓴다) */
+const NO_LIBRARY = { patternsFor: (ids: readonly string[]) => ids.map((id) => `lib-${id}`) };
+
+function f_ExcludeHash(job: typJob): string {
+    return resolveEffectiveExcludes(job, NO_LIBRARY).snapshotHash;
+}
+
 function f_Compare(over: Partial<itfCompareResult> = {}): itfCompareResult {
     return {
         jobId: JOB_ID,
@@ -96,6 +105,7 @@ function f_Compare(over: Partial<itfCompareResult> = {}): itfCompareResult {
         entries: [],
         warnings: [],
         planToken: TOKEN,
+        excludeHash: f_ExcludeHash(f_Job()),
         ...over,
     };
 }
@@ -238,9 +248,15 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 if (!ac) return Promise.reject(new clsAppError("INTERNAL"));
                 return Promise.resolve(ac);
             },
-            requirePlan: (jobId, token) => {
+            requirePlan: (jobId, token, excludeHash) => {
                 requirePlanCalls.push(token);
                 if (!compare || token !== compare.planToken) throw new clsAppError("PLAN_REQUIRED");
+                if (excludeHash !== compare.excludeHash) {
+                    throw new clsAppError(
+                        "PLAN_STALE",
+                        "제외 패턴이 바뀌었습니다. 다시 비교하세요.",
+                    );
+                }
                 return compare;
             },
             invalidate: (jobId) => {
@@ -269,6 +285,8 @@ function f_Harness(o: itfHarnessOptions = {}) {
             },
         },
         logsDir,
+        excludes: NO_LIBRARY,
+        excludeFileDir: join(logsDir, "exclude-files"),
         logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) },
         run,
         now: () => new Date(T0),
@@ -295,6 +313,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
         written,
         autoCompareCalls,
         logsDir,
+        excludeFileDir: join(logsDir, "exclude-files"),
         finished: () => events.filter((e) => e.type === "finished"),
     };
 }
@@ -567,6 +586,8 @@ describe("clsRunService 실제 실행 게이트", () => {
             activity: new clsActivityLock(),
             activeRun: { write: async () => undefined, clear: async () => undefined },
             logsDir: h.logsDir,
+            excludes: NO_LIBRARY,
+            excludeFileDir: join(h.logsDir, "exclude-files"),
             logger: { info: () => undefined, warn: () => undefined },
         });
         const e = await f_Err(
@@ -711,8 +732,58 @@ function f_SyncJob(preflight = true): typJob {
     });
 }
 
+/** --exclude-from 값 */
+function f_ExcludeFromArg(args: readonly string[]): string {
+    return args[args.indexOf("--exclude-from") + 1]!;
+}
+
 describe("clsRunService 실제 sync (Phase 7)", () => {
     const SYNC_INPUT = { jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 2 };
+
+    it("제외 패턴 파일: 사전 확인·실제 실행이 같은 --exclude-from 파일을 쓰고, 끝나면 지운다", async () => {
+        const many = Array.from({ length: 70 }, (_v, i) => `p${i}/**`);
+        const job = { ...f_SyncJob(), excludes: [...many, "#keep"] };
+        const h = f_Harness({
+            job,
+            compare: { ...f_SyncCompare(), excludeHash: f_ExcludeHash(job) },
+            scripts: [null, null],
+        });
+        await h.svc.start(SYNC_INPUT);
+        for (let i = 0; i < 200 && h.procs.length < 1; i += 1) {
+            await new Promise((r) => setTimeout(r, 1));
+        }
+        const file = f_ExcludeFromArg(h.procs[0]!.args);
+        expect(existsSync(file)).toBe(true);
+        expect(readFileSync(file, "utf8")).toBe(`${many.join("\n")}\n`);
+        expect(
+            h.procs[0]!.args.slice(
+                h.procs[0]!.args.indexOf("--exclude"),
+                h.procs[0]!.args.indexOf("--exclude") + 2,
+            ),
+        ).toEqual(["--exclude", "#keep"]);
+        h.procs[0]!.finish(fixtureLines("sync-dryrun"));
+        for (let i = 0; i < 200 && h.procs.length < 2; i += 1) {
+            await new Promise((r) => setTimeout(r, 1));
+        }
+        expect(f_ExcludeFromArg(h.procs[1]!.args)).toBe(file);
+        h.procs[1]!.finish(fixtureLines("sync-real"));
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("success");
+        expect(existsSync(file)).toBe(false);
+        expect(readdirSync(h.excludeFileDir)).toEqual([]);
+        const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
+        expect(text).toContain("--exclude-from <제외 파일>");
+        expect(text).not.toContain("excl-run-");
+    });
+
+    it("수동 실행: 비교 뒤 제외 패턴이 바뀌면(해시 다름) PLAN_STALE, 이력·프로세스 없음", async () => {
+        const job = { ...f_SyncJob(), excludes: ["바뀜/**"] };
+        const h = f_Harness({ job, compare: f_SyncCompare() });
+        const e = await f_Err(h.svc.start(SYNC_INPUT));
+        expect(e.code).toBe("PLAN_STALE");
+        expect(h.begun).toEqual([]);
+        expect(h.procs).toEqual([]);
+    });
 
     it("사전 확인 일치 → spawn 2회(1차 --dry-run·--max-delete 없음, 2차 --max-delete 2), 단계 순서", async () => {
         const h = f_Harness({
@@ -1088,6 +1159,20 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
         expect(h.begun[0]).toMatchObject({ status: "canceled" });
         expect(h.procs).toEqual([]);
         expect(h.activity.current()).toBeNull();
+    });
+
+    it("비교의 제외 패턴 해시가 실행 문맥과 다르면 blocked PLAN_STALE, 프로세스 없음", async () => {
+        const h = f_Harness({
+            job: f_AutoJob(),
+            autoCompare: f_Compare({ excludeHash: "0".repeat(32) }),
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("blocked");
+        expect(o.error).toMatchObject({
+            code: "PLAN_STALE",
+            message: expect.stringContaining("제외 패턴"),
+        });
+        expect(h.procs).toEqual([]);
     });
 
     it("비교하는 동안 작업 rev가 바뀌면 blocked PLAN_STALE", async () => {

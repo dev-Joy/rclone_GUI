@@ -246,6 +246,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                     defaults={DEFAULT_EXCLUDES}
                     defaultsLabel="초기값으로"
                     error={err("defaults.excludes")}
+                    hint="새 작업의 작업 전용 패턴 기본값입니다. 한 줄에 하나씩 rclone --exclude 형식으로 씁니다. 공용 제외 패턴은 작업 편집기에서 고릅니다."
                 />
                 <JobOptionsFields
                     idPrefix="defaults"

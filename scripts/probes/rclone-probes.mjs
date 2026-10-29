@@ -7,7 +7,7 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
- *       묶음 이름(copy-cancel-large)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       묶음 이름(copy-cancel-large, excl)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -60,11 +60,39 @@ function f_Save(name, stdout, stderr, status) {
 }
 
 function f_Probe(name, args, group) {
-    if (!f_Selected(name, group)) return;
+    if (!f_Selected(name, group)) return null;
     const r = spawnSync(rclone, args, { shell: false, windowsHide: true, encoding: "utf8" });
     if (r.error) throw r.error;
     f_Save(name, r.stdout ?? "", r.stderr ?? "", r.status);
     console.log(`[${name}] exit=${r.status}  rclone ${f_Sanitize(args.join(" "))}`);
+    return r;
+}
+
+/** lsjson stdout의 Path 목록(정렬). 해석할 수 없으면 null */
+function f_LsPaths(stdout) {
+    try {
+        return JSON.parse(stdout)
+            .map((e) => e.Path)
+            .toSorted();
+    } catch {
+        return null;
+    }
+}
+
+/** sync dry-run stderr(json 로그)의 건너뛴 동작 목록(정렬): "skipped:object" */
+function f_SkippedOps(stderr) {
+    return stderr
+        .split("\n")
+        .map((line) => {
+            try {
+                const j = JSON.parse(line);
+                return j.skipped ? `${j.skipped}:${j.object ?? ""}` : null;
+            } catch {
+                return null;
+            }
+        })
+        .filter((x) => x !== null)
+        .toSorted();
 }
 
 /**
@@ -325,6 +353,110 @@ try {
             g,
         );
         console.log(`  대상 파일(다시 복사 뒤): ${f_ListFiles(largeDst).join(", ") || "(없음)"}`);
+    }
+
+    // INT-002 Phase 2: --exclude-from 파일 해석(주석·이스케이프·BOM·CRLF·공백·빈 줄)과 인자 방식 비교
+    if (f_Selected("excl")) {
+        const g = "excl";
+        const ex = join(work, "excl-src");
+        const exDst = join(work, "excl-dst");
+        mkdirSync(exDst, { recursive: true });
+        // 앞뒤 공백 이름은 Windows가 뒤 공백을 지우므로 실제로 생긴 이름을 출력한다
+        for (const n of ["#a", ";a", "a", " b ", "c", "한글.txt", "{p,q}", "x\\y"]) {
+            f_SetFile(join(ex, n), n, OLD);
+        }
+        console.log(`  excl 원본 파일: ${JSON.stringify(f_ListFiles(ex))}`);
+        const exLs = (name, extra) =>
+            f_Probe(
+                name,
+                [
+                    "lsjson",
+                    "--recursive",
+                    "--files-only",
+                    "--no-mimetype",
+                    ask,
+                    ...common,
+                    ...extra,
+                    "--",
+                    ex,
+                ],
+                g,
+            );
+        const f_ExFile = (name, content) => {
+            const f = join(work, `${name}.txt`);
+            writeFileSync(f, content);
+            return f;
+        };
+        const show = (label, r) =>
+            r &&
+            console.log(
+                `  ${label}: exit=${r.status} 남은 항목=${JSON.stringify(f_LsPaths(r.stdout))}`,
+            );
+
+        // P1: 파일의 #·; 줄은 주석인가, 인자 --exclude "#a"는 적용되는가
+        show(
+            "P1 파일 #a ;a",
+            exLs("excl-comment-file", ["--exclude-from", f_ExFile("p1", "#a\n;a\n")]),
+        );
+        show("P1 인자 #a ;a", exLs("excl-comment-arg", ["--exclude", "#a", "--exclude", ";a"]));
+        // P2: 파일의 \#a 이스케이프
+        show(
+            "P2 파일 \\#a",
+            exLs("excl-escape-file", ["--exclude-from", f_ExFile("p2", "\\#a\n")]),
+        );
+        // P3: 인자 + 파일 동시
+        show(
+            "P3 인자 a + 파일 c",
+            exLs("excl-arg-and-file", ["--exclude", "a", "--exclude-from", f_ExFile("p3", "c\n")]),
+        );
+        // P4: BOM, CRLF
+        show("P4 BOM a,c", exLs("excl-bom", ["--exclude-from", f_ExFile("p4b", "\uFEFFa\nc\n")]));
+        show("P4 CRLF a,c", exLs("excl-crlf", ["--exclude-from", f_ExFile("p4c", "a\r\nc\r\n")]));
+        // P5: 앞뒤 공백 줄
+        show("P5 공백 '  a  '", exLs("excl-spaces", ["--exclude-from", f_ExFile("p5", "  a  \n")]));
+        // P7: 없는 파일
+        show("P7 없는 파일", exLs("excl-missing-file", ["--exclude-from", join(work, "none.txt")]));
+        // P8: 빈 줄
+        show(
+            "P8 빈 줄",
+            exLs("excl-blank-lines", ["--exclude-from", f_ExFile("p8", "\n\na\n\n\nc\n\n")]),
+        );
+
+        // P6: 200개 패턴 — 인자 방식과 파일 방식의 lsjson·sync dry-run 결과가 같은가
+        const many = join(work, "excl-many");
+        for (let i = 0; i < 300; i += 1) {
+            const n = String(i).padStart(3, "0");
+            f_SetFile(join(many, i % 2 === 0 ? `d${n % 7}` : "", `n${n}.dat`), n, OLD);
+        }
+        f_SetFile(join(many, "keep", "한글 이름.txt"), "k", OLD);
+        const patterns = [];
+        for (let i = 0; i < 196; i += 1) patterns.push(`n${String(i).padStart(3, "0")}.dat`);
+        patterns.push("d3/**", "*.tmp", "{n290,n291}.dat", "/n299.dat");
+        const manyArgs = patterns.flatMap((p) => ["--exclude", p]);
+        const manyFile = f_ExFile("p6", `${patterns.join("\n")}\n`);
+        const lsMany = ["lsjson", "--recursive", "--files-only", "--no-mimetype", ask, ...common];
+        const la = f_Probe("excl-many-args-lsjson", [...lsMany, ...manyArgs, "--", many], g);
+        const lf = f_Probe(
+            "excl-many-file-lsjson",
+            [...lsMany, "--exclude-from", manyFile, "--", many],
+            g,
+        );
+        const syncMany = ["sync", ask, ...common, ...tx, ...mw, "--dry-run", ...log];
+        const sa = f_Probe("excl-many-args-sync", [...syncMany, ...manyArgs, "--", many, exDst], g);
+        const sf = f_Probe(
+            "excl-many-file-sync",
+            [...syncMany, "--exclude-from", manyFile, "--", many, exDst],
+            g,
+        );
+        if (la && lf && sa && sf) {
+            const lsSame =
+                JSON.stringify(f_LsPaths(la.stdout)) === JSON.stringify(f_LsPaths(lf.stdout));
+            const syncSame =
+                JSON.stringify(f_SkippedOps(sa.stderr)) === JSON.stringify(f_SkippedOps(sf.stderr));
+            console.log(
+                `  P6 200개: lsjson ${lsSame ? "같음" : "다름"}(${f_LsPaths(lf.stdout)?.length}개), sync dry-run ${syncSame ? "같음" : "다름"}(${f_SkippedOps(sf.stderr).length}건), 인자 명령 길이 ${manyArgs.join(" ").length}자`,
+            );
+        }
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

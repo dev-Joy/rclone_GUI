@@ -6,6 +6,7 @@ import {
     ALLOWED_COMMANDS,
     BLOCKED_FLAGS,
     assertAllowedCommand,
+    assertCommandLength,
     assertNoBlockedFlags,
     buildConfigFileArgs,
     buildListRemotesArgs,
@@ -28,7 +29,7 @@ function f_Input(over: Partial<itfTransferArgsInput> = {}): itfTransferArgsInput
         source: "C:\\tmp\\src",
         destination: "test-remote:dst",
         configPath: "C:\\tmp\\rclone.conf",
-        excludes: ["node_modules/**", "*.tmp"],
+        excludes: { patterns: ["node_modules/**", "*.tmp"], fromFile: null },
         options: { ...DEFAULT_OPTIONS },
         dryRun: false,
         maxDelete: null,
@@ -73,7 +74,7 @@ describe("buildTransferArgs", () => {
         const args = buildTransferArgs(
             f_Input({
                 configPath: null,
-                excludes: [],
+                excludes: { patterns: [], fromFile: null },
                 options: {
                     ...DEFAULT_OPTIONS,
                     fastList: false,
@@ -130,7 +131,7 @@ describe("buildLsjsonArgs", () => {
     const base: itfLsjsonArgsInput = {
         path: "r:a",
         configPath: "C:\\c.conf",
-        excludes: ["x/**"],
+        excludes: { patterns: ["x/**"], fromFile: null },
         withHash: true,
         hashTypes: [],
         skipLinks: true,
@@ -308,6 +309,86 @@ describe("환경 감지·경로 확인 빌더", () => {
         ]) {
             expect(() => assertAllowedCommand(args)).not.toThrow();
         }
+    });
+});
+
+describe("제외 패턴 전달 (INT-002 T-09)", () => {
+    const lsBase: itfLsjsonArgsInput = {
+        path: "r:a",
+        configPath: "C:\\c.conf",
+        excludes: { patterns: ["#a", " b"], fromFile: "C:\\ud\\exclude-files\\excl-cmp-x.txt" },
+        withHash: false,
+        hashTypes: [],
+        skipLinks: false,
+        fastList: false,
+    };
+
+    it("--config → --exclude(인자 패턴) → --exclude-from 순서, '--' 앞에만", () => {
+        const args = buildLsjsonArgs(lsBase);
+        const i = args.indexOf("--config");
+        expect(args.slice(i, i + 7)).toEqual([
+            "--config",
+            "C:\\c.conf",
+            "--exclude",
+            "#a",
+            "--exclude",
+            " b",
+            "--exclude-from",
+        ]);
+        expect(args.indexOf("--exclude-from")).toBeLessThan(args.indexOf("--"));
+        const t = buildTransferArgs(
+            f_Input({ excludes: { patterns: ["#a"], fromFile: "C:\\f.txt" } }),
+        );
+        expect(t.slice(t.indexOf("--exclude"), t.indexOf("--exclude") + 4)).toEqual([
+            "--exclude",
+            "#a",
+            "--exclude-from",
+            "C:\\f.txt",
+        ]);
+    });
+
+    it("--filter·--filter-from·--include*는 만들지 않는다(파일 방식 포함)", () => {
+        const all = [
+            buildLsjsonArgs(lsBase),
+            buildTransferArgs(f_Input({ excludes: { patterns: ["a"], fromFile: "C:\\f.txt" } })),
+            buildTransferArgs(
+                f_Input({
+                    mode: "sync",
+                    dryRun: true,
+                    excludes: { patterns: [], fromFile: "C:\\f.txt" },
+                }),
+            ),
+        ];
+        for (const args of all) {
+            const flags = args.slice(0, args.indexOf("--"));
+            expect(flags.some((a) => /^--(filter|include)/.test(a))).toBe(false);
+            expect(() => assertNoBlockedFlags(args)).not.toThrow();
+        }
+    });
+
+    it("차단 목록은 그대로다", () => {
+        expect(BLOCKED_FLAGS.map((b) => b.flag)).toEqual([
+            "--delete-excluded",
+            "--no-check-dest",
+            "--max-delete -1",
+            "--dump*",
+            "--ignore-errors (백업 없음)",
+        ]);
+    });
+
+    it("assertCommandLength: 한도 안은 통과, 넘으면 VALIDATION(따옴표·역슬래시 포함 추정)", () => {
+        const bin = "C:\\Program Files\\rclone\\rclone.exe";
+        expect(() => assertCommandLength(bin, ["lsjson", "x".repeat(30_000)])).not.toThrow();
+        expect(() => assertCommandLength(bin, ["lsjson", "x".repeat(32_300)])).toThrow(
+            expect.objectContaining({
+                code: "VALIDATION",
+                message: expect.stringContaining("너무 깁니다"),
+            }),
+        );
+        // 역슬래시는 이스케이프로 길이가 늘어난다고 본다
+        expect(() => assertCommandLength(bin, ["lsjson", "\\".repeat(16_200)])).toThrow(
+            expect.objectContaining({ code: "VALIDATION" }),
+        );
     });
 });
 

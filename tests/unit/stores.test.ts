@@ -254,6 +254,103 @@ describe("clsJobStore", () => {
     });
 });
 
+describe("clsJobStore 공용 제외 패턴 연결 (INT-002 T-03)", () => {
+    const P1 = "00000000-0000-4000-8000-0000000000a1";
+    const P2 = "00000000-0000-4000-8000-0000000000a2";
+
+    function f_AddPatterns(db: clsSqliteDb): void {
+        for (const [id, p] of [
+            [P1, "node_modules/**"],
+            [P2, "*.tmp"],
+        ] as const) {
+            db.run(
+                "INSERT INTO exclude_patterns (id, pattern, created_at, updated_at) VALUES ($id, $p, 'x', 'x')",
+                { id, p },
+            );
+        }
+    }
+
+    it("연결 왕복: 중복 제거·정렬, 재시작 후 유지, jobs.data JSON에는 필드 없음", async () => {
+        const db = f_Db();
+        f_AddPatterns(db);
+        const jobs = new clsJobStore({ db, caseInsensitive: () => true });
+        await jobs.load();
+        const job = await jobs.create(f_Draft({ excludePatternIds: [P2, P1, P2] }));
+        expect(job.excludePatternIds).toEqual([P1, P2]);
+        const row = db.get("SELECT data FROM jobs WHERE id = $id", { id: job.id });
+        expect(JSON.parse(String(row?.data))).not.toHaveProperty("excludePatternIds");
+
+        const again = new clsJobStore({ db: f_Db(), caseInsensitive: () => true });
+        expect((await again.load())[0]?.excludePatternIds).toEqual([P1, P2]);
+
+        const copy = await again.duplicate(job.id);
+        expect(copy.excludePatternIds).toEqual([P1, P2]);
+        const updated = await again.update(job.id, { excludePatternIds: [P2] });
+        expect(updated.excludePatternIds).toEqual([P2]);
+        // patch에 없으면 연결 유지
+        expect((await again.update(job.id, { name: "새 이름" })).excludePatternIds).toEqual([P2]);
+        await again.setBookkeeping(job.id, { nextRunAt: null });
+        await again.remove(job.id);
+        expect(
+            db.all("SELECT job_id FROM job_exclude_patterns ORDER BY job_id").map((r) => r.job_id),
+        ).toEqual([copy.id, copy.id]);
+    });
+
+    it("없는 패턴 id는 VALIDATION, 캐시와 행은 그대로", async () => {
+        const db = f_Db();
+        f_AddPatterns(db);
+        const jobs = new clsJobStore({ db, caseInsensitive: () => true });
+        await jobs.load();
+        const missing = "00000000-0000-4000-8000-0000000000ff";
+        await expect(jobs.create(f_Draft({ excludePatternIds: [missing] }))).rejects.toMatchObject({
+            code: "VALIDATION",
+        });
+        expect(jobs.list()).toEqual([]);
+        expect(db.get("SELECT COUNT(*) AS n FROM jobs")).toEqual({ n: 0 });
+        const job = await jobs.create(f_Draft({ excludePatternIds: [P1] }));
+        await expect(jobs.update(job.id, { excludePatternIds: [missing] })).rejects.toMatchObject({
+            code: "VALIDATION",
+        });
+        expect(jobs.get(job.id).excludePatternIds).toEqual([P1]);
+        expect(jobs.get(job.id).rev).toBe(0);
+    });
+
+    it("refreshExcludeLinks: 연결 테이블을 다시 읽고 rev는 그대로, onChange 호출", async () => {
+        const db = f_Db();
+        f_AddPatterns(db);
+        let changes = 0;
+        const jobs = new clsJobStore({
+            db,
+            caseInsensitive: () => true,
+            onChange: () => {
+                changes += 1;
+            },
+        });
+        await jobs.load();
+        const job = await jobs.create(f_Draft({ excludePatternIds: [P1, P2] }));
+        db.run("DELETE FROM job_exclude_patterns WHERE pattern_id = $id", { id: P1 });
+        jobs.refreshExcludeLinks();
+        expect(jobs.get(job.id).excludePatternIds).toEqual([P2]);
+        expect(jobs.get(job.id).rev).toBe(0);
+        expect(changes).toBe(2);
+    });
+
+    it("읽기 한도 안의 예전 값(경로 2000자)은 읽히고, 관리 기록은 되지만 사용자 수정은 거부", async () => {
+        const db = f_Db();
+        const jobs = new clsJobStore({ db, caseInsensitive: () => true });
+        await jobs.load();
+        const job = await jobs.create(f_Draft());
+        const long = `C:\\${"a".repeat(2000)}`;
+        const { excludePatternIds: _x, ...data } = { ...job, source: long };
+        db.run("UPDATE jobs SET data = $d WHERE id = $id", { d: JSON.stringify(data), id: job.id });
+        const again = new clsJobStore({ db, caseInsensitive: () => true });
+        expect((await again.load())[0]?.source).toBe(long);
+        await again.setBookkeeping(job.id, { nextRunAt: null });
+        await expect(again.update(job.id, { name: "x" })).rejects.toBeInstanceOf(ZodError);
+        await again.update(job.id, { source: "C:\\tmp\\short" });
+    });
+});
+
 function f_Record(id: string, status: typRunRecord["status"] = "success"): typRunRecord {
     return {
         id,
@@ -422,6 +519,36 @@ describe("SQLite 저장소 동작 (INT-002 T-01)", () => {
         const s = new clsSettingsStore(db, (n) => notices.push(n));
         expect(await s.load()).toEqual(createDefaultSettings());
         expect(notices).toHaveLength(1);
+    });
+
+    it("설정: 깨진 원본은 meta에 보관되고 update 뒤에도 남는다(최신 3개)", async () => {
+        const db = f_Db();
+        const broken = JSON.stringify({ logs: { historyLimit: "많이" } });
+        db.run("INSERT INTO settings (id, data, updated_at) VALUES (1, $data, 'x')", {
+            data: broken,
+        });
+        const notices: itfAppNotice[] = [];
+        const s = new clsSettingsStore(db, (n) => notices.push(n));
+        await s.load();
+        expect(notices[0]?.message).toContain("원래 값은 저장소에 보관했습니다");
+        await s.update({ ui: { theme: "dark" } });
+        const kept = db.all(
+            "SELECT key, value FROM meta WHERE key LIKE 'settings_unreadable:%' ORDER BY key",
+        );
+        expect(kept).toHaveLength(1);
+        expect(kept[0]?.value).toBe(broken);
+        expect(String(kept[0]?.key)).toMatch(/^settings_unreadable:\d{4}-\d{2}-\d{2}T/);
+
+        for (let i = 0; i < 4; i += 1) {
+            db.run("INSERT INTO meta (key, value) VALUES ($k, 'old')", {
+                k: `settings_unreadable:2000-01-0${i + 1}T00:00:00.000Z`,
+            });
+        }
+        db.run("UPDATE settings SET data = $data WHERE id = 1", { data: broken });
+        await new clsSettingsStore(db).load();
+        const after = db.all("SELECT key FROM meta WHERE key LIKE 'settings_unreadable:%'");
+        expect(after).toHaveLength(3);
+        expect(after.some((r) => String(r.key).startsWith("settings_unreadable:2000-"))).toBe(true);
     });
 
     it("이력: offset 페이지, jobId 필터, 최신순", async () => {

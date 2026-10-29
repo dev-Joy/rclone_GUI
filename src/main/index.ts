@@ -16,6 +16,7 @@
 /// <reference types="electron-vite/node" />
 
 // ========== External imports ==========
+import { join } from "node:path";
 import {
     app,
     BrowserWindow,
@@ -36,6 +37,8 @@ import { registerIpc } from "@/main/ipc/register";
 import { clsLogger } from "@/main/lib/logger";
 import { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsActivityLock } from "@/main/services/activity-lock";
+import { cleanupExcludeFiles, EXCLUDE_FILE_DIR } from "@/main/services/exclude-file";
+import { clsExcludeService } from "@/main/services/exclude-service";
 import { clsCompareService } from "@/main/services/compare-service";
 import { pruneRunLogs } from "@/main/services/log-retention";
 import { clsPathService } from "@/main/services/path-service";
@@ -44,6 +47,7 @@ import { clsRunService } from "@/main/services/run-service";
 import { clsScheduler } from "@/main/services/scheduler";
 import { clsWslService } from "@/main/services/wsl";
 import { openAppDb } from "@/main/store/app-db";
+import { clsExcludeStore } from "@/main/store/exclude-store";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { clsSettingsStore } from "@/main/store/settings-store";
@@ -406,6 +410,12 @@ async function f_Start(): Promise<void> {
         },
     });
     await jobs.load();
+    const excludeStore = new clsExcludeStore({ db });
+    excludeStore.load();
+    // 지난번 비정상 종료로 남은 --exclude-from 임시 파일 정리
+    const excludeFileDir = join(paths.userData, EXCLUDE_FILE_DIR);
+    const leftover = await cleanupExcludeFiles(excludeFileDir);
+    if (leftover > 0) logger.info(`남은 제외 패턴 파일 정리: ${leftover}개`);
     const history = new clsHistoryStore(db, () => settings.get().logs.historyLimit, f_AddNotice);
     await history.load();
     // 지난번 실행 중 비정상 종료로 남은 rclone을 먼저 정리하고, 남은 running 이력을 중단됨으로 바꾼다
@@ -435,6 +445,8 @@ async function f_Start(): Promise<void> {
         rcloneEnv,
         pathService,
         activity,
+        excludes: excludeStore,
+        excludeFileDir,
         logger,
         emit: (e) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -451,6 +463,8 @@ async function f_Start(): Promise<void> {
         activity,
         activeRun,
         logsDir: paths.logs,
+        excludes: excludeStore,
+        excludeFileDir,
         logger,
         emit: (e) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -458,6 +472,13 @@ async function f_Start(): Promise<void> {
             }
             if (e.type === "started" || e.type === "finished") scheduler?.emitState();
         },
+    });
+    const excludes = new clsExcludeService({
+        store: excludeStore,
+        jobs,
+        compare,
+        activity,
+        logger,
     });
     const devTickMs = f_DevTickMs();
     scheduler = new clsScheduler({
@@ -495,6 +516,7 @@ async function f_Start(): Promise<void> {
         runs,
         history,
         scheduler,
+        excludes,
         getWindow: () => mainWindow,
     });
 

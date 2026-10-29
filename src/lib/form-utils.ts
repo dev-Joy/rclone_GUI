@@ -37,6 +37,7 @@ export function excludesIssueText(
     relPath: readonly PropertyKey[],
 ): string {
     if (relPath.length === 0) {
+        if (issue.code === "custom") return issue.message;
         return issue.code === "too_big"
             ? "제외 규칙은 100개까지 쓸 수 있습니다."
             : "제외 규칙을 확인하세요.";

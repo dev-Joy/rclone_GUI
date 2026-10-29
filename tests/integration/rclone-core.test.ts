@@ -58,7 +58,7 @@ function f_List(path: string) {
         buildLsjsonArgs({
             path,
             configPath: conf,
-            excludes: ["*.tmp"],
+            excludes: { patterns: ["*.tmp"], fromFile: null },
             withHash: false,
             hashTypes: [],
             skipLinks: true,
@@ -76,7 +76,7 @@ function f_Transfer(mode: "copy" | "sync", dryRun: boolean, maxDelete: number | 
             source: src,
             destination: dst,
             configPath: conf,
-            excludes: ["*.tmp"],
+            excludes: { patterns: ["*.tmp"], fromFile: null },
             options: { ...OPTIONS },
             dryRun,
             maxDelete,
@@ -189,7 +189,7 @@ describe.skipIf(!HAS_RCLONE)("rclone 실제 동작 (임시 폴더)", () => {
             buildLsjsonArgs({
                 path: join(root, "missing"),
                 configPath: conf,
-                excludes: [],
+                excludes: { patterns: [], fromFile: null },
                 withHash: false,
                 hashTypes: [],
                 skipLinks: true,

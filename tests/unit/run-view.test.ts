@@ -32,6 +32,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         destination: "D:\\tmp\\dst",
         mode: "copy",
         excludes: [...excludes],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
@@ -83,6 +84,7 @@ function f_Result(over: Partial<itfCompareResult> = {}): itfCompareResult {
         entries: [],
         warnings: [],
         planToken: "a".repeat(32),
+        excludeHash: "0".repeat(32),
         ...over,
     };
 }

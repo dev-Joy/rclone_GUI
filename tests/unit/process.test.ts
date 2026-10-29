@@ -186,4 +186,16 @@ describe("runRclone", () => {
             runRclone(NODE, ["sync", "--delete-excluded", "--", "a", "b"], { timeoutMs: 1000 }),
         ).rejects.toBeInstanceOf(clsCommandBlockedError);
     });
+
+    it("명령줄이 Windows 한도를 넘으면 실행 전에 VALIDATION", async () => {
+        const args = [
+            "lsjson",
+            ...Array.from({ length: 700 }, () => ["--exclude", "x".repeat(40)]).flat(),
+            "--",
+            "a",
+        ];
+        await expect(runRclone(NODE, args, { timeoutMs: 1000 })).rejects.toMatchObject({
+            code: "VALIDATION",
+        });
+    });
 });

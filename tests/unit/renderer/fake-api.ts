@@ -19,6 +19,7 @@ import type {
 } from "@/shared/types/compare";
 import { checkPathPair } from "@/shared/path-utils";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
+import type { itfExcludePatternUsage } from "@/shared/schemas/excludes";
 import type { typJob, typJobDraft } from "@/shared/schemas/job";
 import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
@@ -70,6 +71,10 @@ export interface itfFakeApi {
     setSchedulerState: (s: itfSchedulerState) => void;
     emitSchedulerState: (s: itfSchedulerState) => void;
     emitAppNotify: (n: itfAppNotify) => void;
+    /** excludes.list가 돌려줄 공용 패턴 */
+    setExcludes: (items: itfExcludePatternUsage[]) => void;
+    /** 다음 excludes.update/remove 응답 실패(예: CONFIRM_REQUIRED) */
+    setExcludeWriteError: (e: typAppErrorPayload | null) => void;
 }
 
 let uuidSeq = 0;
@@ -89,6 +94,7 @@ export function makeJob(over: Partial<typJob> = {}): typJob {
         destination: "D:\\tmp\\dst",
         mode: "copy",
         excludes: [...excludes],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
@@ -147,6 +153,8 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     let schedulerState: itfSchedulerState = { paused: false, running: null, next: null };
     const schedulerListeners = new Set<(e: itfSchedulerState) => void>();
     const notifyListeners = new Set<(e: itfAppNotify) => void>();
+    let excludes: itfExcludePatternUsage[] = [];
+    let excludeWriteError: typAppErrorPayload | null = null;
     // 시드(fakeUuid(1~99))와 겹치지 않게 100부터
     let seq = 100;
 
@@ -232,6 +240,54 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 jobs = [...jobs, copy];
                 f_Notify();
                 return f_Ok(structuredClone(copy));
+            },
+        },
+        excludes: {
+            list: () => {
+                calls.push("excludes.list");
+                return f_Ok(structuredClone(excludes));
+            },
+            create: (pattern) => {
+                calls.push("excludes.create");
+                const found = excludes.find((e) => e.pattern === pattern.trim());
+                if (found) {
+                    const { usedBy: _u, ...item } = found;
+                    return f_Ok({ item, created: false });
+                }
+                seq += 1;
+                const at = "2026-10-29T00:00:00.000Z";
+                const item = {
+                    id: fakeUuid(seq),
+                    pattern: pattern.trim(),
+                    createdAt: at,
+                    updatedAt: at,
+                };
+                excludes = [...excludes, { ...item, usedBy: [] }];
+                return f_Ok({ item, created: true });
+            },
+            update: (input) => {
+                calls.push("excludes.update");
+                if (excludeWriteError)
+                    return Promise.resolve({ ok: false as const, error: excludeWriteError });
+                const cur = excludes.find((e) => e.id === input.id);
+                if (!cur) return f_Fail("NOT_FOUND");
+                excludes = excludes.map((e) =>
+                    e.id === input.id ? { ...e, pattern: input.pattern } : e,
+                );
+                const { usedBy: _u, ...item } = { ...cur, pattern: input.pattern };
+                return f_Ok(item);
+            },
+            remove: (input) => {
+                calls.push("excludes.remove");
+                if (excludeWriteError)
+                    return Promise.resolve({ ok: false as const, error: excludeWriteError });
+                excludes = excludes.filter((e) => e.id !== input.id);
+                jobs = jobs.map((j) => ({
+                    ...j,
+                    excludePatternIds: j.excludePatternIds.filter((x) => x !== input.id),
+                }));
+                f_Notify();
+                return f_Ok(null);
             },
         },
         compare: {
@@ -399,6 +455,12 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         emitAppNotify: (n) => {
             for (const l of notifyListeners) l(n);
+        },
+        setExcludes: (items) => {
+            excludes = structuredClone(items);
+        },
+        setExcludeWriteError: (e) => {
+            excludeWriteError = e;
         },
     };
 }

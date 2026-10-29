@@ -55,6 +55,12 @@
             font-size: 13px;
         }
 
+        .pathError {
+            margin: 8px 0 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
         .actions {
             display: flex;
             flex-wrap: wrap;

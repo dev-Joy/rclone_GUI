@@ -34,6 +34,7 @@ function f_Job(
         destination: "C:\\fake\\dst",
         mode: "copy",
         excludes: [...excludes],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {

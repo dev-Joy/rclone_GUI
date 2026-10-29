@@ -21,7 +21,8 @@ export interface itfPlanTokenInput {
     source: string;
     destination: string;
     mode: typRunMode;
-    excludes: readonly string[];
+    /** 적용한 제외 패턴(공용 + 작업 전용)·전달 방식 해시(resolveEffectiveExcludes) */
+    excludeSnapshotHash: string;
     options: Pick<
         typJobRunOptions,
         "checkHashes" | "modtimeToleranceMs" | "skipLinks" | "fastList"
@@ -37,14 +38,14 @@ export function computePlanToken(input: itfPlanTokenInput): string {
     const s = input.summary;
     const o = input.options;
     const fields: unknown[] = [
-        1,
+        2,
         input.jobId,
         input.jobRev,
         input.createdAt,
         input.source,
         input.destination,
         input.mode,
-        [...input.excludes],
+        input.excludeSnapshotHash,
         [o.checkHashes, o.modtimeToleranceMs, o.skipLinks, o.fastList],
         input.caseInsensitive,
         input.binaryPath,

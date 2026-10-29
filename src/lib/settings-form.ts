@@ -12,9 +12,16 @@ import {
     stableStringify,
     type itfNumberRange,
 } from "@/lib/form-utils";
-import { zSettings, type typSettings, type typSettingsPatch } from "@/shared/schemas/settings";
+import {
+    zSettings,
+    zSettingsPathInput,
+    type typSettings,
+    type typSettingsPatch,
+} from "@/shared/schemas/settings";
 
 export type typSettingsFormField =
+    | "rclonePath"
+    | "configPath"
     | "defaults.excludes"
     | "defaults.checkers"
     | "defaults.transfers"
@@ -65,7 +72,14 @@ export function validateSettingsDraft(s: typSettings): itfSettingsFormCheck {
             if (field && fieldErrors[field] === undefined) fieldErrors[field] = text;
         }
     }
-    return { fieldErrors, ok: parsed.success };
+    // 읽기 한도(4096)는 넘지 않아도 새로 저장하는 경로는 입력 한도로 막는다
+    for (const key of ["rclonePath", "configPath"] as const) {
+        const r = zSettingsPathInput.safeParse(s[key]);
+        if (!r.success && fieldErrors[key] === undefined) {
+            fieldErrors[key] = r.error.issues[0]?.message ?? "경로를 확인하세요.";
+        }
+    }
+    return { fieldErrors, ok: Object.keys(fieldErrors).length === 0 && parsed.success };
 }
 
 /**

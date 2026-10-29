@@ -16,6 +16,7 @@ import {
     stableStringify,
     type itfNumberRange,
 } from "@/lib/form-utils";
+import { PATH_MAX_INPUT } from "@/shared/option-limits";
 import { checkPathPair } from "@/shared/path-utils";
 import { driveLetterRemoteWarning, looksLikeDriveLetterRemotePath } from "@/shared/remote-name";
 import type { typAppErrorPayload } from "@/shared/schemas/common";
@@ -104,9 +105,11 @@ function f_StringIssueText(field: typJobFormField, issue: z.core.$ZodIssue): str
             return "메모는 4000자 이내로 입력하세요.";
         case "source":
         case "destination":
-            return big ? "경로는 4096자 이내로 입력하세요." : "경로를 입력하세요.";
+            return big ? `경로는 ${PATH_MAX_INPUT}자 이내로 입력하세요.` : "경로를 입력하세요.";
         case "configPathOverride":
-            return big ? "경로는 4096자 이내로 입력하세요." : "rclone.conf 파일을 고르세요.";
+            return big
+                ? `경로는 ${PATH_MAX_INPUT}자 이내로 입력하세요.`
+                : "rclone.conf 파일을 고르세요.";
         case "mode":
             return "복사 또는 동기화를 고르세요.";
         default:
@@ -120,7 +123,7 @@ function f_MapIssue(
     draft: typJobDraft,
 ): { field: typJobFormField; text: string } | null {
     const [head, sub, ...rest] = issue.path;
-    if (head === "excludes") {
+    if (head === "excludes" || head === "excludePatternIds") {
         return {
             field: "excludes",
             text: excludesIssueText(issue, sub === undefined ? [] : [sub, ...rest]),
@@ -157,6 +160,7 @@ export function jobToDraft(job: typJob): typJobDraft {
         destination: job.destination,
         mode: job.mode,
         excludes: [...job.excludes],
+        excludePatternIds: [...job.excludePatternIds],
         options: { ...job.options },
         configPathOverride: job.configPathOverride,
         autoSync: {

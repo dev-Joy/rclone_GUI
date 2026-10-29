@@ -31,6 +31,7 @@ export const ERROR_CODES = [
     "STORE_ERROR",
     "STORE_VERSION_UNSUPPORTED",
     "FORBIDDEN_SENDER",
+    "CONFIRM_REQUIRED",
     "INTERNAL",
 ] as const;
 
@@ -63,5 +64,6 @@ export const ERROR_MESSAGES: Record<typErrorCode, string> = {
     STORE_ERROR: "설정 저장에 실패했습니다.",
     STORE_VERSION_UNSUPPORTED: "지원하지 않는 저장 파일 버전입니다.",
     FORBIDDEN_SENDER: "허용되지 않은 요청입니다.",
+    CONFIRM_REQUIRED: "이 패턴을 쓰는 작업이 바뀌었습니다. 목록을 다시 확인하세요.",
     INTERNAL: "내부 오류가 발생했습니다.",
 };

@@ -9,6 +9,12 @@
 // ========== Internal imports ==========
 import type { typPathKind } from "@/shared/path-utils";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
+import type {
+    itfExcludePatternUsage,
+    typExcludeDeleteInput,
+    typExcludePattern,
+    typExcludeUpdateInput,
+} from "@/shared/schemas/excludes";
 import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
@@ -34,6 +40,10 @@ export const IPC_CHANNELS = {
     jobsUpdate: "jobs:update",
     jobsDelete: "jobs:delete",
     jobsDuplicate: "jobs:duplicate",
+    excludesList: "excludes:list",
+    excludesCreate: "excludes:create",
+    excludesUpdate: "excludes:update",
+    excludesDelete: "excludes:delete",
     compareRun: "compare:run",
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
@@ -152,6 +162,21 @@ export interface itfRcloneGuiApi {
         update(id: string, patch: typJobPatch): Promise<typApiResult<typJob>>;
         remove(id: string): Promise<typApiResult<null>>;
         duplicate(id: string): Promise<typApiResult<typJob>>;
+    };
+    excludes: {
+        /** 공용 제외 패턴과 쓰는 작업(패턴 순) */
+        list(): Promise<typApiResult<itfExcludePatternUsage[]>>;
+        /** 같은 패턴이 이미 있으면 그 패턴을 돌려준다(created:false) */
+        create(
+            pattern: string,
+        ): Promise<typApiResult<{ item: typExcludePattern; created: boolean }>>;
+        /**
+         * confirmedJobIds: 화면에 보여준 사용 작업. main의 지금 목록과 다르면 CONFIRM_REQUIRED,
+         * 사용 작업이 비교·실행 중이면 BUSY. 사용 작업의 비교 결과를 버린다
+         */
+        update(input: typExcludeUpdateInput): Promise<typApiResult<typExcludePattern>>;
+        /** 연결도 함께 지운다(jobs:changed). 확인·BUSY 규칙은 update와 같다 */
+        remove(input: typExcludeDeleteInput): Promise<typApiResult<null>>;
     };
     compare: {
         /** 원본·대상 목록을 읽어 비교한다(파일은 바꾸지 않음). 다른 비교·실행 중이면 BUSY */

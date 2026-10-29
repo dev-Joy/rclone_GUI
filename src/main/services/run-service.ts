@@ -20,6 +20,9 @@
  * - 실제 실행은 결과와 관계없이(취소·실패·차단 포함) 비교 결과를 무효화하고 job.lastRun을 갱신한다.
  *   dry-run은 이력에만 남긴다.
  * - app.log에는 id·수·코드만 남긴다(경로·파일 이름은 실행 로그 파일에만).
+ * - 제외 패턴은 실행 문맥(ctx.excludes)만 쓴다. 게이트는 비교 결과의 excludeHash와 지금 snapshotHash를
+ *   맞춰 보고(다르면 PLAN_STALE), 자동 실행은 같은 실행 안 비교 결과와 맞춰 본다. 파일 방식이면 첫 rclone
+ *   실행 전에 --exclude-from 파일 1개를 만들어 dry-run·사전 확인·실제 실행이 함께 쓰고 끝나면 지운다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -48,10 +51,12 @@ import {
 } from "@/main/rclone/process";
 import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
 import type { clsCompareService } from "@/main/services/compare-service";
+import { writeExcludeFile, type itfExcludeFileHandle } from "@/main/services/exclude-file";
 import { remoteNameOf, resolveJobContext, type itfJobContext } from "@/main/services/job-context";
 import { clsRunEventBatcher, type itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunLogFile, maskArgsForLog, runLogFileName } from "@/main/services/run-log-file";
 import type { clsActiveRunStore } from "@/main/services/run-recovery";
+import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
@@ -83,6 +88,10 @@ export interface itfRunServiceDeps {
     activeRun: Pick<clsActiveRunStore, "write" | "clear">;
     /** 실행 로그 폴더(logs/) */
     logsDir: string;
+    /** 공용 제외 패턴 조회 */
+    excludes: Pick<clsExcludeStore, "patternsFor">;
+    /** --exclude-from 임시 파일 폴더(userData/exclude-files) */
+    excludeFileDir: string;
     logger: Pick<clsLogger, "info" | "warn">;
     /** 기본 runRclone */
     run?: typRunRclone;
@@ -130,6 +139,8 @@ interface itfActiveRun {
     done: Promise<void>;
     /** 마무리한 최종 이력 레코드 */
     final: typRunRecord | null;
+    /** 이 실행의 --exclude-from 파일 경로(파일 방식이 아니면 null) */
+    excludeFile: string | null;
 }
 
 /** 자동 실행 결과(스케줄러가 예약·알림에 쓴다). recorded가 false면 이력에 없다(noop 등) */
@@ -168,11 +179,12 @@ function f_CheckRealGate(
     input: typStartRunInput,
     compare: Pick<clsCompareService, "requirePlan">,
     safety: typSettings["safety"],
+    excludeHash: string,
 ): typRealGate {
     if (!input.planToken) {
         throw new clsAppError("PLAN_REQUIRED", "먼저 비교한 뒤 실행하세요.");
     }
-    const result = compare.requirePlan(job.id, input.planToken);
+    const result = compare.requirePlan(job.id, input.planToken, excludeHash);
     const plan = planFromCompare(result.summary, job.mode);
     const block = checkPlanSafety(plan, job);
     if (block) throw new clsAppError(block.code, block.message);
@@ -312,7 +324,13 @@ export class clsRunService {
         const ctx = await resolveJobContext(job, this.deps);
         const gate = input.dryRun
             ? null
-            : f_CheckRealGate(job, input, this.deps.compare, this.deps.settings.get().safety);
+            : f_CheckRealGate(
+                  job,
+                  input,
+                  this.deps.compare,
+                  this.deps.settings.get().safety,
+                  ctx.excludes.snapshotHash,
+              );
 
         const runId = this.deps.newId();
         const startedAtDate = this.deps.now();
@@ -453,6 +471,7 @@ export class clsRunService {
             logStarted: false,
             done: Promise.resolve(),
             final: null,
+            excludeFile: null,
         };
     }
 
@@ -511,6 +530,22 @@ export class clsRunService {
                     error: {
                         code: "PLAN_STALE",
                         message: "비교하는 동안 작업 설정이 바뀌어 실행하지 않았습니다.",
+                    },
+                    plan: null,
+                },
+                release,
+                true,
+            );
+        }
+        // 실행 문맥과 비교의 제외 패턴이 다르면(그 사이 공용 패턴 변경) 실행하지 않는다
+        if (result.excludeHash !== ctx.excludes.snapshotHash) {
+            return this.finishEarly(
+                active,
+                {
+                    status: "blocked",
+                    error: {
+                        code: "PLAN_STALE",
+                        message: "비교하는 동안 제외 패턴이 바뀌어 실행하지 않았습니다.",
                     },
                     plan: null,
                 },
@@ -644,7 +679,17 @@ export class clsRunService {
         });
         let result: itfProcessResult | null = null;
         let outcome: itfRunOutcome;
+        let file: itfExcludeFileHandle | null = null;
         try {
+            // 파일 방식이면 첫 rclone 실행 전에 만들어 dry-run·사전 확인·실제 실행이 함께 쓴다
+            if (ctx.excludes.fileContent !== null) {
+                file = await writeExcludeFile(
+                    this.deps.excludeFileDir,
+                    ctx.excludes.fileContent,
+                    "run",
+                );
+                active.excludeFile = file.path;
+            }
             const stopped = gate?.preflight
                 ? await this.runPreflight(ctx, gate, active, batcher)
                 : null;
@@ -661,6 +706,9 @@ export class clsRunService {
             }
         } catch (e) {
             outcome = { status: "failed", error: f_StartFailure(e) };
+        } finally {
+            active.excludeFile = null;
+            await file?.dispose();
         }
         await this.finalize(active, outcome, result, batcher, release);
     }
@@ -765,7 +813,7 @@ export class clsRunService {
             source,
             destination,
             configPath: ctx.configPath,
-            excludes: job.excludes,
+            excludes: { patterns: ctx.excludes.argPatterns, fromFile: active.excludeFile },
             options: job.options,
             dryRun: !real,
             maxDelete: step.kind === "real" ? step.gate.maxDelete : null,

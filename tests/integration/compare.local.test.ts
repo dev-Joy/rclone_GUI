@@ -64,6 +64,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         destination: dst,
         mode: "sync",
         excludes: [...excludes, "*.tmp"],
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
@@ -113,6 +114,8 @@ function f_Service(opts: itfHarnessOptions = {}) {
         rcloneEnv,
         pathService,
         activity: new clsActivityLock(),
+        excludes: { patternsFor: () => [] },
+        excludeFileDir: join(root, "exclude-files"),
         logger: LOGGER,
         run: (bin, args, o) =>
             (opts.run && holder.svc ? opts.run(holder.svc) : runRclone)(bin, args, o),

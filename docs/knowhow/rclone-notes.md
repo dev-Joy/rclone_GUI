@@ -108,3 +108,25 @@
 - 결과: exit 1(강제 종료). 대상에는 `big.bin.<hash>.partial`(약 5 MiB)만 남고 **대상 파일 `big.bin`은 생기지 않는다**. lsjson은 이 파일을 보통 파일로 나열하고, sync dry-run은 `Skipped delete ... big.bin.<hash>.partial`(대상에만 있음 → 삭제 대상)로 센다.
 - 결과: 같은 원본·대상이면 `<hash>`가 매번 같다(2회 취소해도 `.partial` 1개). 같은 원본을 다시 copy하면 `Copied (new)`로 끝나고 `.partial`은 없어진다(같은 임시 이름을 다시 써서 이름을 바꾸는 것으로 보임). **원본 파일이 바뀐 뒤** 다시 copy하면 새 파일은 복사되지만 예전 `.partial`은 그대로 남는다. 다른 temp 폴더에서 실행하면 `<hash>`가 다르다.
 - 영향: 앱에서 큰 파일 복사·동기화를 취소(또는 종료 시 취소)하면 대상에 `.partial` 찌꺼기가 남을 수 있다. 다음 비교에서 copy 작업은 "대상에만 있음(유지)", sync 작업은 삭제 대상(삭제 확인 창 샘플에 보임)으로 나온다 — sync는 다음 실행에서 지워 정리하지만 copy는 계속 남는다. 2026-10-29 TASK_011에서 비교 목록·삭제 확인 창에 ‘취소로 남은 임시 파일’로 표시하고, 실제 전송 중 취소·실패면 안내를 띄우도록 했다(정리·제외 규칙은 없음).
+
+## 2026-10-29 · rclone v1.75.1 · Windows 11 x64 (INT-002 Phase 2: `--exclude-from`)
+
+### 18. `--exclude-from` 파일의 `#`·`;` 줄은 주석, `\#`는 이스케이프, 빈 줄은 무시, 줄 앞뒤 공백은 지운다
+- 명령: 임시 폴더(`#a`, `;a`, `a`, ` b `, `c`, `한글.txt`, `{p,q}`, `x/y`)에 `lsjson --recursive --files-only --no-mimetype --ask-password=false --config <conf> --exclude-from <파일> -- <폴더>` (fixture `excl-comment-file`·`excl-comment-arg`·`excl-escape-file`·`excl-blank-lines`·`excl-spaces`)
+- 결과: 파일 내용 `#a\n;a\n` → 아무것도 빠지지 않음(둘 다 주석). 같은 패턴을 인자 `--exclude "#a" --exclude ";a"`로 주면 두 파일이 빠진다. 파일의 `\#a`는 `#a`를 뺀다. 빈 줄은 무시된다. 파일 줄 `  a  `는 `a`를 뺀다(줄 앞뒤 공백을 지움). 모두 exit 0.
+- 영향: 라이브러리 패턴은 `#`·`;` 시작과 앞뒤 공백을 막는다(DB CHECK + zod). 작업 전용 패턴 중 `#`·`;`로 시작하거나 앞뒤 공백이 있는 것은 파일을 쓸 때도 항상 `--exclude` 인자로 넘긴다(`isFileSafePattern`). 파일에는 빈 줄을 쓰지 않는다.
+
+### 19. BOM이 있으면 첫 패턴이 깨진다, CRLF는 문제없다
+- 명령: 같은 폴더에 `--exclude-from`으로 `﻿a\nc\n`(fixture `excl-bom`)과 `a\r\nc\r\n`(fixture `excl-crlf`)
+- 결과: BOM 파일은 `c`만 빠지고 `a`는 남는다(첫 줄이 BOM+`a`로 읽힘). CRLF 파일은 `a`·`c` 모두 빠진다. exit 0, 경고 없음.
+- 영향: 제외 파일은 BOM 없는 UTF-8·LF로만 쓰고, 쓴 뒤 다시 읽어 앞 3바이트가 `EF BB BF`가 아님을 확인한다(`writeExcludeFile`).
+
+### 20. `--exclude`와 `--exclude-from`은 합쳐 적용되고, 200개 패턴은 인자와 파일 결과가 같다
+- 명령: `--exclude a --exclude-from <c만 든 파일>`(fixture `excl-arg-and-file`). 301개 파일 폴더에 패턴 200개(파일 이름 196개, `d3/**`, `*.tmp`, `{n290,n291}.dat`, `/n299.dat`)를 인자 200개(약 3,800자)와 파일 1개로 각각 `lsjson`(`excl-many-args-lsjson`·`excl-many-file-lsjson`)·`sync --dry-run`(`excl-many-args-sync`·`excl-many-file-sync`)
+- 결과: `a`·`c` 모두 빠진다(합집합). 200개는 lsjson 남은 항목 96개, sync dry-run 건너뛴 동작 103건이 두 방식에서 완전히 같다.
+- 영향: 패턴이 많으면(64개 초과 또는 인자 길이 약 8,000자 초과) 파일에 넣을 수 있는 패턴은 `--exclude-from` 파일로, 나머지는 인자로 함께 넘긴다. 비교와 실행이 같은 방식을 쓰도록 방식은 패턴만으로 정한다.
+
+### 21. 없는 `--exclude-from` 파일은 exit 1로 실패한다
+- 명령: `lsjson ... --exclude-from <없는 파일> -- <폴더>` (fixture `excl-missing-file`)
+- 결과: stdout 없음, stderr `CRITICAL: Failed to initialise global options: failed to reload "filter" options: open <파일>: The system cannot find the file specified.`, exit 1.
+- 영향: 파일이 실행 전에 지워져도 제외 없이 진행되지 않고 실패한다. 그래도 파일은 실행 직전에 만들고(`wx`) 다시 읽어 확인하며, 실행이 끝나면 지운다. 앱 시작 때 남은 `exclude-files/excl-*.txt`를 정리한다.

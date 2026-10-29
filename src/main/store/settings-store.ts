@@ -1,7 +1,8 @@
 /**
  * 앱 설정 저장소 (SQLite settings 테이블의 한 행, INT-002 T-01).
  * patch를 병합한 최종 값을 검증한 뒤에만 저장하고, 저장에 성공한 뒤에만 메모리 값을 바꾼다.
- * 저장된 값에 없는 새 설정 항목은 기본값으로 채운다. 읽을 수 없으면 알리고 기본값으로 시작한다.
+ * 저장된 값에 없는 새 설정 항목은 기본값으로 채운다. 읽을 수 없으면 원래 값을 meta에
+ * settings_unreadable:<ISO> 키로 보관(최신 3개)하고 알린 뒤 기본값으로 시작한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -24,6 +25,12 @@ import {
 const zDataRow = z.object({ data: z.string() });
 
 const SQL_SELECT = "SELECT data FROM settings WHERE id = 1";
+const UNREADABLE_PREFIX = "settings_unreadable:";
+const UNREADABLE_KEEP = 3;
+const SQL_KEEP_UNREADABLE =
+    "INSERT INTO meta (key, value) VALUES ($key, $value) ON CONFLICT (key) DO UPDATE SET value = excluded.value";
+const SQL_PRUNE_UNREADABLE =
+    "DELETE FROM meta WHERE key LIKE 'settings_unreadable:%' AND key NOT IN (SELECT key FROM meta WHERE key LIKE 'settings_unreadable:%' ORDER BY key DESC LIMIT $keep)";
 const SQL_UPSERT =
     "INSERT INTO settings (id, data, updated_at) VALUES (1, $data, $updatedAt) ON CONFLICT (id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at";
 
@@ -88,13 +95,28 @@ export class clsSettingsStore {
             this.value = parsed;
         } else {
             this.value = createDefaultSettings();
+            const kept = this.keepUnreadable(row);
             this.onNotice?.({
                 level: "error",
-                message:
-                    "저장된 설정을 읽을 수 없어 기본값으로 시작합니다. 설정을 바꾸면 기본값 기준으로 다시 저장합니다.",
+                message: `저장된 설정을 읽을 수 없어 기본값으로 시작합니다. 설정을 바꾸면 기본값 기준으로 다시 저장합니다.${kept ? " 원래 값은 저장소에 보관했습니다." : ""}`,
             });
         }
         return this.value;
+    }
+
+    /** 읽을 수 없는 설정 원본을 meta에 보관한다(같은 접두사 최신 UNREADABLE_KEEP개). 실패하면 false */
+    private keepUnreadable(row: Record<string, unknown>): boolean {
+        const raw = row.data;
+        const value = typeof raw === "string" ? raw : JSON.stringify(raw ?? null);
+        try {
+            this.db.transaction(() => {
+                this.db.run(SQL_KEEP_UNREADABLE, { key: `${UNREADABLE_PREFIX}${nowIso()}`, value });
+                this.db.run(SQL_PRUNE_UNREADABLE, { keep: UNREADABLE_KEEP });
+            });
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     get(): typSettings {

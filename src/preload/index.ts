@@ -36,6 +36,12 @@ const api: itfRcloneGuiApi = {
         remove: (id) => ipcRenderer.invoke(C.jobsDelete, { id }),
         duplicate: (id) => ipcRenderer.invoke(C.jobsDuplicate, { id }),
     },
+    excludes: {
+        list: () => ipcRenderer.invoke(C.excludesList),
+        create: (pattern) => ipcRenderer.invoke(C.excludesCreate, { pattern }),
+        update: (input) => ipcRenderer.invoke(C.excludesUpdate, input),
+        remove: (input) => ipcRenderer.invoke(C.excludesDelete, input),
+    },
     compare: {
         run: (jobId) => ipcRenderer.invoke(C.compareRun, { jobId }),
         cancel: (jobId) => ipcRenderer.invoke(C.compareCancel, { jobId }),

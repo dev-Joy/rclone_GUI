@@ -2,6 +2,7 @@
  * 작업 실행 문맥 해석. 비교와 실행이 rclone을 부르기 전에 같은 순서로 확인한다.
  * 경로 형식·안전 검사(드라이브 상대 경로 포함) → rclone 실행 파일 → 설정 파일(remote면 필수).
  * 프로세스를 실행하지 않는 검사가 먼저이므로 경로 오류면 rclone 감지도 하지 않는다.
+ * 제외 패턴(공용 + 작업 전용)은 마지막 await 뒤 동기 구간에서 해석한다(비교·실행은 ctx.excludes만 쓴다).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -9,6 +10,11 @@
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
 import type { clsRcloneEnv } from "@/main/rclone/detect";
+import {
+    resolveEffectiveExcludes,
+    type itfEffectiveExcludes,
+} from "@/main/services/effective-excludes";
+import type { clsExcludeStore } from "@/main/store/exclude-store";
 import { checkRunPaths, parsePath, type itfParsedPath } from "@/shared/path-utils";
 import type { typJob } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
@@ -16,6 +22,8 @@ import type { typSettings } from "@/shared/schemas/settings";
 export interface itfJobContextDeps {
     settings: { get(): typSettings };
     rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
+    /** 공용 제외 패턴 조회 */
+    excludes: Pick<clsExcludeStore, "patternsFor">;
 }
 
 export interface itfJobContext {
@@ -28,6 +36,8 @@ export interface itfJobContext {
     binaryPath: string;
     /** --config로 넘길 경로. 없으면 null */
     configPath: string | null;
+    /** 적용할 제외 패턴과 전달 방식(job.excludes를 직접 쓰지 않는다) */
+    excludes: itfEffectiveExcludes;
 }
 
 function f_Parse(raw: string): itfParsedPath {
@@ -75,6 +85,8 @@ export async function resolveJobContext(
             "remote 경로를 쓰려면 rclone 설정 파일이 필요합니다.",
         );
     }
+    // 3) 제외 패턴: 마지막 await 뒤 동기로 해석해 이후 비교·실행이 같은 값을 쓴다
+    const excludes = resolveEffectiveExcludes(job, deps.excludes);
     return {
         job,
         settings,
@@ -83,5 +95,6 @@ export async function resolveJobContext(
         dst,
         binaryPath: rt.binaryPath,
         configPath,
+        excludes,
     };
 }

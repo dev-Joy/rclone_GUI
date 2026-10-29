@@ -8,6 +8,7 @@
 import { z } from "zod";
 
 // ========== Internal imports ==========
+import { PATH_MAX_INPUT, PATH_MAX_STORED } from "@/shared/option-limits";
 import { zExcludes, zJobRunOptions } from "@/shared/schemas/job";
 import type { typDeepPartial } from "@/shared/schemas/common";
 
@@ -19,8 +20,8 @@ export type typJobDefaults = z.infer<typeof zJobDefaults>;
 
 export const zSettings = z.object({
     version: z.literal(1),
-    rclonePath: z.string().trim().min(1).max(4096).nullable(),
-    configPath: z.string().trim().min(1).max(4096).nullable(),
+    rclonePath: z.string().trim().min(1).max(PATH_MAX_STORED).nullable(),
+    configPath: z.string().trim().min(1).max(PATH_MAX_STORED).nullable(),
     defaults: zJobDefaults,
     compare: z.object({
         caseInsensitivePaths: z.boolean(),
@@ -46,14 +47,22 @@ export type typSettings = z.infer<typeof zSettings>;
 
 export type typSettingsPatch = typDeepPartial<Omit<typSettings, "version">>;
 
+/** 새로 저장하는 경로 입력 한도(읽기는 PATH_MAX_STORED) */
+export const zSettingsPathInput = z
+    .string()
+    .trim()
+    .min(1)
+    .max(PATH_MAX_INPUT, `경로는 ${PATH_MAX_INPUT}자 이내로 입력하세요.`)
+    .nullable();
+
 /**
  * 모양만 느슨하게 확인하는 patch 스키마. 값 범위는 병합 후 zSettings로 다시 검사한다.
- * 알 수 없는 키는 거부한다.
+ * 경로는 새 입력 한도(PATH_MAX_INPUT)로 막는다. 알 수 없는 키는 거부한다.
  */
 export const zSettingsPatch = z
     .object({
-        rclonePath: zSettings.shape.rclonePath,
-        configPath: zSettings.shape.configPath,
+        rclonePath: zSettingsPathInput,
+        configPath: zSettingsPathInput,
         defaults: zJobDefaults.partial().strict(),
         compare: zSettings.shape.compare.partial().strict(),
         safety: zSettings.shape.safety.partial().strict(),

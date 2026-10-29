@@ -38,14 +38,15 @@ afterEach(() => {
 });
 
 describe("migrateSchema", () => {
-    it("새 DB는 백업 없이 v1 테이블을 만든다", () => {
+    it("새 DB는 백업 없이 최신(v2) 테이블을 만든다", () => {
         const d = f_Open();
         const backups: number[] = [];
         expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 0, to: SCHEMA_VERSION });
         expect(backups).toEqual([]);
-        expect(SCHEMA_VERSION).toBe(1);
+        expect(SCHEMA_VERSION).toBe(2);
         expect(f_Tables(d)).toEqual([
             "exclude_patterns",
+            "job_exclude_patterns",
             "jobs",
             "meta",
             "remotes",
@@ -54,8 +55,58 @@ describe("migrateSchema", () => {
             "settings",
         ]);
         // 이미 최신이면 아무것도 안 한다
-        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 1, to: 1 });
+        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 2, to: 2 });
         expect(backups).toEqual([]);
+    });
+
+    it("v1 → v2: 백업을 먼저 부르고, #·;·공백 패턴은 버리고 나머지는 옮긴다", () => {
+        const d = f_Open();
+        migrateSchema(d, () => undefined, MIGRATIONS.slice(0, 1));
+        expect(d.getUserVersion()).toBe(1);
+        for (const [id, p] of [
+            ["k1", "node_modules/**"],
+            ["k2", "#주석"],
+            ["k3", ";a"],
+            ["k4", " a"],
+            ["k5", "*.tmp"],
+        ] as const) {
+            d.run(
+                "INSERT INTO exclude_patterns (id, pattern, created_at, updated_at) VALUES ($id, $p, 'x', 'x')",
+                { id, p },
+            );
+        }
+        const backups: number[] = [];
+        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 1, to: 2 });
+        expect(backups).toEqual([1]);
+        expect(d.all("SELECT id FROM exclude_patterns ORDER BY id").map((r) => r.id)).toEqual([
+            "k1",
+            "k5",
+        ]);
+    });
+
+    it("v2 제약: 패턴 CHECK, 쓰는 패턴은 못 지움(RESTRICT), 작업을 지우면 연결도 지움(CASCADE)", () => {
+        const d = f_Open();
+        migrateSchema(d, () => undefined);
+        const ins = (id: string, p: string) =>
+            d.run(
+                "INSERT INTO exclude_patterns (id, pattern, created_at, updated_at) VALUES ($id, $p, 'x', 'x')",
+                { id, p },
+            );
+        for (const bad of ["#a", ";a", " a", "a ", "a\rb", ""]) {
+            expect(() => ins("b", bad)).toThrow(clsSqliteError);
+        }
+        ins("p1", "a");
+        d.run(
+            "INSERT INTO jobs (id, name, rev, created_at, updated_at, data) VALUES ('j', 'n', 0, 'x', 'x', '{}')",
+        );
+        d.run("INSERT INTO job_exclude_patterns (job_id, pattern_id) VALUES ('j', 'p1')");
+        expect(() =>
+            d.run("INSERT INTO job_exclude_patterns (job_id, pattern_id) VALUES ('j', '없음')"),
+        ).toThrow(clsSqliteError);
+        expect(() => d.run("DELETE FROM exclude_patterns WHERE id = 'p1'")).toThrow(clsSqliteError);
+        d.run("DELETE FROM jobs WHERE id = 'j'");
+        expect(d.all("SELECT * FROM job_exclude_patterns")).toEqual([]);
+        d.run("DELETE FROM exclude_patterns WHERE id = 'p1'");
     });
 
     it("v1 제약: settings id=1, json_valid, 제외 패턴 줄바꿈 거부, schedules는 작업 삭제 시 함께 삭제", () => {
@@ -94,7 +145,7 @@ describe("migrateSchema", () => {
         const order: string[] = [];
         const v2: itfMigration[] = [
             ...MIGRATIONS,
-            { version: 2, statements: ["CREATE TABLE extra (x TEXT) STRICT"] },
+            { version: SCHEMA_VERSION + 1, statements: ["CREATE TABLE extra (x TEXT) STRICT"] },
         ];
         const r = migrateSchema(
             d,
@@ -104,23 +155,23 @@ describe("migrateSchema", () => {
             },
             v2,
         );
-        expect(r).toEqual({ from: 1, to: 2 });
-        expect(order).toEqual(["backup:1"]);
+        expect(r).toEqual({ from: SCHEMA_VERSION, to: SCHEMA_VERSION + 1 });
+        expect(order).toEqual([`backup:${SCHEMA_VERSION}`]);
         expect(f_Tables(d)).toContain("extra");
     });
 
-    it("v2 실패 시 ROLLBACK하고 user_version을 그대로 둔다", () => {
+    it("다음 버전 실패 시 ROLLBACK하고 user_version을 그대로 둔다", () => {
         const d = f_Open();
         migrateSchema(d, () => undefined);
         const bad: itfMigration[] = [
             ...MIGRATIONS,
             {
-                version: 2,
+                version: SCHEMA_VERSION + 1,
                 statements: ["CREATE TABLE half (x TEXT) STRICT", "CREATE TABLE jobs (x TEXT)"],
             },
         ];
         expect(() => migrateSchema(d, () => undefined, bad)).toThrow(clsSqliteError);
-        expect(d.getUserVersion()).toBe(1);
+        expect(d.getUserVersion()).toBe(SCHEMA_VERSION);
         expect(f_Tables(d)).not.toContain("half");
     });
 

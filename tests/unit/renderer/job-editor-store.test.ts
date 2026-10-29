@@ -140,6 +140,18 @@ describe("job-editor-store syncFromJobs", () => {
         expect(f_Editor().externalChange).toBe(false);
     });
 
+    it("같은 rev에 공용 패턴이 지워져 연결만 바뀌면 저장본·초안에서 그 id를 뺀다(변경 없음 유지)", () => {
+        const [p1, p2, p3] = [fakeUuid(71), fakeUuid(72), fakeUuid(73)];
+        const job = { ...fake.jobs()[0]!, excludePatternIds: [p1, p2] };
+        f_Editor().openJob(job);
+        f_Editor().setField("excludePatternIds", [p1, p2, p3]);
+        f_Editor().syncFromJobs([{ ...job, excludePatternIds: [p2] }]);
+        expect(f_Editor().baseline?.excludePatternIds).toEqual([p2]);
+        expect(f_Editor().draft?.excludePatternIds).toEqual([p2, p3]);
+        f_Editor().setField("excludePatternIds", [p2]);
+        expect(f_Dirty()).toBe(false);
+    });
+
     it("새 작업 편집은 목록 변경으로 닫히지 않는다", () => {
         f_Editor().openNew(createDefaultSettings());
         f_Editor().syncFromJobs([]);

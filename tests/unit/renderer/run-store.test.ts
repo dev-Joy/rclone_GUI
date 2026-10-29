@@ -34,6 +34,7 @@ function f_Compare(jobId: string, mode: "copy" | "sync" = "copy"): itfCompareRes
         entries: [],
         warnings: [],
         planToken: TOKEN,
+        excludeHash: "0".repeat(32),
     };
 }
 

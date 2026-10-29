@@ -8,6 +8,9 @@
  * - 자동 실행용 compareForAuto는 실행 서비스가 잡은 락 안에서 부른다: 락·캐시·진행 이벤트가 없고
  *   수동 비교 결과(planToken)를 건드리지 않는다. 취소는 넘겨받은 signal로 한다.
  * - 로그에는 작업 id·수·코드만 남기고 경로·파일 이름은 쓰지 않는다.
+ * - 제외 패턴은 실행 문맥(ctx.excludes)만 쓴다. 파일 방식이면 --exclude-from 파일 1개를 만들어 두 lsjson이
+ *   함께 쓰고 끝나면 지운다. 결과의 excludeHash가 지금 패턴과 다르면 get은 null, requirePlan은 PLAN_STALE
+ *   (공용 패턴을 바꿔도 작업 rev는 그대로라 rev만으로는 막지 못한다).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -21,14 +24,21 @@ import {
     type itfLsjsonLineParser,
 } from "@/main/parsers/lsjson-parser";
 import { hintForRcloneError, summarizeStderr } from "@/main/parsers/rclone-env-parser";
-import { buildLsjsonArgs, COMPARE_HASH_TYPES } from "@/main/rclone/command-builder";
+import {
+    buildLsjsonArgs,
+    COMPARE_HASH_TYPES,
+    type itfExcludeArgs,
+} from "@/main/rclone/command-builder";
 import { RCLONE_TIMEOUTS } from "@/main/rclone/config";
 import type { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclone/process";
 import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
-import { remoteNameOf, resolveJobContext } from "@/main/services/job-context";
+import { resolveEffectiveExcludes } from "@/main/services/effective-excludes";
+import { writeExcludeFile, type itfExcludeFileHandle } from "@/main/services/exclude-file";
+import { remoteNameOf, resolveJobContext, type itfJobContext } from "@/main/services/job-context";
 import { PROBE_MISSING_MESSAGE, type clsPathService } from "@/main/services/path-service";
 import { computePlanToken } from "@/main/services/plan-token";
+import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { diffFileLists } from "@/shared/diff-engine";
 import type { itfPathProbe } from "@/shared/ipc-contract";
@@ -50,6 +60,10 @@ export interface itfCompareServiceDeps {
     rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
     pathService: Pick<clsPathService, "probe">;
     activity: clsActivityLock;
+    /** 공용 제외 패턴 조회 */
+    excludes: Pick<clsExcludeStore, "patternsFor">;
+    /** --exclude-from 임시 파일 폴더(userData/exclude-files) */
+    excludeFileDir: string;
     logger: Pick<clsLogger, "info" | "warn">;
     /** 기본 runRclone */
     run?: typRunRclone;
@@ -183,7 +197,7 @@ export class clsCompareService {
         a.controller.abort();
     }
 
-    /** 유효한 결과만. 작업 rev·설정 지문이 바뀌었거나 작업이 없으면 지우고 null */
+    /** 유효한 결과만. 작업 rev·설정 지문·제외 패턴이 바뀌었거나 작업이 없으면 지우고 null */
     get(jobId: string): itfCompareResult | null {
         const entry = this.cache.get(jobId);
         if (!entry) return null;
@@ -196,7 +210,8 @@ export class clsCompareService {
         }
         if (
             job.rev !== entry.result.jobRev ||
-            f_SettingsKey(this.deps.settings.get()) !== entry.settingsKey
+            f_SettingsKey(this.deps.settings.get()) !== entry.settingsKey ||
+            this.currentExcludeHash(job) !== entry.result.excludeHash
         ) {
             this.cache.delete(jobId);
             return null;
@@ -218,9 +233,10 @@ export class clsCompareService {
 
     /**
      * Phase 6/7 실행 게이트용. 없음·토큰 불일치 → PLAN_REQUIRED,
-     * rev/설정 변경·compareMaxAgeMinutes 초과 → PLAN_STALE. 통과하면 결과를 돌려준다.
+     * rev/설정 변경·제외 패턴 변경(excludeHash: 실행 문맥의 snapshotHash)·compareMaxAgeMinutes 초과
+     * → PLAN_STALE. 통과하면 결과를 돌려준다.
      */
-    requirePlan(jobId: string, planToken: string): itfCompareResult {
+    requirePlan(jobId: string, planToken: string, excludeHash: string): itfCompareResult {
         const entry = this.cache.get(jobId);
         if (!entry) throw new clsAppError("PLAN_REQUIRED");
         const job = this.deps.jobs.get(jobId);
@@ -228,6 +244,10 @@ export class clsCompareService {
         if (job.rev !== entry.result.jobRev || f_SettingsKey(settings) !== entry.settingsKey) {
             this.cache.delete(jobId);
             throw new clsAppError("PLAN_STALE", "작업 설정이 바뀌었습니다. 다시 비교하세요.");
+        }
+        if (excludeHash !== entry.result.excludeHash) {
+            this.cache.delete(jobId);
+            throw new clsAppError("PLAN_STALE", "제외 패턴이 바뀌었습니다. 다시 비교하세요.");
         }
         if (entry.result.planToken !== planToken) throw new clsAppError("PLAN_REQUIRED");
         const ageMs = this.deps.now().getTime() - Date.parse(entry.result.createdAt);
@@ -244,6 +264,15 @@ export class clsCompareService {
         this.cache.delete(jobId);
     }
 
+    /** 지금 패턴의 해시. 해석할 수 없으면(지워진 공용 패턴 등) null */
+    private currentExcludeHash(job: typJob): string | null {
+        try {
+            return resolveEffectiveExcludes(job, this.deps.excludes).snapshotHash;
+        } catch {
+            return null;
+        }
+    }
+
     private async execute(
         job: typJob,
         active: itfActiveCompare,
@@ -251,8 +280,37 @@ export class clsCompareService {
     ): Promise<{ result: itfCompareResult; settingsKey: string }> {
         // 1~2) 경로 형식·안전 검사(프로세스 실행 전) → rclone·설정 파일
         const ctx = await resolveJobContext(job, this.deps);
-        const { src, dst, configPath, caseInsensitive } = ctx;
         const settingsKey = f_SettingsKey(ctx.settings);
+        this.throwIfCanceled(active);
+        // 파일 방식이면 두 lsjson이 함께 쓸 제외 파일 1개를 만들고, 비교가 끝나면 지운다
+        let file: itfExcludeFileHandle | null = null;
+        try {
+            if (ctx.excludes.fileContent !== null) {
+                file = await writeExcludeFile(
+                    this.deps.excludeFileDir,
+                    ctx.excludes.fileContent,
+                    "cmp",
+                );
+            }
+            const excludeArgs: itfExcludeArgs = {
+                patterns: ctx.excludes.argPatterns,
+                fromFile: file?.path ?? null,
+            };
+            return await this.executeWith(job, active, t0, ctx, settingsKey, excludeArgs);
+        } finally {
+            await file?.dispose();
+        }
+    }
+
+    private async executeWith(
+        job: typJob,
+        active: itfActiveCompare,
+        t0: number,
+        ctx: itfJobContext,
+        settingsKey: string,
+        excludeArgs: itfExcludeArgs,
+    ): Promise<{ result: itfCompareResult; settingsKey: string }> {
+        const { src, dst, configPath, caseInsensitive } = ctx;
         this.throwIfCanceled(active);
 
         // 3) 폴더 확인
@@ -271,7 +329,14 @@ export class clsCompareService {
         ];
         if (!destMissing)
             sides.push({ label: "대상", path: dst, parser: createLsjsonLineParser() });
-        const lists = await this.listAll(job, sides, configPath, ctx.binaryPath, active);
+        const lists = await this.listAll(
+            job,
+            sides,
+            configPath,
+            ctx.binaryPath,
+            active,
+            excludeArgs,
+        );
         const sourceList = lists[0]!;
         const destList = lists[1] ?? [];
         this.throwIfCanceled(active);
@@ -332,7 +397,7 @@ export class clsCompareService {
             source: src.normalized,
             destination: dst.normalized,
             mode: job.mode,
-            excludes: job.excludes,
+            excludeSnapshotHash: ctx.excludes.snapshotHash,
             options: {
                 checkHashes: job.options.checkHashes,
                 modtimeToleranceMs: job.options.modtimeToleranceMs,
@@ -356,6 +421,7 @@ export class clsCompareService {
             entries: diff.entries,
             warnings,
             planToken,
+            excludeHash: ctx.excludes.snapshotHash,
         };
         return { result, settingsKey };
     }
@@ -415,6 +481,7 @@ export class clsCompareService {
         configPath: string | null,
         binary: string,
         active: itfActiveCompare,
+        excludeArgs: itfExcludeArgs,
     ): Promise<itfFileMeta[][]> {
         let firstError: unknown = null;
         const f_Fail = (e: unknown) => {
@@ -432,12 +499,19 @@ export class clsCompareService {
         };
         const lists = await Promise.all(
             sides.map((side) =>
-                this.listSide(job, side, configPath, binary, active, f_Fail, f_Tick).catch(
-                    (e: unknown) => {
-                        f_Fail(e);
-                        return null;
-                    },
-                ),
+                this.listSide(
+                    job,
+                    side,
+                    configPath,
+                    binary,
+                    active,
+                    excludeArgs,
+                    f_Fail,
+                    f_Tick,
+                ).catch((e: unknown) => {
+                    f_Fail(e);
+                    return null;
+                }),
             ),
         );
         if (active.canceled) throw new clsAppError("CANCELED", "비교를 취소했습니다.");
@@ -453,6 +527,7 @@ export class clsCompareService {
         configPath: string | null,
         binary: string,
         active: itfActiveCompare,
+        excludeArgs: itfExcludeArgs,
         f_Fail: (e: unknown) => void,
         f_Tick: () => void,
     ): Promise<itfFileMeta[]> {
@@ -461,7 +536,7 @@ export class clsCompareService {
         const args = buildLsjsonArgs({
             path: side.path.normalized,
             configPath,
-            excludes: job.excludes,
+            excludes: excludeArgs,
             withHash: job.options.checkHashes,
             hashTypes: COMPARE_HASH_TYPES,
             skipLinks: job.options.skipLinks,

@@ -5,6 +5,8 @@
  *       (기존 데이터면 변경 전 pre-v<N> 백업) → 예전 JSON 1회 이전 → 하루 한 번 daily 백업.
  * - 손상: db·-wal·-shm을 .corrupt-<시각>으로 옮기고, db-backups/에서 최신순으로 무결성이 맞는 첫 백업을
  *   복사해 연다. 없으면 새 DB. 예전 JSON은 이미 .migrated라 다시 가져오지 않는다.
+ * - 복구 시작 표시(db-recovery.pending, {stamp})를 옮기기 전에 만들고, 복구한 DB가 열린 뒤에만 지운다.
+ *   시작할 때 표시가 남아 있으면 본 파일 유무와 관계없이 복구를 이어서 한다(옮기다 멈춘 경우).
  * - 백업은 VACUUM INTO로 만든다(WAL DB 파일을 그대로 복사하지 않는다). daily는 최신 5개만 남기고 pre-v는 지우지 않는다.
  * - 손상이 아닌 열기 오류(권한 등)와 더 새 버전 데이터는 파일을 건드리지 않고 throw한다.
  *
@@ -12,8 +14,8 @@
  */
 
 // ========== External imports ==========
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { copyFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { copyFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 // ========== Internal imports ==========
@@ -28,6 +30,8 @@ import type { itfAppNotice } from "@/shared/ipc-contract";
 
 export const DB_FILE_NAME = "rclonegui-store.sqlite";
 export const DB_BACKUP_DIR = "db-backups";
+/** 복구 시작 표시 파일(userData 안) */
+export const DB_RECOVERY_MARKER = "db-recovery.pending";
 /** daily 백업 보관 수 */
 export const DB_BACKUP_KEEP = 5;
 
@@ -36,6 +40,7 @@ const BACKUP_PREFIX = "rclonegui-store-";
 const DAILY_RE = /^rclonegui-store-daily-(\d{8}-\d{6})\.sqlite$/;
 const REASON_RE = /^[a-z0-9-]{1,32}$/;
 const SIDE_FILES = ["", "-wal", "-shm"] as const;
+const STAMP_RE = /^\d{8}-\d{6}$/;
 
 export interface itfOpenAppDbOptions {
     userDataDir: string;
@@ -106,19 +111,59 @@ function f_OpenChecked(file: string, existed: boolean): clsSqliteDb | null {
     }
 }
 
-/** 손상된 DB를 격리하고 백업으로 복구한다(없으면 새 DB) */
+/** 남은 복구 표시의 stamp. 표시가 없으면 null, 읽을 수 없으면 fallback */
+function f_ReadMarkerStamp(marker: string, fallback: string): string | null {
+    if (!existsSync(marker)) return null;
+    try {
+        const v: unknown = JSON.parse(readFileSync(marker, "utf8"));
+        const stamp =
+            typeof v === "object" && v !== null && "stamp" in v
+                ? (v as { stamp: unknown }).stamp
+                : undefined;
+        return typeof stamp === "string" && STAMP_RE.test(stamp) ? stamp : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+/**
+ * 손상된 DB를 격리하고 백업으로 복구한다(없으면 새 DB).
+ * resumeStamp가 있으면 이전에 멈춘 복구를 그 stamp로 이어서 한다(표시는 이미 있음).
+ */
 async function f_Recover(
     file: string,
     o: itfOpenAppDbOptions,
     now: Date,
+    resumeStamp: string | null = null,
 ): Promise<{ db: clsSqliteDb; restoredFrom: string | null }> {
-    const stamp = fileStamp(now);
+    const marker = join(o.userDataDir, DB_RECOVERY_MARKER);
+    const stamp = resumeStamp ?? fileStamp(now);
+    if (resumeStamp === null) {
+        try {
+            await writeFile(marker, JSON.stringify({ stamp }), { encoding: "utf8", flag: "wx" });
+        } catch (e) {
+            throw new clsAppError(
+                "STORE_ERROR",
+                undefined,
+                `복구 표시를 만들지 못함: ${e instanceof Error ? e.message : String(e)}`,
+            );
+        }
+    }
     const moved: string[] = [];
     for (const suffix of SIDE_FILES) {
         const from = `${file}${suffix}`;
         if (!existsSync(from)) continue;
         const to = `${from}.corrupt-${stamp}`;
-        await renameWithRetry(from, to);
+        try {
+            await renameWithRetry(from, to);
+        } catch (e) {
+            // 표시는 남겨 다음 시작에서 이어서 복구한다
+            throw new clsAppError(
+                "STORE_ERROR",
+                undefined,
+                `손상 파일을 옮기지 못함: ${e instanceof Error ? e.message : String(e)}`,
+            );
+        }
         moved.push(to);
     }
     let restoredFrom: string | null = null;
@@ -132,7 +177,8 @@ async function f_Recover(
         break;
     }
     const db = clsSqliteDb.open({ file });
-    const where = moved.length > 0 ? moved[0] : file;
+    rmSync(marker, { force: true });
+    const where = moved.length > 0 ? moved[0] : `${file}.corrupt-${stamp}`;
     const how = restoredFrom
         ? `${new Date(statSync(restoredFrom).mtimeMs).toLocaleString("ko-KR")}에 만든 백업(${basename(restoredFrom)})으로 복구했습니다. 그 뒤의 변경은 없습니다.`
         : "쓸 수 있는 백업이 없어 빈 저장소로 시작합니다.";
@@ -190,10 +236,17 @@ export async function openAppDb(o: itfOpenAppDbOptions): Promise<itfOpenAppDbRes
     mkdirSync(o.userDataDir, { recursive: true });
     const file = join(o.userDataDir, DB_FILE_NAME);
     const existed = existsSync(file);
+    const resumeStamp = f_ReadMarkerStamp(join(o.userDataDir, DB_RECOVERY_MARKER), fileStamp(now));
 
     let restoredFrom: string | null = null;
-    let db = f_OpenChecked(file, existed);
-    if (!db) ({ db, restoredFrom } = await f_Recover(file, o, now));
+    let db: clsSqliteDb | null = null;
+    if (resumeStamp !== null) {
+        o.logger?.warn("저장소 복구가 끝나지 않은 채 종료되어 이어서 복구합니다.");
+        ({ db, restoredFrom } = await f_Recover(file, o, now, resumeStamp));
+    } else {
+        db = f_OpenChecked(file, existed);
+        if (!db) ({ db, restoredFrom } = await f_Recover(file, o, now));
+    }
 
     try {
         const opened = db;

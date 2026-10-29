@@ -64,6 +64,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         destination: "D:\\tmp\\dst",
         mode: "copy",
         excludes,
+        excludePatternIds: [],
         options,
         configPathOverride: null,
         autoSync: {
