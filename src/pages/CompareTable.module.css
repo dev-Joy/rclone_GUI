@@ -96,6 +96,11 @@
             font-size: 12px;
         }
 
+        .partial {
+            margin-right: 6px;
+            font-family: var(--font);
+        }
+
         .caseOnly {
             color: var(--warning);
             font-family: var(--font);

@@ -6,13 +6,14 @@
  *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
  *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영),
  *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변
- *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 비교 탭) → 대상 반영)
+ *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 비교 탭) → 대상 반영),
+ *        대상의 가짜 `x.bin.0123abcd.partial`을 비교 목록·삭제 확인 창에서 "취소로 남은 임시 파일"로 표시,
  *        이력 탭(목록·상세·로그 끝부분), 설정(트레이·로그인 시작 표시, 이력 비우기), 자동 실행 일시정지
  * 2회차: 재시작 후 작업·설정·lastRun·일시정지 유지, active-run 없음, 이름순 첫 작업 자동 선택,
  *        자동 실행 재개 → 1분 주기 자동 실행(copy 반영·삭제 허용 끈 sync는 blocked·대상 불변) → 일시정지,
  *        실행 중 창 닫기 → 트레이로 숨김(실행 계속) → 트레이 끄고 창 닫기 → 종료 확인(개발 실행 자동 응답 "종료")
- *        → 취소 뒤 종료·rclone 미잔존·active-run 없음·이력 canceled
- * 3회차: 중단됨 안내 없음·lastRun canceled·일시정지 유지·자동 실행 예약 유지(중복 실행 없음)
+ *        → 취소 뒤 종료·rclone 미잔존·active-run 없음·이력 canceled(전송 시작 기록)
+ * 3회차: 중단됨 안내 없음·lastRun canceled·일시정지 유지·자동 실행 예약 유지(중복 실행 없음)·이력 상세 .partial 안내
  * 4회차: --hidden(로그인 시 시작)으로 띄우면 창이 보이지 않음, 콘솔 오류 0건 확인
  * 개발 실행 전용 환경 변수: RCLONEGUI_DEV_TICK_MS(스케줄러 tick 단축), RCLONEGUI_DEV_QUIT_CHOICE(종료 확인 창 자동 응답)
  * 실제 사용자 데이터는 건드리지 않는다(임시 폴더만 사용, 끝나면 삭제).
@@ -889,6 +890,54 @@ try {
     await a.evaluate(`window.rclonegui.jobs.remove(${js(syncJob.data?.id)})`);
     await f_Sleep(300);
 
+    // ===== 취소로 남은 임시 파일(.partial) 표시: 비교 목록·삭제 확인 창 (가짜 .partial, 사용자 파일 report.partial은 아님) =====
+    const partSrc = join(smokeRoot, "partial-src");
+    const partDst = join(smokeRoot, "partial-dst");
+    mkdirSync(partSrc);
+    mkdirSync(partDst);
+    writeFileSync(join(partSrc, "a.txt"), "a");
+    writeFileSync(join(partDst, "x.bin.0123abcd.partial"), "partial");
+    writeFileSync(join(partDst, "report.partial"), "user");
+    const partJob = await a.evaluate(
+        `window.rclonegui.jobs.create({ ...${draft}, name: "partial 스모크", mode: "sync", source: ${js(partSrc)}, destination: ${js(partDst)} })`,
+    );
+    await ui.clickJob("partial 스모크");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "partial 스모크"`);
+    await ui.click("비교");
+    await ui.until(syncReady, 20000);
+    const partRows = await a.evaluate(
+        `[...document.querySelectorAll("tr[data-status=onlyDest]")].map((r) => r.cells[1]?.innerText ?? "")`,
+    );
+    const BADGE = "취소로 남은 임시 파일";
+    f_Check(
+        ".partial 표시: 비교 목록에서 x.bin.0123abcd.partial만 ‘취소로 남은 임시 파일’",
+        partRows.length === 2 &&
+            partRows.some((t) => t.includes("x.bin.0123abcd.partial") && t.includes(BADGE)) &&
+            partRows.some((t) => t.includes("report.partial") && !t.includes(BADGE)),
+        JSON.stringify(partRows),
+    );
+    await ui.click("동기화 실행");
+    await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
+    const partSamples = await a.evaluate(
+        `[...document.querySelectorAll("dialog[open] details li")].map((li) => li.innerText)`,
+    );
+    f_Check(
+        ".partial 표시: 삭제 확인 창 샘플에도 같은 표시(report.partial은 없음)",
+        partSamples.length === 2 &&
+            partSamples.some((t) => t.includes("x.bin.0123abcd.partial") && t.includes(BADGE)) &&
+            partSamples.some((t) => t.includes("report.partial") && !t.includes(BADGE)),
+        JSON.stringify(partSamples),
+    );
+    await ui.click("취소", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
+    f_Check(
+        ".partial 표시만 하고 대상은 그대로",
+        readdirSync(partDst).toSorted().join(",") === "report.partial,x.bin.0123abcd.partial",
+        readdirSync(partDst).toSorted().join(","),
+    );
+    await a.evaluate(`window.rclonegui.jobs.remove(${js(partJob.data?.id)})`);
+    await f_Sleep(300);
+
     // ===== Phase 8: 설정(트레이·로그인 시작·이력 비우기)·일시정지 =====
     const pausePatch = await a.evaluate(
         `window.rclonegui.settings.update({ scheduler: { paused: true } })`,
@@ -1134,9 +1183,11 @@ try {
         `pid=${activeRec?.pid} alive=${rcloneLeft}`,
     );
     f_Check(
-        "종료 뒤 이력은 canceled(중단됨 아님)·대상은 일부만 복사",
-        quitHist?.status === "canceled" && copiedCount < QUIT_FILES,
-        `status=${quitHist?.status} copied=${copiedCount}`,
+        "종료 뒤 이력은 canceled(중단됨 아님)·전송 시작 기록·대상은 일부만 복사",
+        quitHist?.status === "canceled" &&
+            quitHist?.transferStarted === true &&
+            copiedCount < QUIT_FILES,
+        `status=${quitHist?.status} transferStarted=${quitHist?.transferStarted} copied=${copiedCount}`,
     );
 
     const cLaunchedAt = Date.now();
@@ -1181,6 +1232,27 @@ try {
             cAuto: cAuto.length,
         }),
     );
+    // 전송 중 취소한 기록의 이력 상세에는 .partial 안내가 보인다
+    const cUi = f_Ui(c);
+    await cUi.clickJob("종료 스모크");
+    await cUi.until(`document.querySelector("#job-title")?.textContent === "종료 스모크"`);
+    await c.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+    await cUi.until(
+        `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button").length === 1`,
+    );
+    await c.evaluate(
+        `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+    );
+    const quitDetail = await cUi.until(
+        `document.querySelector("dialog[open]")?.innerText.includes("임시 파일(.partial)이 남을 수 있습니다")`,
+        5000,
+    );
+    f_Check(
+        "전송 중 취소한 기록의 이력 상세 → .partial 안내",
+        quitDetail,
+        (await cUi.dialogText()).replace(/\s+/g, " ").slice(0, 300),
+    );
+    await cUi.click("닫기", { inDialog: true });
     await f_Sleep(300);
     const errorsC = [...c.consoleErrors];
     await f_Close(c);

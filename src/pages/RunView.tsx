@@ -3,6 +3,7 @@
  * 실행 시작 버튼은 작업 화면 헤더(미리보기·복사 실행)에 있다.
  * 실제 실행은 취소해도 이미 복사(·삭제)된 파일이 되돌려지지 않는다는 것을 알린다.
  * 사전 확인 불일치(blocked, PLAN_DRIFT)는 비교 결과와 다른 점을 목록으로 보여 준다.
+ * 전송 중 실패·취소로 끝났으면 대상에 임시 파일(.partial)이 남을 수 있다고 알린다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -11,6 +12,7 @@
 import ZBCButton from "@/components/ZBCButton";
 import { runStatusText } from "@/lib/run-view";
 import { formatDuration, formatLocalDateTime } from "@/shared/format";
+import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
 import { matchPlanWithDryRun } from "@/shared/run-plan";
 import type { typRunMode, typRunPhase } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
@@ -144,6 +146,11 @@ export default function RunView(props: itfRunViewProps) {
                                     </pre>
                                 </details>
                             )}
+                        {mayLeavePartial(shownLast.record) && (
+                            <p className={styles.warning} role="note">
+                                {PARTIAL_LEFT_NOTICE}
+                            </p>
+                        )}
                     </div>
                     {shownLast.dryRunSummary && (
                         <DryRunSummary

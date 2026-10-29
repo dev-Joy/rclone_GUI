@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ========== Internal imports ==========
 import { emptySummary } from "@/shared/diff-engine";
+import { PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
 import type { typRunRecord } from "@/shared/schemas/run";
 import type { itfCompareResult } from "@/shared/types/compare";
 import type { itfRunSnapshot } from "@/shared/types/run";
@@ -301,6 +302,48 @@ describe("run-store 이벤트", () => {
         expect(useToastStore.getState().toasts.at(-1)?.message).toContain(
             "이미 복사된 파일은 대상에 남습니다",
         );
+        off();
+    });
+
+    it("전송 중 취소·실패면 결과 토스트 뒤에 .partial 안내 토스트를 띄운다", () => {
+        const off = f_S().subscribe();
+        for (const status of ["canceled", "failed"] as const) {
+            useToastStore.setState(useToastStore.getInitialState(), true);
+            fake.emitRunEvent({
+                type: "finished",
+                runId: RUN,
+                record: f_Record({
+                    status,
+                    transferStarted: true,
+                    error: { code: "RCLONE_FAILED", message: "x" },
+                }),
+                dryRunSummary: null,
+            });
+            const toasts = useToastStore.getState().toasts;
+            expect(toasts).toHaveLength(2);
+            expect(toasts[1]).toMatchObject({ level: "warning", message: PARTIAL_LEFT_NOTICE });
+        }
+        off();
+    });
+
+    it("dry-run·전송 전 멈춤·성공·자동 실행이면 .partial 안내 토스트가 없다", () => {
+        const off = f_S().subscribe();
+        for (const over of [
+            { status: "canceled", dryRun: true, transferStarted: true },
+            { status: "canceled", transferStarted: false },
+            { status: "failed" },
+            { status: "success", transferStarted: true },
+            { status: "canceled", transferStarted: true, trigger: "scheduler" },
+        ] as Array<Partial<typRunRecord>>) {
+            fake.emitRunEvent({
+                type: "finished",
+                runId: RUN,
+                record: f_Record(over),
+                dryRunSummary: null,
+            });
+        }
+        const messages = useToastStore.getState().toasts.map((t) => t.message);
+        expect(messages).not.toContain(PARTIAL_LEFT_NOTICE);
         off();
     });
 

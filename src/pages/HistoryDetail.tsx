@@ -1,6 +1,7 @@
 /**
  * 이력 상세 창(ZBCModal): 결과·오류·계획·사전 확인·rclone 통계와 실행 로그 끝부분(기본 256KB).
  * 이력 표에서 시작 시각을 누르면 열린다(history-store.selectedId). 로그 폴더를 열 수 있다.
+ * 전송 중 실패·취소한 기록이면 대상에 임시 파일(.partial)이 남을 수 있다고 알린다.
  *
  * @author dev-Joy 2026-10-29
  */
@@ -12,6 +13,7 @@ import { errorText, getApi, unwrap } from "@/lib/api";
 import { HISTORY_KIND_LABEL, historyKind } from "@/lib/history-view";
 import { runStatusText } from "@/lib/run-view";
 import { formatBytes, formatDuration, formatLocalDateTime } from "@/shared/format";
+import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
 import { useHistoryStore } from "@/stores/history-store";
 import { useToastStore } from "@/stores/toast-store";
 import RunLogTail from "./RunLogTail";
@@ -99,6 +101,11 @@ export default function HistoryDetail() {
                                 <pre className={styles.detail}>{rec.error.detail}</pre>
                             )}
                         </div>
+                    )}
+                    {mayLeavePartial(rec) && (
+                        <p className={styles.warning} role="note">
+                            {PARTIAL_LEFT_NOTICE}
+                        </p>
                     )}
                     {rec.stats ? (
                         <RunStatsGrid stats={rec.stats} dryRun={rec.dryRun} />

@@ -6,6 +6,7 @@ import { clsAppError } from "@/main/lib/app-error";
 import type { itfAutoOutcome } from "@/main/services/run-service";
 import { autoOutcomeNotice, clsScheduler, FAILURE_WARN_COUNT } from "@/main/services/scheduler";
 import { createDefaultSettings } from "@/shared/defaults";
+import { PARTIAL_LEFT_NOTICE_SHORT } from "@/shared/partial-files";
 import type { typJob } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 import type { itfRunSnapshot } from "@/shared/types/run";
@@ -136,6 +137,7 @@ function f_Harness(jobsInit: typJob[], o: { paused?: boolean; startError?: clsAp
                             stats: null,
                             finishedAt: new Date(nowMs).toISOString(),
                             recorded: true,
+                            transferStarted: false,
                             ...over,
                         });
                     },
@@ -360,7 +362,45 @@ describe("clsScheduler 알림", () => {
                 stats: null,
                 finishedAt: iso(0),
                 recorded: false,
+                transferStarted: false,
             }),
         ).toBeNull();
+    });
+
+    it("autoOutcomeNotice: 전송 중 실패·취소면 .partial 안내를 덧붙인다(경로 없음)", () => {
+        const base: itfAutoOutcome = {
+            runId: "r",
+            jobId: "j",
+            jobName: "n",
+            status: "canceled",
+            error: null,
+            plan: null,
+            stats: null,
+            finishedAt: iso(0),
+            recorded: true,
+            transferStarted: true,
+        };
+        const canceled = autoOutcomeNotice(base);
+        expect(canceled).toEqual({
+            level: "warning",
+            message: `‘n’ 자동 실행을 취소했습니다. ${PARTIAL_LEFT_NOTICE_SHORT}`,
+        });
+        const failed = autoOutcomeNotice({
+            ...base,
+            status: "failed",
+            error: { code: "RCLONE_FAILED", message: "원본: C:\\secret" },
+        });
+        expect(failed?.message.endsWith(PARTIAL_LEFT_NOTICE_SHORT)).toBe(true);
+        expect(failed?.message).not.toContain("secret");
+        // 전송 전에 멈췄거나 성공·일부 실패면 덧붙이지 않는다
+        for (const o of [
+            { ...base, transferStarted: false },
+            { ...base, status: "failed" as const, transferStarted: false },
+            { ...base, status: "partial" as const },
+            { ...base, status: "success" as const },
+        ]) {
+            expect(autoOutcomeNotice(o)?.message).not.toContain(".partial");
+        }
+        expect(autoOutcomeNotice({ ...base, transferStarted: false })?.level).toBe("info");
     });
 });

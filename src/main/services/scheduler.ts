@@ -9,6 +9,7 @@
  * - 앱 시작: 켜진 작업의 예약이 없거나 지났으면 now + 60초(몰아서 따라잡지 않음). 절전 재개도 같다.
  *   일시정지를 풀면 지난 예약만 now + 30초.
  * - 알림: blocked·failed·partial·canceled·success만(noop은 알리지 않음). 문구에는 작업 이름과 수만 쓴다(경로 없음).
+ *   전송 중 실패·취소면 대상에 임시 파일(.partial)이 남을 수 있다고 덧붙인다.
  *   같은 작업이 연속 3번 실패하면 경고를 한 번 더 알린다(자동 실행을 끄지는 않음, 카운터는 메모리).
  *
  * @author dev-Joy 2026-10-29
@@ -20,6 +21,7 @@ import type { clsLogger } from "@/main/lib/logger";
 import type { clsRunService, itfAutoOutcome } from "@/main/services/run-service";
 import type { clsJobStore, itfJobBookkeeping } from "@/main/store/job-store";
 import { ERROR_MESSAGES } from "@/shared/errors";
+import { mayLeavePartial, PARTIAL_LEFT_NOTICE_SHORT } from "@/shared/partial-files";
 import {
     addMinutes,
     nextAfterFinish,
@@ -75,6 +77,14 @@ function f_Count(n: number | undefined): number {
 /** 자동 실행 결과 알림 문구(작업 이름·수만). noop이면 null */
 export function autoOutcomeNotice(o: itfAutoOutcome): itfAppNotify | null {
     const name = `‘${o.jobName}’`;
+    // 전송 중 멈췄으면 .partial 안내를 덧붙인다(자동 실행은 항상 실제 실행)
+    const partial = mayLeavePartial({
+        dryRun: false,
+        status: o.status,
+        transferStarted: o.transferStarted,
+    })
+        ? ` ${PARTIAL_LEFT_NOTICE_SHORT}`
+        : "";
     switch (o.status) {
         case "success": {
             const copied = f_Count(o.stats?.transfers);
@@ -91,7 +101,7 @@ export function autoOutcomeNotice(o: itfAutoOutcome): itfAppNotify | null {
         case "failed":
             return {
                 level: "error",
-                message: `${name} 자동 실행 실패: ${o.error ? ERROR_MESSAGES[o.error.code] : ERROR_MESSAGES.INTERNAL} 이력에서 자세히 확인하세요.`,
+                message: `${name} 자동 실행 실패: ${o.error ? ERROR_MESSAGES[o.error.code] : ERROR_MESSAGES.INTERNAL} 이력에서 자세히 확인하세요.${partial}`,
             };
         case "blocked":
             // 게이트 문구는 수만 담는다(경로 없음)
@@ -100,7 +110,10 @@ export function autoOutcomeNotice(o: itfAutoOutcome): itfAppNotify | null {
                 message: `${name} 자동 실행을 멈췄습니다: ${o.error?.message ?? ERROR_MESSAGES.SAFETY_BLOCKED}`,
             };
         case "canceled":
-            return { level: "info", message: `${name} 자동 실행을 취소했습니다.` };
+            return {
+                level: partial ? "warning" : "info",
+                message: `${name} 자동 실행을 취소했습니다.${partial}`,
+            };
         default:
             return null;
     }

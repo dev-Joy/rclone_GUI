@@ -143,6 +143,8 @@ export interface itfAutoOutcome {
     stats: typRunStats | null;
     finishedAt: string;
     recorded: boolean;
+    /** 실제 전송 rclone을 시작했는지(멈췄으면 대상에 .partial이 남을 수 있음) */
+    transferStarted: boolean;
 }
 
 /** 자동 실행을 실제 전송 없이 끝내는 이유 */
@@ -423,6 +425,7 @@ export class clsRunService {
             pid: null,
             error: null,
             logFile: logFile.fileName,
+            transferStarted: false,
         };
         return {
             snapshot: {
@@ -549,6 +552,7 @@ export class clsRunService {
             stats: rec.stats,
             finishedAt: rec.finishedAt ?? this.deps.now().toISOString(),
             recorded: true,
+            transferStarted: rec.transferStarted === true,
         };
     }
 
@@ -608,6 +612,7 @@ export class clsRunService {
             stats: null,
             finishedAt,
             recorded: saved,
+            transferStarted: false,
         };
     }
 
@@ -785,7 +790,7 @@ export class clsRunService {
             timeoutMs: null,
             signal: active.controller.signal,
             collectStdout: false,
-            onSpawn: (pid) => this.onSpawn(active, pid, imageName, phase),
+            onSpawn: (pid) => this.onSpawn(active, pid, imageName, phase, real),
             onStderrLine: (line) => this.onLine(active, line, batcher),
         });
     }
@@ -795,10 +800,13 @@ export class clsRunService {
         pid: number,
         imageName: string,
         phase: typRunPhase,
+        real: boolean,
     ): void {
         const { runId, jobId, startedAt } = active.snapshot;
         active.pid = pid;
         active.snapshot.phase = phase;
+        // 실제 전송이 시작됐다: 멈추면 대상에 .partial이 남을 수 있다(rclone-notes #17)
+        if (real) active.record.transferStarted = true;
         this.safeEmit({
             type: "phase",
             runId,
@@ -809,7 +817,7 @@ export class clsRunService {
             .write({ version: 1, runId, jobId, pid, startedAt, imageName })
             .catch((e: unknown) => this.warn(`active-run 기록 실패: run=${runId}`, e));
         this.deps.history
-            .patch(runId, { pid, phase })
+            .patch(runId, real ? { pid, phase, transferStarted: true } : { pid, phase })
             .catch((e: unknown) => this.warn(`이력 갱신 실패: run=${runId}`, e));
     }
 
@@ -876,6 +884,7 @@ export class clsRunService {
                 exitCode,
                 pid: active.pid,
                 error: outcome.error,
+                transferStarted: active.record.transferStarted === true,
             };
             record = { ...active.record, ...patch };
             try {

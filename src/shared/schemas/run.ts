@@ -70,6 +70,11 @@ export const zRunRecord = z.object({
     pid: z.number().int().nullable(),
     error: zAppErrorPayload.nullable(),
     logFile: z.string().nullable(),
+    /**
+     * 실제 전송(dry-run·사전 확인 아님) rclone을 시작했는지. 대상에 쓰기 시작했을 수 있다는 뜻이다.
+     * 이 필드가 생기기 전의 기록에는 없다.
+     */
+    transferStarted: z.boolean().optional(),
 });
 export type typRunRecord = z.infer<typeof zRunRecord>;
 

@@ -17,6 +17,7 @@ import { create } from "zustand";
 import { getApi, unwrap } from "@/lib/api";
 import { appendTail, runStatusText } from "@/lib/run-view";
 import { ERROR_MESSAGES } from "@/shared/errors";
+import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
 import { expectedDeletes } from "@/shared/run-plan";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
@@ -91,6 +92,12 @@ function f_Input(jobId: string, dryRun: boolean, confirm?: itfRunConfirm): typSt
 }
 
 function f_FinishToast(rec: typRunRecord): void {
+    f_ResultToast(rec);
+    // 전송 중 멈췄으면 .partial 안내를 결과 토스트 뒤에 따로 띄운다
+    if (mayLeavePartial(rec)) useToastStore.getState().push("warning", PARTIAL_LEFT_NOTICE);
+}
+
+function f_ResultToast(rec: typRunRecord): void {
     const push = useToastStore.getState().push;
     const text = runStatusText(rec.status, rec.dryRun, rec.mode);
     switch (rec.status) {

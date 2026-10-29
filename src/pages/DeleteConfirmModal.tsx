@@ -1,7 +1,7 @@
 /**
  * 삭제가 있는 동기화 실제 실행 확인 (MVP_SPEC §9.2, S10·S11).
  * 작업·모드·원본·대상, 삭제 수·바이트·대상 대비 비율, 삭제 샘플(최대 20개), 빈 폴더 정리 안내,
- * 사전 확인이 꺼져 있으면 경고를 보여 준다. 체크박스 1은 항상, 대량 삭제면 체크박스 2도 체크해야 실행할 수 있다.
+ * 사전 확인이 꺼져 있으면 경고를 보여 준다. 샘플 중 rclone 임시 파일(.partial)은 "취소로 남은 임시 파일"로 표시한다. 체크박스 1은 항상, 대량 삭제면 체크박스 2도 체크해야 실행할 수 있다.
  * main은 화면 체크를 믿지 않고 삭제 수·대량 삭제 확인을 다시 검사한다.
  *
  * @author dev-Joy 2026-10-29
@@ -18,6 +18,7 @@ import ZBCModal from "@/components/ZBCModal";
 import { pathKindBadge } from "@/lib/path-display";
 import { deleteConfirmInfo, deleteSamples, realRunConfirmText } from "@/lib/run-view";
 import { formatBytes } from "@/shared/format";
+import { isRclonePartial, PARTIAL_BADGE_TEXT, PARTIAL_BADGE_TITLE } from "@/shared/partial-files";
 import type { typDeleteThresholds } from "@/shared/run-gates";
 import type { typJob } from "@/shared/schemas/job";
 import type { itfCompareResult } from "@/shared/types/compare";
@@ -128,6 +129,11 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                         {samples.map((s) => (
                             <li key={s.path}>
                                 <span className={styles.samplePath}>{s.path}</span>
+                                {isRclonePartial(s.path) && (
+                                    <ZBCBadge tone="warning" title={PARTIAL_BADGE_TITLE}>
+                                        {PARTIAL_BADGE_TEXT}
+                                    </ZBCBadge>
+                                )}
                                 <span className={styles.sampleSize}>{formatBytes(s.size)}</span>
                             </li>
                         ))}

@@ -2,6 +2,7 @@
  * 비교 결과 표(고정 높이 30px 행의 가상 목록). 보이는 행만 그리고 위·아래는 빈 행으로 채운다.
  * 열: 상태(+사유) · 경로 · 원본 크기·수정시간 · 대상 크기·수정시간. 머리글 버튼으로 정렬한다.
  * 화면 읽기 프로그램용으로 aria-rowcount·aria-rowindex·aria-sort를 둔다. 머리글은 스크롤해도 고정된다.
+ * 대상에만 있는 rclone 임시 파일(.partial)은 경로 앞에 "취소로 남은 임시 파일"로 표시한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -20,6 +21,7 @@ import {
 } from "@/lib/compare-view";
 import { useVirtualRows } from "@/lib/use-virtual-rows";
 import { formatBytes, formatModTime } from "@/shared/format";
+import { isRclonePartial, PARTIAL_BADGE_TEXT, PARTIAL_BADGE_TITLE } from "@/shared/partial-files";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { itfDiffEntry } from "@/shared/types/compare";
 import styles from "./CompareTable.module.css";
@@ -64,6 +66,7 @@ function f_Time(side: itfDiffEntry["source"]): string {
 const CompareRow = memo(function CompareRow(props: itfRowProps) {
     const { entry, mode, rowIndex } = props;
     const reasons = entry.status === "modified" ? reasonText(entry.reasons) : "";
+    const partial = entry.status === "onlyDest" && isRclonePartial(entry.dest?.path ?? entry.path);
     const pathTitle =
         entry.dest && entry.source && entry.dest.path !== entry.source.path
             ? `원본: ${entry.source.path}\n대상: ${entry.dest.path}`
@@ -77,6 +80,13 @@ const CompareRow = memo(function CompareRow(props: itfRowProps) {
                 {reasons && <span className={styles.reason}>{reasons}</span>}
             </td>
             <td className={styles.path} title={pathTitle}>
+                {partial && (
+                    <span className={styles.partial}>
+                        <ZBCBadge tone="warning" title={PARTIAL_BADGE_TITLE}>
+                            {PARTIAL_BADGE_TEXT}
+                        </ZBCBadge>
+                    </span>
+                )}
                 {entry.path}
                 {entry.caseOnly && <span className={styles.caseOnly}> 대소문자만 다름</span>}
             </td>

@@ -16,6 +16,7 @@ import { clsActivityLock } from "@/main/services/activity-lock";
 import type { itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunService, type itfRunServiceDeps } from "@/main/services/run-service";
 import { createDefaultSettings } from "@/shared/defaults";
+import { mayLeavePartial } from "@/shared/partial-files";
 import type { typJob } from "@/shared/schemas/job";
 import type { typActiveRunFile, typRunRecord } from "@/shared/schemas/run";
 import type { itfCompareResult, itfCompareSummary } from "@/shared/types/compare";
@@ -630,6 +631,9 @@ describe("clsRunService 락·취소·실패", () => {
         expect(h.procs[0]!.aborts).toBe(1);
         expect(rec.status).toBe("canceled");
         expect(rec.error?.code).toBe("CANCELED");
+        // dry-run은 대상에 쓰지 않는다
+        expect(rec.transferStarted).toBe(false);
+        expect(mayLeavePartial(rec)).toBe(false);
         h.svc.cancel(runId);
     });
 
@@ -642,11 +646,24 @@ describe("clsRunService 락·취소·실패", () => {
             confirmedDeletes: 0,
         });
         h.svc.cancel(runId);
-        await f_Done(h);
+        const rec = await f_Done(h);
         expect(h.invalidated).toEqual([JOB_ID]);
         expect(h.bookkeeping).toEqual([
             expect.objectContaining({ lastRun: expect.objectContaining({ status: "canceled" }) }),
         ]);
+        // 전송 중 취소: 대상에 .partial이 남을 수 있다
+        expect(rec.transferStarted).toBe(true);
+        expect(h.patches.some((p) => p.transferStarted === true)).toBe(true);
+        expect(mayLeavePartial(rec)).toBe(true);
+    });
+
+    it("실제 실행에서 rclone을 시작하지 못하면 transferStarted false(.partial 안내 없음)", async () => {
+        const h = f_Harness({ spawnError: "ENOENT" });
+        await h.svc.start({ jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 0 });
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("failed");
+        expect(rec.transferStarted).toBe(false);
+        expect(mayLeavePartial(rec)).toBe(false);
     });
 
     it("프로세스 종료를 확인하지 못하면(closed:false) active-run을 남긴다", async () => {
@@ -807,6 +824,8 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
         expect(h.procs).toHaveLength(1);
         expect(rec.status).toBe("canceled");
         expect(rec.error?.message).toContain("사전 확인 중 취소");
+        expect(rec.transferStarted).toBe(false);
+        expect(mayLeavePartial(rec)).toBe(false);
         expect(h.invalidated).toEqual([JOB_ID]);
     });
 
@@ -823,6 +842,7 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
         expect(rec.status).toBe("failed");
         expect(rec.error).toMatchObject({ code: "RCLONE_FAILED", detail: "boom" });
         expect(rec.error?.message).toMatch(/^사전 확인에 실패해/);
+        expect(mayLeavePartial(rec)).toBe(false);
     });
 
     it("실제 sync exit 7 → failed MAX_DELETE_EXCEEDED (fixture sync-maxdelete1)", async () => {
@@ -873,7 +893,12 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
     it("copy: 비교(compareForAuto) → 실행, trigger scheduler, started는 비교 단계, lastRun·무효화", async () => {
         const h = f_Harness({ job: f_AutoJob(), script: { lines: fixtureLines("copy-real") } });
         const o = await f_Auto(h);
-        expect(o).toMatchObject({ status: "success", recorded: true, jobName: "실행 작업" });
+        expect(o).toMatchObject({
+            status: "success",
+            recorded: true,
+            jobName: "실행 작업",
+            transferStarted: true,
+        });
         expect(h.autoCompareCalls).toEqual([JOB_ID]);
         expect(h.requirePlanCalls).toEqual([]);
         expect(h.procs).toHaveLength(1);
@@ -1059,6 +1084,7 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
         const o = await done;
         expect(o.status).toBe("canceled");
         expect(o.error?.message).toContain("비교 중에 취소");
+        expect(o.transferStarted).toBe(false);
         expect(h.begun[0]).toMatchObject({ status: "canceled" });
         expect(h.procs).toEqual([]);
         expect(h.activity.current()).toBeNull();

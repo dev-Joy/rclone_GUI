@@ -100,6 +100,16 @@
 - 검증: check(unit 678), format:check, test:int 36(+1 skip), build, drive-app 빌드본 94 통과
 - 설계와 다름: compare-service는 기존 private `execute`를 공통 core로 그대로 쓰고 `silent` 플래그로 이벤트만 막음. launch 대신 `createActive`·`beginRecord`로 공통화. 자동 실행의 비교 단계에서 종료하면 묻지 않고 취소. 개발 전용 환경 변수 `RCLONEGUI_DEV_TICK_MS`·`RCLONEGUI_DEV_QUIT_CHOICE` 추가. 화면의 `window.close()`는 페이지만 닫아 종료 흐름을 타지 않으므로 drive-app은 `taskkill`(/F 없음, WM_CLOSE)과 두 번째 실행으로 확인
 
+[TASK_011] : (2026-10-29) 취소·실패로 남은 rclone 임시 파일(.partial) 표시·안내 (관련 Intent: INT-001)
+- 결정: TASK_009 대응안 중 ① 취소·실패 안내 ② 비교 결과 표시만 구현(사용자 결정). ③ 정리 동작·기본 제외 규칙 `*.partial`은 하지 않음, 실행 동작은 바꾸지 않음
+- 판정 기준: 최종 이력의 phase는 항상 finalizing이고 pid는 사전 확인에서 멈춰도 남아 구분할 수 없음 → 이력에 `transferStarted`(선택, 예전 기록은 없음) 추가. 실제 전송(step real) rclone의 onSpawn에서 true, 시작값 false. `mayLeavePartial` = 실제 실행 && transferStarted === true && status canceled·failed (dry-run·사전 확인 중 멈춤·rclone 시작 전 실패·성공·partial·blocked는 false)
+- shared `partial-files.ts`: `isRclonePartial`(마지막 경로 요소가 `/^.+\.[0-9a-f]{8}\.partial$/i`, fixture lsjson-dst-after-cancel로 확인), `mayLeavePartial`, 안내·배지 문구 상수
+- main: run-service(createActive transferStarted false, onSpawn real이면 true·이력 patch, finalize patch, 자동 실행 결과 `transferStarted`), scheduler `autoOutcomeNotice` 실패·취소 문구에 짧은 안내(경로 없음, 취소는 warning)
+- 화면: CompareTable 대상에만 있는 .partial 행 경로 앞 ZBCBadge(warning) "취소로 남은 임시 파일", DeleteConfirmModal 삭제 샘플 같은 배지, RunView 결과·HistoryDetail에 경고(role=note), run-store 결과 토스트 뒤 warning 토스트(자동 실행은 main 알림)
+- 테스트: 단위 partial-files(fixture·맞는/안 맞는 이름·report.partial 오탐 없음·예전 기록 파싱), run-service(실제 copy 취소 true·실제 실행 ENOENT·dry-run·사전 확인 취소/실패 false·자동 실행 결과), scheduler 알림, renderer run-store 토스트 2건. drive-app: 가짜 `x.bin.0123abcd.partial`·`report.partial` sync 비교 목록·삭제 확인 창 표시(대상 불변), 종료 취소 이력 transferStarted, 3회차 이력 상세 안내
+- 검증: check(unit 708), format:check, test:int 36(+1 skip), build, drive-app 빌드본 98 통과
+- 후속: 실행 중 앱 비정상 종료로 `interrupted`가 된 기록도 전송이 시작됐다면 안내 대상에 포함(`mayLeavePartial`)
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
