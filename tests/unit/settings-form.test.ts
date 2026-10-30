@@ -7,12 +7,12 @@ import { createDefaultSettings } from "@/shared/defaults";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
 describe("설정 폼 검증", () => {
-    it("rclone·설정 파일 경로는 1024자까지(읽기 한도 4096 안이어도 저장은 막음)", () => {
+    it("rclone·설정 파일 경로는 4096자까지", () => {
         const s = createDefaultSettings();
-        s.configPath = `C:\\${"a".repeat(2000)}`;
+        s.configPath = `C:\\${"a".repeat(5000)}`;
         const r = validateSettingsDraft(s);
         expect(r.ok).toBe(false);
-        expect(r.fieldErrors.configPath).toBe("경로는 1024자 이내로 입력하세요.");
+        expect(r.fieldErrors.configPath).toBe("경로는 4096자 이내로 입력하세요.");
         expect(r.fieldErrors.rclonePath).toBeUndefined();
     });
 

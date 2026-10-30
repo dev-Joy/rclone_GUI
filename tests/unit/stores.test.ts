@@ -335,7 +335,7 @@ describe("clsJobStore 공용 제외 패턴 연결 (INT-002 T-03)", () => {
         expect(changes).toBe(2);
     });
 
-    it("읽기 한도 안의 예전 값(경로 2000자)은 읽히고, 관리 기록은 되지만 사용자 수정은 거부", async () => {
+    it("4096자 이내의 예전 경로 값은 읽고 그대로 수정할 수 있다", async () => {
         const db = f_Db();
         const jobs = new clsJobStore({ db, caseInsensitive: () => true });
         await jobs.load();
@@ -346,7 +346,8 @@ describe("clsJobStore 공용 제외 패턴 연결 (INT-002 T-03)", () => {
         const again = new clsJobStore({ db, caseInsensitive: () => true });
         expect((await again.load())[0]?.source).toBe(long);
         await again.setBookkeeping(job.id, { nextRunAt: null });
-        await expect(again.update(job.id, { name: "x" })).rejects.toBeInstanceOf(ZodError);
+        await again.update(job.id, { name: "x" });
+        expect(again.get(job.id).source).toBe(long);
         await again.update(job.id, { source: "C:\\tmp\\short" });
     });
 });

@@ -81,7 +81,7 @@ export const useRcloneEnvStore = create<itfRcloneEnvState>((set, get) => {
         set((s) => ({ remotesByConfig: { ...s.remotesByConfig, [configPath]: value } }));
     }
 
-    /** 고른 경로를 저장 전에 검사한다(1024자 등). 통과하면 true */
+    /** 고른 경로를 저장 전에 검사한다(4096자 등). 통과하면 true */
     function f_CheckPath(path: string): boolean {
         const r = zSettingsPathInput.safeParse(path);
         if (r.success) {

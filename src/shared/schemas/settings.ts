@@ -47,7 +47,7 @@ export type typSettings = z.infer<typeof zSettings>;
 
 export type typSettingsPatch = typDeepPartial<Omit<typSettings, "version">>;
 
-/** 새로 저장하는 경로 입력 한도(읽기는 PATH_MAX_STORED) */
+/** 새로 저장하는 경로 입력 한도(읽기와 같은 PATH_MAX_STORED) */
 export const zSettingsPathInput = z
     .string()
     .trim()

@@ -1,6 +1,6 @@
 /**
  * 옵션 길이·개수 한도 (INT-002 T-09).
- * 저장된 값을 읽을 때는 예전 한도(경로 4096)를 그대로 받고, 새로 저장하는 입력만 좁은 한도로 막는다.
+ * 경로는 읽기·저장 입력 모두 4096자로 통일한다(깊은 UNC·확장 경로 보호, spec Q1 결정).
  * 제외 패턴 전달 방식(인자 / --exclude-from 파일)과 Windows 명령줄 길이 한도도 여기서 정한다.
  *
  * @author dev-Joy 2026-10-29
@@ -9,7 +9,7 @@
 /** 저장된 경로를 읽을 때의 한도 */
 export const PATH_MAX_STORED = 4096;
 /** 새로 저장하는 경로 입력 한도 */
-export const PATH_MAX_INPUT = 1024;
+export const PATH_MAX_INPUT = 4096;
 /** 일반 옵션 문자열 한도(예약) */
 export const OPTION_STRING_MAX = 256;
 /** 제외 패턴 한 개 길이 */

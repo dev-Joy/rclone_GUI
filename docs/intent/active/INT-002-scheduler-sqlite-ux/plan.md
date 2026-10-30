@@ -37,7 +37,7 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 2.1 | **probe 먼저:** `#`·`;` 주석, 인자 방식과 `--exclude-from` 결과가 같은지, BOM·CRLF 처리 | `scripts/probes/rclone-probes.mjs`, `tests/fixtures/rclone/`, `docs/knowhow/rclone-notes.md` | P1 | probe 결과 기록 | fixture 삭제 |
-| 2.2 | 길이 한도 상수와 zod(로드 4096 / 저장 1024, spec Q1 결정 후) | `src/shared/schemas/job.ts`·`settings.ts`, 새 파일 `src/shared/option-limits.ts` | — | unit `schemas.test.ts` | revert |
+| 2.2 | 길이 한도 상수와 zod(로드·저장 4096, spec Q1 결정) | `src/shared/schemas/job.ts`·`settings.ts`, 새 파일 `src/shared/option-limits.ts` | — | unit `schemas.test.ts` | revert |
 | 2.3 | 스키마 v2: `job_exclude_patterns`, 패턴 CHECK에 `#`·`;` 차단, 기존 `#`·`;` 패턴 검사 | `db-schema.ts`, `app-db.ts` | P1 | unit `db-schema.test.ts`(v1→v2, pre-v2 백업) | `db-backups\pre-v2-*` |
 | 2.4 | 패턴 저장소와 IPC `excludes:*`(사용 작업, CONFIRM_REQUIRED, 캐시 무효화) | 새 파일 `src/main/store/exclude-store.ts`, `src/main/ipc/excludes.ts`, `ipc-contract.ts`, `preload` | 2.3 | unit, IPC envelope 테스트 | revert |
 | 2.5 | 실제로 쓰는 패턴 합치기, `--exclude-from` 임시 파일(`wx`·LF·BOM 없음·실행 후 삭제·시작 시 정리), 명령 길이 검사 | `command-builder.ts`(`f_PushCommon`), `run-service.ts`, `compare-service.ts`, 새 파일 `src/main/services/exclude-file.ts` | 2.1, 2.4 | unit `command-builder.test.ts`(차단 목록 그대로), test:int | revert |

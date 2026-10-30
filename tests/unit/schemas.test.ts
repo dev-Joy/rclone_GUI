@@ -103,14 +103,16 @@ function f_Stored(over: Record<string, unknown> = {}) {
 }
 
 describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
-    it("경로 4096자는 읽을 때 통과하고 저장 입력에서는 거부한다", () => {
-        const long = `C:\\${"a".repeat(4090)}`;
-        expect(zJob.safeParse(f_Stored({ source: long })).success).toBe(true);
-        expect(zJobDraft.safeParse({ ...f_Draft(), source: long }).success).toBe(false);
-        expect(zJobPatch.safeParse({ destination: long }).success).toBe(false);
-        expect(
-            zJobDraft.safeParse({ ...f_Draft(), source: `C:\\${"a".repeat(1000)}` }).success,
-        ).toBe(true);
+    it("경로 4096자는 읽기·저장 모두 통과하고 4097자는 거부한다", () => {
+        const max = `C:\\${"a".repeat(4093)}`;
+        expect(max.length).toBe(4096);
+        expect(zJob.safeParse(f_Stored({ source: max })).success).toBe(true);
+        expect(zJobDraft.safeParse({ ...f_Draft(), source: max }).success).toBe(true);
+        expect(zJobPatch.safeParse({ destination: max }).success).toBe(true);
+        const over = `C:\\${"a".repeat(4094)}`;
+        expect(zJob.safeParse(f_Stored({ source: over })).success).toBe(false);
+        expect(zJobDraft.safeParse({ ...f_Draft(), source: over }).success).toBe(false);
+        expect(zJobPatch.safeParse({ destination: over }).success).toBe(false);
     });
 
     it("excludePatternIds가 없는 예전 저장 값은 []로 읽는다", () => {
@@ -140,12 +142,14 @@ describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
         expect(zJobDraft.safeParse({ ...f_Draft(), excludePatternIds: ["x"] }).success).toBe(false);
     });
 
-    it("설정 patch 경로는 1024자까지, 읽기는 4096자까지", () => {
-        const long = `C:\\${"a".repeat(2000)}`;
+    it("설정 patch·읽기 경로 모두 4096자까지", () => {
+        const long = `C:\\${"a".repeat(5000)}`;
         expect(zSettingsPatch.safeParse({ configPath: long }).success).toBe(false);
         expect(zSettings.safeParse({ ...createDefaultSettings(), configPath: long }).success).toBe(
-            true,
+            false,
         );
+        const max = `C:\\${"a".repeat(4093)}`;
+        expect(zSettingsPatch.safeParse({ configPath: max }).success).toBe(true);
     });
 });
 

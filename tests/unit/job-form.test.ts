@@ -95,12 +95,12 @@ describe("validateJobDraft 기본", () => {
 });
 
 describe("validateJobDraft 경로", () => {
-    it("경로 1024자 초과는 해당 필드 오류(저장 한도)", () => {
-        const long = `C:\\${"a".repeat(1100)}`;
+    it("경로 4096자 초과는 해당 필드 오류(저장 한도)", () => {
+        const long = `C:\\${"a".repeat(5000)}`;
         const r = validateJobDraft(f_Draft({ source: long }), true);
-        expect(r.fieldErrors.source).toBe("경로는 1024자 이내로 입력하세요.");
+        expect(r.fieldErrors.source).toBe("경로는 4096자 이내로 입력하세요.");
         const c = validateJobDraft(f_Draft({ configPathOverride: long }), true);
-        expect(c.fieldErrors.configPathOverride).toBe("경로는 1024자 이내로 입력하세요.");
+        expect(c.fieldErrors.configPathOverride).toBe("경로는 4096자 이내로 입력하세요.");
     });
 
     it("공용 + 작업 전용 합계 500 초과는 제외 필드 오류", () => {
