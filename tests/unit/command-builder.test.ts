@@ -33,6 +33,7 @@ function f_Input(over: Partial<itfTransferArgsInput> = {}): itfTransferArgsInput
         configPath: "C:\\tmp\\rclone.conf",
         excludes: { patterns: ["node_modules/**", "*.tmp"], fromFile: null },
         options: { ...DEFAULT_OPTIONS },
+        scope: "files",
         dryRun: false,
         maxDelete: null,
         ...over,
@@ -129,6 +130,36 @@ describe("buildTransferArgs", () => {
     });
 });
 
+describe("동기화 범위 (INT-002 T-05)", () => {
+    it("파일만 범위는 --create-empty-src-dirs를 넣지 않는다", () => {
+        expect(buildTransferArgs(f_Input())).not.toContain("--create-empty-src-dirs");
+        expect(
+            buildTransferArgs(f_Input({ mode: "sync", dryRun: false, maxDelete: 0 })),
+        ).not.toContain("--create-empty-src-dirs");
+    });
+
+    it("전체 범위는 copy·sync, dry-run·실제 모두 --modify-window 뒤에 --create-empty-src-dirs", () => {
+        for (const input of [
+            f_Input({ scope: "all" }),
+            f_Input({ scope: "all", dryRun: true }),
+            f_Input({ scope: "all", mode: "sync", dryRun: true }),
+            f_Input({ scope: "all", mode: "sync", maxDelete: 2 }),
+        ]) {
+            const args = buildTransferArgs(input);
+            const i = args.indexOf("--create-empty-src-dirs");
+            expect(i).toBeGreaterThan(args.indexOf("--modify-window"));
+            expect(i).toBeLessThan(args.indexOf("--"));
+            expect(() => assertAllowedCommand(args)).not.toThrow();
+        }
+    });
+
+    it("전체 범위 실제 sync의 --max-delete는 그대로 붙는다", () => {
+        const args = buildTransferArgs(f_Input({ scope: "all", mode: "sync", maxDelete: 3 }));
+        const i = args.indexOf("--max-delete");
+        expect(args.slice(i, i + 2)).toEqual(["--max-delete", "3"]);
+    });
+});
+
 describe("buildLsjsonArgs", () => {
     const base: itfLsjsonArgsInput = {
         path: "r:a",
@@ -138,6 +169,7 @@ describe("buildLsjsonArgs", () => {
         hashTypes: [],
         skipLinks: true,
         fastList: false,
+        scope: "files",
     };
 
     it("비교용 lsjson 인자", () => {
@@ -155,6 +187,17 @@ describe("buildLsjsonArgs", () => {
             "x/**",
             "--",
             "r:a",
+        ]);
+    });
+
+    it("전체 범위는 --files-only 없이 폴더도 나열한다 (INT-002 T-05)", () => {
+        const args = buildLsjsonArgs({ ...base, scope: "all" });
+        expect(args).not.toContain("--files-only");
+        expect(args.slice(0, 4)).toEqual([
+            "lsjson",
+            "--recursive",
+            "--no-mimetype",
+            "--ask-password=false",
         ]);
     });
 
@@ -372,6 +415,7 @@ describe("제외 패턴 전달 (INT-002 T-09)", () => {
         hashTypes: [],
         skipLinks: false,
         fastList: false,
+        scope: "files",
     };
 
     it("--config → --exclude(인자 패턴) → --exclude-from 순서, '--' 앞에만", () => {

@@ -27,6 +27,7 @@
         "src/lib/form-utils.ts",
         "src/lib/history-view.ts",
         "src/lib/job-form.ts",
+        "src/lib/job-list-view.ts",
         "src/lib/path-display.ts",
         "src/lib/run-view.ts",
         "src/lib/settings-form.ts",

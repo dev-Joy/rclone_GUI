@@ -63,6 +63,7 @@ function f_List(path: string) {
             hashTypes: [],
             skipLinks: true,
             fastList: false,
+            scope: "files",
         }),
     );
     expect(r.exit).toBe(0);
@@ -78,6 +79,7 @@ function f_Transfer(mode: "copy" | "sync", dryRun: boolean, maxDelete: number | 
             configPath: conf,
             excludes: { patterns: ["*.tmp"], fromFile: null },
             options: { ...OPTIONS },
+            scope: "files",
             dryRun,
             maxDelete,
         }),
@@ -194,6 +196,7 @@ describe.skipIf(!HAS_RCLONE)("rclone 실제 동작 (임시 폴더)", () => {
                 hashTypes: [],
                 skipLinks: true,
                 fastList: false,
+                scope: "files",
             }),
         );
         expect(r.exit).toBe(3);

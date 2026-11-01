@@ -45,6 +45,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         source: SRC,
         destination: DST,
         mode: "copy",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options,
@@ -81,6 +82,8 @@ function f_Summary(over: Partial<itfCompareSummary> = {}): itfCompareSummary {
         caseOnlyFiles: 0,
         hashComparedFiles: 0,
         hashUnavailableFiles: 0,
+        createDirs: 0,
+        deleteDirs: 0,
         ...over,
     };
 }
@@ -99,10 +102,12 @@ function f_Compare(over: Partial<itfCompareResult> = {}): itfCompareResult {
         createdAt: new Date(T0).toISOString(),
         durationMs: 1,
         mode: "copy",
+        scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
         summary: f_Summary(),
         entries: [],
+        dirChanges: [],
         warnings: [],
         planToken: TOKEN,
         excludeHash: f_ExcludeHash(f_Job()),
@@ -1206,5 +1211,169 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
         expect(h.bookkeeping).toEqual([]);
         expect(h.events).toEqual([]);
         release();
+    });
+});
+
+function f_AllSyncJob(): typJob {
+    return { ...f_SyncJob(), scope: "all" };
+}
+
+describe("clsRunService 동기화 범위 (INT-002 T-05)", () => {
+    /** scope-sync-all-dryrun 출력과 같은 계획: 새 파일 1, 파일 삭제 1, 빈 폴더 생성 4, 폴더 삭제 4 */
+    const DIR_SUMMARY = {
+        createFiles: 1,
+        updateFiles: 0,
+        deleteFiles: 1,
+        createDirs: 4,
+        deleteDirs: 4,
+    };
+    const ALL_SYNC_INPUT = {
+        jobId: JOB_ID,
+        dryRun: false,
+        planToken: TOKEN,
+        confirmedDeletes: 1,
+        confirmedDeleteDirs: 4,
+    };
+
+    it("수동: 확인한 폴더 삭제 수가 다르면(없음 포함) SAFETY_BLOCKED, 이력·프로세스 없음", async () => {
+        for (const confirmedDeleteDirs of [3, undefined]) {
+            const h = f_Harness({ job: f_AllSyncJob(), compare: f_SyncCompare(DIR_SUMMARY) });
+            const e = await f_Err(h.svc.start({ ...ALL_SYNC_INPUT, confirmedDeleteDirs }));
+            expect(e.code).toBe("SAFETY_BLOCKED");
+            expect(e.message).toContain("폴더 삭제 수");
+            expect(h.begun).toEqual([]);
+            expect(h.procs).toEqual([]);
+        }
+    });
+
+    it("수동: 사전 확인이 폴더 삭제 수까지 일치하면 실행, 두 단계 모두 --create-empty-src-dirs, --max-delete는 파일 수", async () => {
+        const h = f_Harness({
+            job: f_AllSyncJob(),
+            compare: f_SyncCompare(DIR_SUMMARY),
+            scripts: [
+                { lines: fixtureLines("scope-sync-all-dryrun") },
+                { lines: fixtureLines("scope-sync-all-real") },
+            ],
+        });
+        await h.svc.start(ALL_SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("success");
+        expect(rec.plan).toMatchObject({ deleteFiles: 1, deleteDirs: 4, createDirs: 4 });
+        expect(h.procs).toHaveLength(2);
+        for (const p of h.procs) expect(p.args).toContain("--create-empty-src-dirs");
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("1");
+    });
+
+    it("수동: 사전 확인의 폴더 삭제 수가 계획과 다르면 PLAN_DRIFT", async () => {
+        const h = f_Harness({
+            job: f_AllSyncJob(),
+            compare: f_SyncCompare({ ...DIR_SUMMARY, deleteDirs: 3 }),
+            scripts: [{ lines: fixtureLines("scope-sync-all-dryrun") }, null],
+        });
+        await h.svc.start({ ...ALL_SYNC_INPUT, confirmedDeleteDirs: 3 });
+        const rec = await f_Done(h);
+        expect(h.procs).toHaveLength(1);
+        expect(rec.status).toBe("blocked");
+        expect(rec.error?.code).toBe("PLAN_DRIFT");
+        expect(rec.error?.detail).toContain("폴더 삭제: 계획 3개, 사전 확인 4개");
+    });
+
+    it("수동: 폴더 삭제만 있어도 사전 확인을 거친다", async () => {
+        const h = f_Harness({
+            job: f_AllSyncJob(),
+            // 파일 삭제 없음(새 파일 newdir/sub/n.txt 1개만), 폴더 삭제 3
+            compare: f_SyncCompare({
+                createFiles: 1,
+                updateFiles: 0,
+                deleteFiles: 0,
+                deleteDirs: 3,
+            }),
+            scripts: [null, null],
+        });
+        await h.svc.start({ ...ALL_SYNC_INPUT, confirmedDeletes: 0, confirmedDeleteDirs: 3 });
+        for (let i = 0; i < 200 && h.procs.length < 1; i += 1) {
+            await new Promise((r) => setTimeout(r, 1));
+        }
+        expect(h.procs[0]!.args).toContain("--dry-run");
+        h.procs[0]!.finish(fixtureLines("scope-sync-all-dirsonly-dryrun"));
+        for (let i = 0; i < 200 && h.procs.length < 2; i += 1) {
+            await new Promise((r) => setTimeout(r, 1));
+        }
+        expect(h.procs).toHaveLength(2);
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("0");
+        h.procs[1]!.finish(fixtureLines("scope-sync-all-dirsonly-maxdelete0"));
+        expect((await f_Done(h)).status).toBe("success");
+    });
+
+    it("파일만 범위는 --create-empty-src-dirs를 넣지 않는다", async () => {
+        const h = f_Harness({ script: { lines: fixtureLines("copy-real") } });
+        await h.svc.start({ jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 0 });
+        await f_Done(h);
+        expect(h.procs[0]!.args).not.toContain("--create-empty-src-dirs");
+    });
+
+    it("자동: 폴더 삭제만 있어도 allowDeletes가 꺼져 있으면 blocked", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob({ mode: "sync" }), scope: "all" },
+            compare: f_SyncCompare({
+                createFiles: 0,
+                updateFiles: 0,
+                deleteFiles: 0,
+                deleteDirs: 2,
+            }),
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("blocked");
+        expect(o.error?.message).toContain("파일 0개, 폴더 2개");
+        expect(h.procs).toEqual([]);
+    });
+
+    it("자동: autoMaxDeletes는 파일 + 폴더를 합산한다", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob({ mode: "sync", allowDeletes: true }), scope: "all" },
+            compare: f_SyncCompare(DIR_SUMMARY),
+            safety: { autoMaxDeletes: 4 },
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("blocked");
+        expect(o.error?.message).toContain("파일 1개, 폴더 4개");
+        expect(h.procs).toEqual([]);
+    });
+
+    it("자동: 한도 이하면 실행하고 --max-delete는 파일 수만 쓴다", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob({ mode: "sync", allowDeletes: true }), scope: "all" },
+            compare: f_SyncCompare(DIR_SUMMARY),
+            safety: { autoMaxDeletes: 5 },
+            scripts: [
+                { lines: fixtureLines("scope-sync-all-dryrun") },
+                { lines: fixtureLines("scope-sync-all-real") },
+            ],
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("success");
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("1");
+    });
+
+    it("자동: 빈 폴더 생성만 있으면 noop이 아니다", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob(), scope: "all" },
+            compare: f_Compare({
+                summary: f_Summary({
+                    createFiles: 0,
+                    updateFiles: 0,
+                    deleteFiles: 0,
+                    createDirs: 2,
+                }),
+            }),
+            script: { lines: fixtureLines("copy-real") },
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("success");
+        expect(h.procs).toHaveLength(1);
+        expect(h.procs[0]!.args).toContain("--create-empty-src-dirs");
     });
 });

@@ -29,6 +29,10 @@ export const zRunPlan = z.object({
     deleteBytes: zCount,
     conflictFiles: zCount,
     caseOnlyFiles: zCount,
+    /** 전체 범위(INT-002 T-05): 만들 빈 폴더 수. 예전 기록에는 없어 0으로 읽는다 */
+    createDirs: zCount.default(0),
+    /** 전체 범위 sync: 지울 폴더 수(copy는 0). 예전 기록에는 없어 0으로 읽는다 */
+    deleteDirs: zCount.default(0),
 });
 export type typRunPlan = z.infer<typeof zRunPlan>;
 
@@ -86,7 +90,8 @@ export type typHistoryFile = z.infer<typeof zHistoryFile>;
 
 /**
  * run:start 입력. 실제 실행(dryRun:false)은 비교의 planToken과 확인한 삭제 수가 필요하다
- * (main이 계획에서 삭제 수를 다시 계산해 맞춰 본다). 대량 삭제(isLargeDelete)는 confirmLargeDeletes도
+ * (main이 계획에서 삭제 수를 다시 계산해 맞춰 본다). 전체 범위 sync의 폴더 삭제가 있으면
+ * confirmedDeleteDirs도 맞아야 한다(없으면 0으로 본다). 대량 삭제(isLargeDelete)는 confirmLargeDeletes도
  * 필요하다. 알 수 없는 키는 거부한다.
  */
 export const zStartRunInput = z
@@ -95,6 +100,7 @@ export const zStartRunInput = z
         dryRun: z.boolean(),
         planToken: z.string().min(1).max(200).optional(),
         confirmedDeletes: zCount.optional(),
+        confirmedDeleteDirs: zCount.optional(),
         confirmLargeDeletes: z.boolean().optional(),
     })
     .strict();

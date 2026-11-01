@@ -41,6 +41,8 @@ export const zSettings = z.object({
         theme: zThemeMode,
         minimizeToTray: z.boolean(),
         launchAtLogin: z.boolean(),
+        /** 작업 목록에 최근 실행 상태 문구(성공·실패 등)를 보인다(INT-002 T-04) */
+        showJobStatusText: z.boolean(),
     }),
 });
 export type typSettings = z.infer<typeof zSettings>;

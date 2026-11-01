@@ -19,6 +19,7 @@ import { numberText, toNumber } from "@/lib/form-utils";
 import { serverErrorToCheck, validateJobDraft, type itfJobFormCheck } from "@/lib/job-form";
 import { formatLocalDateTime } from "@/shared/format";
 import type { typRunMode } from "@/shared/schemas/common";
+import type { typSyncScope } from "@/shared/schemas/job";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -39,6 +40,19 @@ const MODE_OPTIONS: ReadonlyArray<{ value: typRunMode; label: string; descriptio
         value: "sync",
         label: "동기화",
         description: "대상을 원본과 같게 만듭니다. 대상에만 있는 파일은 삭제합니다.",
+    },
+];
+
+const SCOPE_OPTIONS: ReadonlyArray<{ value: typSyncScope; label: string; description: string }> = [
+    {
+        value: "files",
+        label: "파일만",
+        description: "파일만 비교·복사합니다. 원본의 빈 폴더는 만들지 않습니다.",
+    },
+    {
+        value: "all",
+        label: "전체(빈 폴더 포함)",
+        description: "원본의 빈 폴더도 대상에 만듭니다. 동기화하면 대상에만 있는 폴더도 지웁니다.",
     },
 ];
 
@@ -109,6 +123,8 @@ export default function JobEditor() {
     const h_Name = (v: string) => setField("name", v);
     const h_Mode = (e: ChangeEvent<HTMLInputElement>) =>
         setField("mode", e.target.value as typRunMode);
+    const h_Scope = (e: ChangeEvent<HTMLInputElement>) =>
+        setField("scope", e.target.value as typSyncScope);
     const h_Source = (v: string) => setField("source", v);
     const h_Destination = (v: string) => setField("destination", v);
     const h_Excludes = (v: string[]) => setField("excludes", v);
@@ -196,6 +212,27 @@ export default function JobEditor() {
                                     value={m.value}
                                     checked={draft.mode === m.value}
                                     onChange={h_Mode}
+                                />
+                                <span>
+                                    <strong>{m.label}</strong> — {m.description}
+                                </span>
+                            </label>
+                        ))}
+                    </fieldset>
+                    <fieldset className={styles.modes}>
+                        <legend className={styles.legend}>동기화 범위</legend>
+                        {SCOPE_OPTIONS.map((m) => (
+                            <label
+                                key={m.value}
+                                className={styles.mode}
+                                data-checked={draft.scope === m.value ? "" : undefined}
+                            >
+                                <input
+                                    type="radio"
+                                    name="scope"
+                                    value={m.value}
+                                    checked={draft.scope === m.value}
+                                    onChange={h_Scope}
                                 />
                                 <span>
                                     <strong>{m.label}</strong> — {m.description}

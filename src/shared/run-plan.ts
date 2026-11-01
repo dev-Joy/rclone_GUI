@@ -6,6 +6,8 @@
  *   (rclone-notes #1). 그래서 "복사 + 시간만 맞춤 == 새 파일 + 변경"으로 맞춰 본다.
  * - 실제 sync 직전 사전 확인(checkPreflight)은 여기에 삭제 수(수집기·stats 둘 다)와 오류 0을 더 본다.
  *   바이트는 비교하지 않는다(시간만 맞춤 파일 때문에 계획 바이트와 달라질 수 있음, Phase 7 결정 D3).
+ * - 전체 범위(INT-002 T-05)의 사전 확인은 폴더 삭제 수(수집기 remove directory·stats deletedDirs)도 본다
+ *   (rclone-notes #23). 폴더 생성 수는 dry-run의 make directory와 정의가 달라 비교하지 않는다(#22).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -29,12 +31,24 @@ export function planFromCompare(summary: itfCompareSummary, mode: typRunMode): t
         deleteBytes: deletes ? summary.deleteBytes : 0,
         conflictFiles: summary.conflictFiles,
         caseOnlyFiles: summary.caseOnlyFiles,
+        createDirs: summary.createDirs,
+        deleteDirs: deletes ? summary.deleteDirs : 0,
     };
 }
 
 /** 실행하면 대상에서 지울 파일 수 (실제 실행 전 확인한 수와 맞춰 본다) */
 export function expectedDeletes(summary: itfCompareSummary, mode: typRunMode): number {
     return planFromCompare(summary, mode).deleteFiles;
+}
+
+/** 실행하면 대상에서 지울 폴더 수 (전체 범위 sync만, 확인한 수와 맞춰 본다) */
+export function expectedDeleteDirs(summary: itfCompareSummary, mode: typRunMode): number {
+    return planFromCompare(summary, mode).deleteDirs;
+}
+
+/** 지울 파일 + 폴더 수(삭제가 있는지·자동 삭제 한도 판단용) */
+export function plannedDeleteCount(plan: Pick<typRunPlan, "deleteFiles" | "deleteDirs">): number {
+    return plan.deleteFiles + plan.deleteDirs;
 }
 
 export interface itfPlanMatch {
@@ -59,21 +73,36 @@ export function matchPlanWithDryRun(plan: typRunPlan, dry: itfDryRunSummary): it
     return { ok: mismatches.length === 0, mismatches };
 }
 
+export interface itfPreflightOptions {
+    /** 전체 범위: 폴더 삭제 수(수집기·stats)도 계획과 맞춰 본다 */
+    compareDirs: boolean;
+}
+
 /**
  * 실제 sync 직전 사전 확인(dry-run)이 계획과 같은지 (MVP_SPEC §8.4, S14).
  * matchPlanWithDryRun + stats.deletes == 계획 삭제 수 + stats.errors == 0. stats가 없으면 불일치로 본다.
+ * compareDirs면 remove directory 수와 stats.deletedDirs도 계획 폴더 삭제 수와 같아야 한다.
  */
 export function checkPreflight(
     plan: typRunPlan,
     dry: itfDryRunSummary,
     stats: typRunStats | null,
+    opts: itfPreflightOptions = { compareDirs: false },
 ): itfPlanMatch {
     const mismatches = [...matchPlanWithDryRun(plan, dry).mismatches];
+    if (opts.compareDirs && dry.removeDirs !== plan.deleteDirs) {
+        mismatches.push(`폴더 삭제: 계획 ${plan.deleteDirs}개, 사전 확인 ${dry.removeDirs}개`);
+    }
     if (stats === null) {
         mismatches.push("사전 확인 통계를 받지 못했습니다.");
     } else {
         if (stats.deletes !== plan.deleteFiles) {
             mismatches.push(`삭제(통계): 계획 ${plan.deleteFiles}개, 사전 확인 ${stats.deletes}개`);
+        }
+        if (opts.compareDirs && stats.deletedDirs !== plan.deleteDirs) {
+            mismatches.push(
+                `폴더 삭제(통계): 계획 ${plan.deleteDirs}개, 사전 확인 ${stats.deletedDirs}개`,
+            );
         }
         if (stats.errors > 0) mismatches.push(`사전 확인 중 오류 ${stats.errors}건`);
     }

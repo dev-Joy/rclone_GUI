@@ -96,6 +96,7 @@ function f_DraftOf(job: typJob): typJobDraft {
         source: job.source,
         destination: job.destination,
         mode: job.mode,
+        scope: job.scope,
         excludes: job.excludes,
         excludePatternIds: job.excludePatternIds,
         options: job.options,

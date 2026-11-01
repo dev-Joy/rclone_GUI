@@ -96,6 +96,7 @@ export function settingsToPatch(s: typSettings): typSettingsPatch {
             theme: s.ui.theme,
             minimizeToTray: s.ui.minimizeToTray,
             launchAtLogin: s.ui.launchAtLogin,
+            showJobStatusText: s.ui.showJobStatusText,
         },
     };
 }

@@ -33,6 +33,7 @@ function f_Job(
         source: "C:\\fake\\src",
         destination: "C:\\fake\\dst",
         mode: "copy",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options,

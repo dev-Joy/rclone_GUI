@@ -189,3 +189,99 @@ describe("실제 rclone 출력 기반", () => {
         });
     });
 });
+
+function f_DirDiff(
+    src: itfFileMeta[],
+    dst: itfFileMeta[],
+    dirs: { source: string[]; dest: string[] },
+    opts: Partial<itfDiffOptions> = {},
+) {
+    const r = diffFileLists(src, dst, { ...OPTS, ...opts }, dirs);
+    if (!r.ok) throw new Error("diff 실패");
+    return r;
+}
+
+/** 폴더 포함 lsjson fixture → 파일 목록과 폴더 경로 */
+function f_Split(name: string) {
+    const all = JSON.parse(readFixture(name, "stdout")) as { Path: string; IsDir: boolean }[];
+    return {
+        files: parseLsjsonOutput(readFixture(name, "stdout")),
+        dirs: all.filter((e) => e.IsDir).map((e) => e.Path),
+    };
+}
+
+describe("폴더 변화 (전체 범위, INT-002 T-05)", () => {
+    it("dirs가 null이면 폴더 수 0, dirChanges []", () => {
+        const r = f_Diff([f_File("a/b.txt")], []);
+        expect(r.summary).toMatchObject({ createDirs: 0, deleteDirs: 0 });
+        expect(r.dirChanges).toEqual([]);
+    });
+
+    it("빈 폴더 체인은 모두 생성, 파일이 든 폴더(조상)는 세지 않는다", () => {
+        const r = f_DirDiff([f_File("new/sub/n.txt")], [], {
+            source: ["e", "e/a", "e/a/b", "new", "new/sub"],
+            dest: [],
+        });
+        expect(r.summary.createDirs).toBe(3);
+        expect(r.dirChanges).toEqual([
+            { path: "e", action: "create" },
+            { path: "e/a", action: "create" },
+            { path: "e/a/b", action: "create" },
+        ]);
+    });
+
+    it("대상에만 있는 폴더는 모두 삭제, 양쪽에 있는 폴더는 그대로", () => {
+        const r = f_DirDiff(
+            [f_File("keep/a.txt")],
+            [f_File("keep/a.txt"), f_File("gone/old.txt")],
+            {
+                source: ["keep", "both"],
+                dest: ["keep", "both", "gone", "x", "x/y"],
+            },
+        );
+        expect(r.summary).toMatchObject({ createDirs: 0, deleteDirs: 3, deleteFiles: 1 });
+        expect(r.dirChanges.map((c) => c.path)).toEqual(["gone", "x", "x/y"]);
+    });
+
+    it("실제 rclone 출력(scope-lsjson-*-all): 생성 4·삭제 4가 dry-run과 같다 (rclone-notes #22·#23)", () => {
+        const s = f_Split("scope-lsjson-src-all");
+        const d = f_Split("scope-lsjson-dst-all");
+        const r = f_DirDiff(s.files, d.files, { source: s.dirs, dest: d.dirs });
+        expect(r.dirChanges.filter((c) => c.action === "create").map((c) => c.path)).toEqual([
+            "empty-src",
+            "nest",
+            "nest/a",
+            "nest/a/b",
+        ]);
+        expect(r.dirChanges.filter((c) => c.action === "delete").map((c) => c.path)).toEqual([
+            "dst-only-empty",
+            "dst-only-nest",
+            "dst-only-nest/x",
+            "gone",
+        ]);
+    });
+
+    it("원본 폴더 ↔ 대상 파일이 겹치면 typeConflict, 그 아래 폴더는 세지 않는다", () => {
+        const r = f_DirDiff([], [f_File("docs", 3)], { source: ["docs", "docs/sub"], dest: [] });
+        expect(r.entries[0]).toMatchObject({ path: "docs", status: "typeConflict" });
+        expect(r.summary).toMatchObject({ conflictGroups: 1, conflictFiles: 1, createDirs: 0 });
+        expect(r.dirChanges).toEqual([]);
+    });
+
+    it("대상 폴더 ↔ 원본 파일이 겹쳐도 typeConflict", () => {
+        const r = f_DirDiff([f_File("docs", 3)], [], { source: [], dest: ["docs"] });
+        expect(r.entries[0]).toMatchObject({ status: "typeConflict" });
+        expect(r.summary.deleteDirs).toBe(0);
+    });
+
+    it("대소문자만 다른 폴더는 caseOnlyFiles로 세고 경고한다", () => {
+        const r = f_DirDiff([], [], { source: ["Docs"], dest: ["docs"] });
+        expect(r.summary).toMatchObject({ caseOnlyFiles: 1, createDirs: 0, deleteDirs: 0 });
+        expect(r.warnings).toContain("대소문자만 다른 폴더: ‘Docs’ ↔ ‘docs’");
+    });
+
+    it("한쪽 폴더 키가 겹치면 CASE_COLLISION", () => {
+        const r = diffFileLists([], [], OPTS, { source: [], dest: ["a", "A"] });
+        expect(r).toEqual({ ok: false, code: "CASE_COLLISION", side: "dest", paths: ["a", "A"] });
+    });
+});

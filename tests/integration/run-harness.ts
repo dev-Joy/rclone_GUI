@@ -36,7 +36,7 @@ import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { createDefaultSettings } from "@/shared/defaults";
 import type { typRunMode } from "@/shared/schemas/common";
-import type { typJob, typJobDraft, typJobRunOptions } from "@/shared/schemas/job";
+import type { typJob, typJobDraft, typJobRunOptions, typSyncScope } from "@/shared/schemas/job";
 import type { typRunRecord } from "@/shared/schemas/run";
 import type { itfDryRunSummary, typRunEvent } from "@/shared/types/run";
 
@@ -92,6 +92,7 @@ export interface itfEnvOptions {
     source: string;
     destination: string;
     mode: typRunMode;
+    scope?: typSyncScope;
     options?: Partial<typJobRunOptions>;
     /** 자동 실행 설정(기본: 꺼짐) */
     autoSync?: Partial<typJobDraft["autoSync"]>;
@@ -126,6 +127,7 @@ export async function makeEnv(o: itfEnvOptions) {
         source: o.source,
         destination: o.destination,
         mode: o.mode,
+        scope: o.scope ?? "files",
         excludes: o.excludes ?? [...excludes, "*.tmp"],
         excludePatternIds: libraryIds,
         options: { ...defaults, ...o.options },

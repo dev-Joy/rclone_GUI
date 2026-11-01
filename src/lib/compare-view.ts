@@ -256,6 +256,23 @@ export function compareStaleReason(
     return null;
 }
 
+/**
+ * 전체 범위의 폴더 변화 한 줄. 예: "빈 폴더 3개 생성, 폴더 2개 삭제",
+ * copy: "빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)". 둘 다 0이면 null
+ */
+export function dirSummaryText(s: itfCompareSummary, mode: typRunMode): string | null {
+    const parts: string[] = [];
+    if (s.createDirs > 0) parts.push(`빈 폴더 ${s.createDirs}개 생성`);
+    if (s.deleteDirs > 0) {
+        parts.push(
+            mode === "sync"
+                ? `폴더 ${s.deleteDirs}개 삭제`
+                : `대상에만 있는 폴더 ${s.deleteDirs}개(유지)`,
+        );
+    }
+    return parts.length > 0 ? parts.join(", ") : null;
+}
+
 export interface itfCanStartCompareInput {
     job: typJob | null;
     dirty: boolean;

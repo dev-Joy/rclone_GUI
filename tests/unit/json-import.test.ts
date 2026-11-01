@@ -83,9 +83,13 @@ describe("importLegacyJson", () => {
         }
 
         const jobs = new clsJobStore({ db, caseInsensitive: () => true });
-        // 예전 JSON에는 공용 제외 패턴 연결이 없으므로 [] (INT-002 T-03)
+        // 예전 JSON에는 공용 제외 패턴 연결과 범위가 없으므로 []·files (INT-002 T-03·T-05)
         expect(await jobs.load()).toEqual(
-            f_Fixture<typJobsFile>("jobs.json").jobs.map((j) => ({ ...j, excludePatternIds: [] })),
+            f_Fixture<typJobsFile>("jobs.json").jobs.map((j) => ({
+                ...j,
+                excludePatternIds: [],
+                scope: "files",
+            })),
         );
         const history = new clsHistoryStore(db, () => 500);
         expect(history.list()).toEqual(f_Fixture<typHistoryFile>("history.json").records);

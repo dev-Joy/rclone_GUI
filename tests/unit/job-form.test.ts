@@ -221,6 +221,22 @@ describe("초안 변환·비교", () => {
         expect(d.excludePatternIds).not.toBe(job.excludePatternIds);
     });
 
+    it("jobToDraft는 범위를 복사하고, 범위가 다르면 isDraftEqual이 다르다 (INT-002 T-05)", () => {
+        const job = {
+            ...f_Job("00000000-0000-4000-8000-000000000001", "a"),
+            scope: "all" as const,
+        };
+        expect(jobToDraft(job).scope).toBe("all");
+        expect(isDraftEqual(f_Draft({ scope: "files" }), f_Draft({ scope: "all" }))).toBe(false);
+    });
+
+    it("잘못된 범위는 scope 필드 오류", () => {
+        const bad = { ...f_Draft(), scope: "dirs" } as unknown as Parameters<
+            typeof validateJobDraft
+        >[0];
+        expect(validateJobDraft(bad, true).fieldErrors.scope).toBe("범위를 고르세요.");
+    });
+
     it("isDraftEqual: 순서 바뀐 excludes·옵션 변경은 다르다", () => {
         const a = f_Draft({ excludes: ["a", "b"] });
         expect(isDraftEqual(a, { ...a, excludes: ["a", "b"] })).toBe(true);

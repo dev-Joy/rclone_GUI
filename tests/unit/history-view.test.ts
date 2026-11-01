@@ -78,6 +78,8 @@ describe("history-view", () => {
                         deleteBytes: 0,
                         conflictFiles: 0,
                         caseOnlyFiles: 0,
+                        createDirs: 0,
+                        deleteDirs: 0,
                     },
                 }),
             ),

@@ -102,6 +102,7 @@ export function makeJob(over: Partial<typJob> = {}): typJob {
         source: "C:\\tmp\\src",
         destination: "D:\\tmp\\dst",
         mode: "copy",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options,

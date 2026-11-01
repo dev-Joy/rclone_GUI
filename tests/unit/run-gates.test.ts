@@ -19,6 +19,8 @@ function f_Plan(over: Partial<typRunPlan> = {}): typRunPlan {
         deleteBytes: 5,
         conflictFiles: 0,
         caseOnlyFiles: 0,
+        createDirs: 0,
+        deleteDirs: 0,
         ...over,
     };
 }
@@ -112,5 +114,15 @@ describe("needsPreflight", () => {
         expect(needsPreflight(f_Plan({ deleteFiles: 0 }), f_Job("sync"))).toBe(false);
         expect(needsPreflight(f_Plan(), f_Job("sync", { preflight: false }))).toBe(false);
         expect(needsPreflight(f_Plan(), f_Job("copy"))).toBe(false);
+    });
+
+    it("폴더 삭제만 있어도 사전 확인을 한다 (INT-002 T-05)", () => {
+        expect(needsPreflight(f_Plan({ deleteFiles: 0, deleteDirs: 2 }), f_Job("sync"))).toBe(true);
+        expect(
+            needsPreflight(
+                f_Plan({ deleteFiles: 0, deleteDirs: 2 }),
+                f_Job("sync", { preflight: false }),
+            ),
+        ).toBe(false);
     });
 });

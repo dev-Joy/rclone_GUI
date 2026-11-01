@@ -58,7 +58,12 @@ describe("settingsToPatch", () => {
             "safety",
             "ui",
         ]);
-        expect(patch.ui).toEqual({ theme: "system", minimizeToTray: true, launchAtLogin: false });
+        expect(patch.ui).toEqual({
+            theme: "system",
+            minimizeToTray: true,
+            launchAtLogin: false,
+            showJobStatusText: true,
+        });
         expect(patch).not.toHaveProperty("scheduler");
         expect(patch).not.toHaveProperty("version");
         expect(() => zSettingsPatch.parse(patch)).not.toThrow();

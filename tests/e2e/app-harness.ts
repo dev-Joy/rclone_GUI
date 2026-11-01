@@ -62,6 +62,10 @@ export interface itfJobInput {
     name: string;
     source: string;
     destination: string;
+    /** 없으면 기본값(복사) */
+    mode?: "copy" | "sync";
+    /** 없으면 기본값(파일만) */
+    scope?: "all" | "files";
 }
 
 /** 임시 userData·rclone.conf 경로. 이미 있는 root를 주면 그대로 쓴다(재시작) */
@@ -128,13 +132,15 @@ export async function waitForApp(page: Page): Promise<void> {
     await expect(page.getByRole("heading", { name: "rcloneGUI", level: 1 })).toBeVisible();
 }
 
-/** 작업 목록(왼쪽)에서 새 작업을 열고 이름·원본·대상만 채워 저장한다 */
+/** 작업 목록(왼쪽)에서 새 작업을 열고 이름·원본·대상(주면 모드·범위도)을 채워 저장한다 */
 export async function createJob(page: Page, job: itfJobInput): Promise<void> {
     const sidebar = page.locator('nav[aria-labelledby="jobs-title"]');
     await sidebar.getByRole("button", { name: "새 작업", exact: true }).click();
     await page.locator("#job-name").fill(job.name);
     await page.locator("#job-source").fill(job.source);
     await page.locator("#job-destination").fill(job.destination);
+    if (job.mode) await page.locator(`input[name="mode"][value="${job.mode}"]`).check();
+    if (job.scope) await page.locator(`input[name="scope"][value="${job.scope}"]`).check();
     await page.getByRole("button", { name: "저장", exact: true }).click();
     await expect(page.getByText("작업을 저장했습니다.")).toBeVisible();
 }

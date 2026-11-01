@@ -120,6 +120,25 @@ describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
         expect(zJob.parse(old).excludePatternIds).toEqual([]);
     });
 
+    it("scope가 없는 예전 저장 값은 files로 읽는다 (INT-002 T-05)", () => {
+        const { scope: _s, ...old } = f_Stored();
+        expect(zJob.parse(old).scope).toBe("files");
+        expect(zJob.parse(f_Stored({ scope: "all" })).scope).toBe("all");
+    });
+
+    it("patch에 scope가 없으면 기본값을 채우지 않는다(범위 유지)", () => {
+        expect("scope" in zJobPatch.parse({})).toBe(false);
+        expect("scope" in zJobPatch.parse({ name: "x" })).toBe(false);
+        expect(zJobPatch.parse({ scope: "all" }).scope).toBe("all");
+    });
+
+    it("저장 입력의 scope는 필수이고 all·files만 받는다", () => {
+        const { scope: _s, ...noScope } = f_Draft();
+        expect(zJobDraft.safeParse(noScope).success).toBe(false);
+        expect(zJobDraft.safeParse({ ...f_Draft(), scope: "dirs" }).success).toBe(false);
+        expect(zJobDraft.safeParse({ ...f_Draft(), scope: "all" }).success).toBe(true);
+    });
+
     it("공용 + 작업 전용 합계 501은 거부, 500은 통과", () => {
         const jobOnly = Array.from({ length: 100 }, (_v, i) => `p${i}`);
         expect(

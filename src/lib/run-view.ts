@@ -11,7 +11,7 @@ import { compareStaleReason } from "@/lib/compare-view";
 import { formatBytes } from "@/shared/format";
 import { checkRunPaths } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, type typDeleteThresholds } from "@/shared/run-gates";
-import { planFromCompare } from "@/shared/run-plan";
+import { planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
 import type { typRunMode, typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
 import type { typRunStats } from "@/shared/schemas/run";
@@ -38,7 +38,7 @@ export interface itfCanStartRunInput {
 /**
  * 미리보기·실제 실행 버튼 가능 여부와 이유.
  * 공통: 저장 안 됨 → 미저장 변경 → 경로 오류 → 비교 중 → 실행 중.
- * 실제 실행: 유효한 비교 결과 → 낡음 → 모드 변경 → 계획 안전 검사(checkPlanSafety) → 바꿀 파일 없음.
+ * 실제 실행: 유효한 비교 결과 → 낡음 → 모드·범위 변경 → 계획 안전 검사(checkPlanSafety) → 바꿀 것 없음.
  */
 export function canStartRun(input: itfCanStartRunInput): typCheck {
     const { job } = input;
@@ -64,12 +64,12 @@ export function canStartRun(input: itfCanStartRunInput): typCheck {
     if (!r || r.jobId !== job.id) return { ok: false, reason: "먼저 비교하세요." };
     const stale = compareStaleReason(r, job, input.maxAgeMinutes, input.nowMs);
     if (stale) return { ok: false, reason: stale };
-    if (r.mode !== job.mode)
+    if (r.mode !== job.mode || r.scope !== job.scope)
         return { ok: false, reason: "작업 설정이 바뀌었습니다. 다시 비교하세요." };
     const plan = planFromCompare(r.summary, job.mode);
     const block = checkPlanSafety(plan, job);
     if (block) return { ok: false, reason: block.message };
-    if (plan.createFiles + plan.updateFiles + plan.deleteFiles === 0) {
+    if (plan.createFiles + plan.updateFiles + plan.createDirs + plannedDeleteCount(plan) === 0) {
         return {
             ok: false,
             reason:
@@ -96,8 +96,20 @@ export function deleteSamples(result: itfCompareResult, limit = 20): itfDeleteSa
     return out;
 }
 
+/** 삭제 예정(대상에만 있음) 폴더 샘플. 경로 오름차순으로 최대 limit개 (전체 범위만) */
+export function deleteDirSamples(result: itfCompareResult, limit = 20): string[] {
+    const out: string[] = [];
+    for (const c of result.dirChanges) {
+        if (out.length >= limit) break;
+        if (c.action === "delete") out.push(c.path);
+    }
+    return out;
+}
+
 export interface itfDeleteConfirmInfo {
     deleteFiles: number;
+    /** 전체 범위 sync에서 지울 폴더 수(그 밖에는 0) */
+    deleteDirs: number;
     deleteBytes: number;
     destFiles: number;
     /** 대상 파일 수 대비 삭제 비율 문구(예: "12.5%"). 대상 파일이 0개면 null */
@@ -116,6 +128,7 @@ export function deleteConfirmInfo(
     const percent = plan.destFiles > 0 ? (plan.deleteFiles / plan.destFiles) * 100 : null;
     return {
         deleteFiles: plan.deleteFiles,
+        deleteDirs: plan.deleteDirs,
         deleteBytes: plan.deleteBytes,
         destFiles: plan.destFiles,
         percentText: percent === null ? null : `${Math.round(percent * 10) / 10}%`,
@@ -144,6 +157,9 @@ export function appendTail(
 }
 
 const MODE_VERB: Record<typRunMode, string> = { copy: "복사", sync: "동기화" };
+
+/** 실제 실행 버튼·확인 창 제목 */
+export const RUN_LABEL: Record<typRunMode, string> = { copy: "복사 실행", sync: "동기화 실행" };
 
 /** 상태 문구. 예: 미리보기 완료, 복사 완료, 복사 취소됨 */
 export function runStatusText(status: typRunStatus, dryRun: boolean, mode: typRunMode): string {
@@ -178,12 +194,17 @@ export function dryRunHeadline(s: itfDryRunSummary): string {
     return `실행하면 ${parts.join(", ")}`;
 }
 
-/** 실제 실행 확인 문구(비교 결과 기준). 예: "대상에 3개 복사, 1개 덮어씀 (총 1.2 MB)" */
+/**
+ * 실제 실행 확인 문구(비교 결과 기준). 예: "대상에 3개 복사, 1개 덮어씀 (총 1.2 MB)".
+ * 전체 범위면 "빈 폴더 N개 생성", sync면 "폴더 N개 삭제"도 붙인다.
+ */
 export function realRunConfirmText(s: itfCompareSummary, mode: typRunMode): string {
     const parts: string[] = [];
     if (s.createFiles > 0) parts.push(`대상에 ${s.createFiles}개 복사`);
     if (s.updateFiles > 0) parts.push(`${s.updateFiles}개 덮어씀`);
     if (mode === "sync" && s.deleteFiles > 0) parts.push(`${s.deleteFiles}개 삭제`);
+    if (s.createDirs > 0) parts.push(`빈 폴더 ${s.createDirs}개 생성`);
+    if (mode === "sync" && s.deleteDirs > 0) parts.push(`폴더 ${s.deleteDirs}개 삭제`);
     if (parts.length === 0) return "바뀌는 파일이 없습니다.";
     return `${parts.join(", ")} (총 ${formatBytes(s.transferBytes)})`;
 }

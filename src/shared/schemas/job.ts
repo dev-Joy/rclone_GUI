@@ -32,6 +32,13 @@ export const zExcludes = z
     .array(zNoControlChars(EXCLUDE_PATTERN_MAX_LEN).min(1))
     .max(JOB_EXCLUDES_MAX);
 
+/**
+ * 동기화 범위(INT-002 T-05). files: 파일만(빈 폴더는 만들지 않음), all: 원본의 빈 폴더도 만든다.
+ * 저장 입력에는 기본값을 두지 않는다 — partial patch에서 default가 범위를 되돌리지 않도록.
+ */
+export const zSyncScope = z.enum(["all", "files"]);
+export type typSyncScope = z.infer<typeof zSyncScope>;
+
 /** 작업에 연결한 공용 제외 패턴 id (저장소에서는 연결 테이블이 원본) */
 export const zExcludePatternIds = z.array(z.uuid()).max(EXCLUDES_TOTAL_MAX);
 
@@ -73,6 +80,7 @@ const zJobDraftShape = {
     source: zPathInput,
     destination: zPathInput,
     mode: zRunMode,
+    scope: zSyncScope,
     excludes: zExcludes,
     excludePatternIds: zExcludePatternIds,
     options: zJobRunOptions,
@@ -80,13 +88,14 @@ const zJobDraftShape = {
     autoSync: zAutoSyncInput,
 };
 
-/** 저장된 작업 읽기용 초안(예전 한도). excludePatternIds가 없으면 [] */
+/** 저장된 작업 읽기용 초안(예전 한도). excludePatternIds가 없으면 [], scope가 없으면 "files" */
 export const zJobStoredDraft = z.object({
     ...zJobDraftShape,
     source: zPathStored,
     destination: zPathStored,
     configPathOverride: zPathStored.nullable(),
     excludePatternIds: zExcludePatternIds.default([]),
+    scope: zSyncScope.default("files"),
 });
 
 /** 공용 + 작업 전용 제외 패턴 합계·인자 길이 */

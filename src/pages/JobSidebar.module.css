@@ -39,6 +39,13 @@
             list-style: none;
         }
 
+        .row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 4px;
+            align-items: start;
+        }
+
         .item {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
@@ -78,6 +85,15 @@
         .badges {
             display: flex;
             gap: 4px;
+        }
+
+        .paths {
+            grid-column: 1 / -1;
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .meta {

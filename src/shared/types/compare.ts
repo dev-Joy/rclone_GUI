@@ -6,6 +6,7 @@
 
 // ========== Internal imports ==========
 import type { typIsoDateString, typRunMode } from "@/shared/schemas/common";
+import type { typSyncScope } from "@/shared/schemas/job";
 
 export type typCompareStatus = "onlySource" | "onlyDest" | "modified" | "equal" | "typeConflict";
 export type typModifiedReason = "size" | "mtime" | "hash" | "type" | "mtimeUnknown";
@@ -56,6 +57,16 @@ export interface itfCompareSummary {
     caseOnlyFiles: number;
     hashComparedFiles: number;
     hashUnavailableFiles: number;
+    /** 전체 범위에서만: 파일이 없는 원본 전용 폴더(--create-empty-src-dirs 때문에만 생김) */
+    createDirs: number;
+    /** 전체 범위에서만: 대상에만 있는 폴더 전부(sync면 지워짐) */
+    deleteDirs: number;
+}
+
+/** 전체 범위의 폴더 변화(파일 5상태와 섞지 않는다, spec Q4) */
+export interface itfDirChange {
+    path: string;
+    action: "create" | "delete";
 }
 
 /** 결과에 비교 방식을 남긴다(화면 표시·Phase 7 게이트) */
@@ -72,12 +83,16 @@ export interface itfCompareResult {
     durationMs: number;
     /** 비교할 때의 작업 모드(onlyDest 표시: copy 유지 / sync 삭제 예정) */
     mode: typRunMode;
+    /** 비교할 때의 동기화 범위 */
+    scope: typSyncScope;
     method: itfCompareMethod;
     /** 대상 폴더가 없어 빈 목록으로 비교했다(실행하면 새로 만든다) */
     destMissing: boolean;
     summary: itfCompareSummary;
     /** 경로 키 오름차순 */
     entries: itfDiffEntry[];
+    /** 폴더 변화, 경로 오름차순(파일만 범위면 []) */
+    dirChanges: itfDirChange[];
     warnings: string[];
     planToken: string;
     /** 비교에 쓴 제외 패턴·전달 방식 해시. 실행 시점 값과 다르면 PLAN_STALE */

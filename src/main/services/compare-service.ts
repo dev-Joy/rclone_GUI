@@ -22,6 +22,7 @@ import {
     clsLsjsonParseError,
     createLsjsonLineParser,
     type itfLsjsonLineParser,
+    type itfLsjsonListing,
 } from "@/main/parsers/lsjson-parser";
 import { hintForRcloneError, summarizeStderr } from "@/main/parsers/rclone-env-parser";
 import {
@@ -54,7 +55,6 @@ import type {
     itfCompareActive,
     itfCompareProgress,
     itfCompareResult,
-    itfFileMeta,
     typCompareEventPhase,
     typComparePhase,
 } from "@/shared/types/compare";
@@ -344,17 +344,22 @@ export class clsCompareService {
             active,
             excludeArgs,
         );
-        const sourceList = lists[0]!;
-        const destList = lists[1] ?? [];
+        const srcListing = lists[0]!;
+        const dstListing = lists[1] ?? null;
         this.throwIfCanceled(active);
 
         // 5) 차이
         this.setPhase(active, "diff");
-        const diff = diffFileLists(sourceList, destList, {
-            caseInsensitive,
-            checkHashes: job.options.checkHashes,
-            modtimeToleranceMs: job.options.modtimeToleranceMs,
-        });
+        const diff = diffFileLists(
+            srcListing.files,
+            dstListing?.files ?? [],
+            {
+                caseInsensitive,
+                checkHashes: job.options.checkHashes,
+                modtimeToleranceMs: job.options.modtimeToleranceMs,
+            },
+            job.scope === "all" ? { source: srcListing.dirs, dest: dstListing?.dirs ?? [] } : null,
+        );
         if (!diff.ok) {
             const [a, b] = diff.paths;
             throw new clsAppError(
@@ -404,6 +409,7 @@ export class clsCompareService {
             source: src.normalized,
             destination: dst.normalized,
             mode: job.mode,
+            scope: job.scope,
             excludeSnapshotHash: ctx.excludes.snapshotHash,
             options: {
                 checkHashes: job.options.checkHashes,
@@ -422,10 +428,12 @@ export class clsCompareService {
             createdAt,
             durationMs: Date.now() - t0,
             mode: job.mode,
+            scope: job.scope,
             method,
             destMissing,
             summary: diff.summary,
             entries: diff.entries,
+            dirChanges: diff.dirChanges,
             warnings,
             planToken,
             excludeHash: ctx.excludes.snapshotHash,
@@ -489,7 +497,7 @@ export class clsCompareService {
         binary: string,
         active: itfActiveCompare,
         excludeArgs: itfExcludeArgs,
-    ): Promise<itfFileMeta[][]> {
+    ): Promise<itfLsjsonListing[]> {
         let firstError: unknown = null;
         const f_Fail = (e: unknown) => {
             if (firstError === null) firstError = e;
@@ -525,7 +533,7 @@ export class clsCompareService {
         if (firstError !== null) throw firstError;
         active.sourceFiles = sides[0]?.parser.count ?? 0;
         active.destFiles = sides[1]?.parser.count ?? 0;
-        return lists.map((l) => l ?? []);
+        return lists.map((l) => l ?? { files: [], dirs: [] });
     }
 
     private async listSide(
@@ -537,7 +545,7 @@ export class clsCompareService {
         excludeArgs: itfExcludeArgs,
         f_Fail: (e: unknown) => void,
         f_Tick: () => void,
-    ): Promise<itfFileMeta[]> {
+    ): Promise<itfLsjsonListing> {
         const { label, parser } = side;
         let lineError = false;
         const args = buildLsjsonArgs({
@@ -548,6 +556,7 @@ export class clsCompareService {
             hashTypes: COMPARE_HASH_TYPES,
             skipLinks: job.options.skipLinks,
             fastList: job.options.fastList,
+            scope: job.scope,
         });
         let r;
         try {
@@ -601,7 +610,7 @@ export class clsCompareService {
             );
         }
         try {
-            return parser.finish();
+            return parser.listing();
         } catch (e) {
             throw f_ParseFailure(label, e);
         }

@@ -435,7 +435,7 @@ try {
         JSON.stringify(info.data),
     );
     f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
-    const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy",
+    const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy", scope: "files",
         excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
         options: { checkers: 8, transfers: 4, fastList: true, skipLinks: true, ignoreErrors: false,

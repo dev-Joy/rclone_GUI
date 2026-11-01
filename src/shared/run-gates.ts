@@ -4,13 +4,14 @@
  *
  * - checkPlanSafety: 확인해도 넘길 수 없는 차단(형식 충돌·대소문자만 다름·빈 원본 sync·오류 무시 sync).
  * - isLargeDelete: 대량 삭제(추가 확인 필요). 기준값을 엄격히 넘을 때만이며, 기준값 0이면 삭제 1개도 대량이다.
- * - needsPreflight: 실제 sync 직전 같은 실행 안에서 사전 확인 dry-run을 할지.
+ * - needsPreflight: 실제 sync 직전 같은 실행 안에서 사전 확인 dry-run을 할지(폴더 삭제만 있어도 한다).
  *
  * @author dev-Joy 2026-10-29
  */
 
 // ========== Internal imports ==========
 import type { typErrorCode } from "@/shared/errors";
+import { plannedDeleteCount } from "@/shared/run-plan";
 import type { typJob } from "@/shared/schemas/job";
 import type { typRunPlan } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
@@ -73,7 +74,14 @@ export function checkPlanSafety(plan: typRunPlan, job: typGateJob): itfGateBlock
     return null;
 }
 
-/** 실제 sync 직전에 사전 확인 dry-run을 할지: sync + 삭제 있음 + 작업 옵션 켜짐 */
-export function needsPreflight(plan: Pick<typRunPlan, "deleteFiles">, job: typGateJob): boolean {
-    return job.mode === "sync" && plan.deleteFiles > 0 && job.options.preflightBeforeDestructive;
+/** 실제 sync 직전에 사전 확인 dry-run을 할지: sync + 삭제(파일 또는 폴더) 있음 + 작업 옵션 켜짐 */
+export function needsPreflight(
+    plan: Pick<typRunPlan, "deleteFiles" | "deleteDirs">,
+    job: typGateJob,
+): boolean {
+    return (
+        job.mode === "sync" &&
+        plannedDeleteCount(plan) > 0 &&
+        job.options.preflightBeforeDestructive
+    );
 }

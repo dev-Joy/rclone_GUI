@@ -70,9 +70,25 @@ describe("clsSettingsStore", () => {
         await s.update({ ui: { theme: "dark" }, defaults: { excludes: ["a/**"] } });
         const again = new clsSettingsStore(f_Db());
         const loaded = await again.load();
-        expect(loaded.ui).toEqual({ theme: "dark", minimizeToTray: true, launchAtLogin: false });
+        expect(loaded.ui).toEqual({
+            theme: "dark",
+            minimizeToTray: true,
+            launchAtLogin: false,
+            showJobStatusText: true,
+        });
         expect(loaded.defaults.excludes).toEqual(["a/**"]);
         expect(loaded.defaults.checkers).toBe(8);
+    });
+
+    it("예전 설정 행에 showJobStatusText가 없으면 기본값(true)으로 읽는다 (INT-002 T-04)", async () => {
+        const db = f_Db();
+        const { showJobStatusText: _x, ...oldUi } = createDefaultSettings().ui;
+        db.run("INSERT INTO settings (id, data, updated_at) VALUES (1, $data, $updatedAt)", {
+            data: JSON.stringify({ ...createDefaultSettings(), ui: { ...oldUi, theme: "dark" } }),
+            updatedAt: "2026-10-29T00:00:00.000Z",
+        });
+        const loaded = await new clsSettingsStore(db).load();
+        expect(loaded.ui).toMatchObject({ theme: "dark", showJobStatusText: true });
     });
 
     it("병합 결과가 범위를 벗어나면 거부하고 기존 값을 유지한다", async () => {

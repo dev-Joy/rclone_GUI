@@ -6,11 +6,13 @@
  *   → 결과 판정 → 마무리.
  * - 실제 실행 게이트(f_CheckRealGate, 락 전): 비교의 planToken(없으면 PLAN_REQUIRED) → 계획 안전 검사
  *   (checkPlanSafety: 형식 충돌·대소문자·빈 원본 sync·오류 무시 sync) → 계획에서 다시 계산한 삭제 수 ==
- *   확인한 삭제 수 → 대량 삭제면 confirmLargeDeletes. 실패하면 이력도 프로세스도 만들지 않는다.
- * - 사전 확인(preflight): sync + 삭제 > 0 + 작업 옵션 켜짐이면 같은 runId 안에서 --dry-run(--max-delete 없음)을
+ *   확인한 삭제 수(전체 범위면 폴더 삭제 수도) → 대량 삭제면 confirmLargeDeletes. 실패하면 이력도 프로세스도
+ *   만들지 않는다.
+ * - 사전 확인(preflight): sync + 삭제(파일 또는 폴더) > 0 + 작업 옵션 켜짐이면 같은 runId 안에서 --dry-run(--max-delete 없음)을
  *   먼저 돌려 계획과 맞춰 본다(checkPreflight). 다르면 blocked + PLAN_DRIFT, 취소면 canceled, rclone 오류면
  *   failed로 끝내고 실제 실행은 하지 않는다. 옵션을 끄면 --max-delete만 백스톱이다.
- * - 실제 sync에는 항상 --max-delete <계획 삭제 수>(0 포함)를 준다.
+ * - 실제 sync에는 항상 --max-delete <계획 파일 삭제 수>(0 포함)를 준다. rclone은 폴더 삭제를 세지 않으므로
+ *   (rclone-notes #25) 폴더 삭제는 계획 토큰·확인한 폴더 삭제 수·사전 확인이 막는다(INT-002 T-05).
  * - 자동 실행(startAuto, 스케줄러): 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
  *   수동 비교 결과는 건드리지 않음) → 작업 rev 재확인 → 자동 게이트(f_CheckAutoGate: checkPlanSafety → 삭제가
  *   있으면 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 켜짐 모두 필요 → 바꿀 것 없으면 noop) → 수동과 같은
@@ -65,7 +67,7 @@ import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
-import { checkPreflight, planFromCompare } from "@/shared/run-plan";
+import { checkPreflight, planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
 import type {
     typAppErrorPayload,
     typRunPhase,
@@ -200,6 +202,13 @@ function f_CheckRealGate(
             `확인한 삭제 수(${input.confirmedDeletes ?? "없음"})가 계획(${expected}개)과 다릅니다. 다시 비교하세요.`,
         );
     }
+    const confirmedDirs = input.confirmedDeleteDirs ?? 0;
+    if (confirmedDirs !== plan.deleteDirs) {
+        throw new clsAppError(
+            "SAFETY_BLOCKED",
+            `확인한 폴더 삭제 수(${confirmedDirs})가 계획(${plan.deleteDirs}개)과 다릅니다. 다시 비교하세요.`,
+        );
+    }
     if (isLargeDelete(plan, safety) && input.confirmLargeDeletes !== true) {
         throw new clsAppError(
             "SAFETY_BLOCKED",
@@ -232,43 +241,47 @@ function f_CheckAutoGate(
     });
     const block = checkPlanSafety(plan, job);
     if (block) return f_Block(block.code, block.message);
-    const d = plan.deleteFiles;
+    const d = plannedDeleteCount(plan);
+    const dText = f_DeleteText(plan);
     if (d > 0) {
         if (!job.autoSync.allowDeletes) {
             return f_Block(
                 "SAFETY_BLOCKED",
-                `대상에서 ${d}개를 지워야 하지만 이 작업은 자동 실행 때 삭제를 허용하지 않아 실행하지 않았습니다.`,
+                `대상에서 ${dText}를 지워야 하지만 이 작업은 자동 실행 때 삭제를 허용하지 않아 실행하지 않았습니다.`,
             );
         }
         if (safety.autoMaxDeletes === 0) {
             return f_Block(
                 "SAFETY_BLOCKED",
-                `설정의 ‘자동 실행 최대 삭제 수’가 0이라 삭제(${d}개)가 필요한 자동 실행은 하지 않았습니다.`,
+                `설정의 ‘자동 실행 최대 삭제 수’가 0이라 삭제(${dText})가 필요한 자동 실행은 하지 않았습니다.`,
             );
         }
         if (d > safety.autoMaxDeletes) {
             return f_Block(
                 "SAFETY_BLOCKED",
-                `삭제 ${d}개가 설정의 ‘자동 실행 최대 삭제 수’(${safety.autoMaxDeletes}개)를 넘어 실행하지 않았습니다.`,
+                `삭제 ${dText}가 설정의 ‘자동 실행 최대 삭제 수’(${safety.autoMaxDeletes}개)를 넘어 실행하지 않았습니다.`,
             );
         }
         if (isLargeDelete(plan, safety)) {
             return f_Block(
                 "SAFETY_BLOCKED",
-                `대상 파일 ${plan.destFiles}개 중 ${d}개를 지우는 대량 삭제라 자동으로 실행하지 않았습니다. 직접 비교한 뒤 실행하세요.`,
+                `대상 파일 ${plan.destFiles}개 중 ${plan.deleteFiles}개를 지우는 대량 삭제라 자동으로 실행하지 않았습니다. 직접 비교한 뒤 실행하세요.`,
             );
         }
         if (!needsPreflight(plan, job)) {
             return f_Block(
                 "SAFETY_BLOCKED",
-                `실행 직전 사전 확인이 꺼져 있어 삭제(${d}개)가 필요한 자동 실행은 하지 않았습니다.`,
+                `실행 직전 사전 확인이 꺼져 있어 삭제(${dText})가 필요한 자동 실행은 하지 않았습니다.`,
             );
         }
     }
-    if (plan.createFiles + plan.updateFiles + d === 0) return { status: "noop", error: null, plan };
+    if (plan.createFiles + plan.updateFiles + plan.createDirs + d === 0) {
+        return { status: "noop", error: null, plan };
+    }
     return {
         plan,
-        maxDelete: f_MaxDelete(job, d),
+        // --max-delete는 파일만 센다(rclone-notes #25). 폴더를 더하면 백스톱이 느슨해진다
+        maxDelete: f_MaxDelete(job, plan.deleteFiles),
         preflight: needsPreflight(plan, job),
     } as typRealGate;
 }
@@ -284,7 +297,13 @@ function f_AutoFailure(e: unknown, canceled: boolean): itfAutoStop {
     return { status: "failed", error: f_StartFailure(e), plan: null };
 }
 
-/** 실제 sync만 --max-delete(계획 삭제 수, 0 포함)를 쓴다. copy는 null */
+/** 삭제 수 문구: "파일 3개" 또는 "파일 3개, 폴더 2개" */
+function f_DeleteText(plan: Pick<typRunPlan, "deleteFiles" | "deleteDirs">): string {
+    const files = `파일 ${plan.deleteFiles}개`;
+    return plan.deleteDirs > 0 ? `${files}, 폴더 ${plan.deleteDirs}개` : files;
+}
+
+/** 실제 sync만 --max-delete(계획 파일 삭제 수, 0 포함)를 쓴다. copy는 null */
 function f_MaxDelete(job: Pick<typJob, "mode">, expected: number): number | null {
     return job.mode === "sync" ? expected : null;
 }
@@ -663,7 +682,9 @@ export class clsRunService {
     /** dry-run 이력의 계획: 유효한 비교 결과가 있으면 그것, 없으면 null */
     private dryRunPlan(job: typJob): typRunPlan | null {
         const r = this.deps.compare.get(job.id);
-        return r && r.mode === job.mode ? planFromCompare(r.summary, job.mode) : null;
+        return r && r.mode === job.mode && r.scope === job.scope
+            ? planFromCompare(r.summary, job.mode)
+            : null;
     }
 
     private snapshotOf(a: itfActiveRun): itfRunSnapshot {
@@ -781,7 +802,9 @@ export class clsRunService {
                 },
             };
         } else {
-            const match = checkPreflight(gate.plan, collector.summary(), stats);
+            const match = checkPreflight(gate.plan, collector.summary(), stats, {
+                compareDirs: ctx.job.scope === "all",
+            });
             if (!match.ok) {
                 outcome = {
                     status: "blocked",
@@ -824,6 +847,7 @@ export class clsRunService {
             configPath: ctx.configPath,
             excludes: { patterns: ctx.excludes.argPatterns, fromFile: active.excludeFile },
             options: job.options,
+            scope: job.scope,
             dryRun: !real,
             maxDelete: step.kind === "real" ? step.gate.maxDelete : null,
         });

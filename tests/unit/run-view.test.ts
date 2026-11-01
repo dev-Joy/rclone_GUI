@@ -6,6 +6,7 @@ import {
     appendTail,
     canStartRun,
     deleteConfirmInfo,
+    deleteDirSamples,
     deleteSamples,
     dryRunHeadline,
     progressPercent,
@@ -31,6 +32,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         source: "C:\\tmp\\src",
         destination: "D:\\tmp\\dst",
         mode: "copy",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options,
@@ -67,6 +69,8 @@ function f_Summary(over: Partial<itfCompareSummary> = {}): itfCompareSummary {
         caseOnlyFiles: 0,
         hashComparedFiles: 0,
         hashUnavailableFiles: 0,
+        createDirs: 0,
+        deleteDirs: 0,
         ...over,
     };
 }
@@ -78,10 +82,12 @@ function f_Result(over: Partial<itfCompareResult> = {}): itfCompareResult {
         createdAt: new Date(T0).toISOString(),
         durationMs: 1,
         mode: "copy",
+        scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
         summary: f_Summary(),
         entries: [],
+        dirChanges: [],
         warnings: [],
         planToken: "a".repeat(32),
         excludeHash: "0".repeat(32),
@@ -216,6 +222,24 @@ describe("canStartRun", () => {
             ),
         ).toContain("바꿀 파일이 없습니다");
     });
+
+    it("동기화 범위 (INT-002 T-05): 범위가 바뀌면 다시 비교, 폴더 변화만 있어도 실행 가능", () => {
+        const sync = f_Job({ mode: "sync" });
+        expect(
+            f_Reason(f_Input({ job: { ...sync, scope: "all" }, compare: f_SyncResult() })),
+        ).toContain("다시 비교");
+        const all = { ...sync, scope: "all" as const };
+        const none = { createFiles: 0, updateFiles: 0, deleteFiles: 0 };
+        const f_All = (over: Partial<itfCompareSummary>) => ({
+            ...f_SyncResult({ ...none, ...over }),
+            scope: "all" as const,
+        });
+        expect(canStartRun(f_Input({ job: all, compare: f_All({ deleteDirs: 2 }) })).ok).toBe(true);
+        expect(canStartRun(f_Input({ job: all, compare: f_All({ createDirs: 1 }) })).ok).toBe(true);
+        expect(f_Reason(f_Input({ job: all, compare: f_All({}) }))).toContain(
+            "바꿀 파일이 없습니다",
+        );
+    });
 });
 
 describe("삭제 확인 정보", () => {
@@ -242,6 +266,7 @@ describe("삭제 확인 정보", () => {
         const s = f_Summary({ destFiles: 8, deleteFiles: 1, deleteBytes: 5 });
         expect(deleteConfirmInfo(s, "sync", SAFETY)).toEqual({
             deleteFiles: 1,
+            deleteDirs: 0,
             deleteBytes: 5,
             destFiles: 8,
             percentText: "12.5%",
@@ -256,6 +281,22 @@ describe("삭제 확인 정보", () => {
             deleteConfirmInfo(f_Summary({ destFiles: 0, deleteFiles: 0 }), "sync", SAFETY)
                 .percentText,
         ).toBeNull();
+        // 폴더 삭제는 sync만 (INT-002 T-05)
+        expect(deleteConfirmInfo(f_Summary({ deleteDirs: 3 }), "sync", SAFETY).deleteDirs).toBe(3);
+        expect(deleteConfirmInfo(f_Summary({ deleteDirs: 3 }), "copy", SAFETY).deleteDirs).toBe(0);
+    });
+
+    it("deleteDirSamples: 지울 폴더만, 최대 limit개", () => {
+        const r = f_Result({
+            dirChanges: [
+                { path: "a", action: "delete" },
+                { path: "b", action: "create" },
+                { path: "c", action: "delete" },
+                { path: "d", action: "delete" },
+            ],
+        });
+        expect(deleteDirSamples(r, 2)).toEqual(["a", "c"]);
+        expect(deleteDirSamples(r)).toEqual(["a", "c", "d"]);
     });
 });
 
@@ -315,5 +356,12 @@ describe("문구", () => {
         expect(realRunConfirmText(f_Summary({ createFiles: 0, updateFiles: 0 }), "copy")).toContain(
             "바뀌는 파일이 없습니다",
         );
+    });
+
+    it("realRunConfirmText: 빈 폴더 생성, sync면 폴더 삭제도 말한다", () => {
+        const s = f_Summary({ createDirs: 2, deleteDirs: 3 });
+        expect(realRunConfirmText(s, "sync")).toContain("빈 폴더 2개 생성, 폴더 3개 삭제");
+        expect(realRunConfirmText(s, "copy")).toContain("빈 폴더 2개 생성");
+        expect(realRunConfirmText(s, "copy")).not.toContain("폴더 3개 삭제");
     });
 });

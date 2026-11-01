@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 // ========== Internal imports ==========
 import {
     checkPreflight,
+    expectedDeleteDirs,
     expectedDeletes,
     matchPlanWithDryRun,
     planFromCompare,
+    plannedDeleteCount,
 } from "@/shared/run-plan";
 import type { typRunStats } from "@/shared/schemas/run";
 import type { itfCompareSummary } from "@/shared/types/compare";
@@ -28,6 +30,8 @@ const SUMMARY: itfCompareSummary = {
     caseOnlyFiles: 0,
     hashComparedFiles: 0,
     hashUnavailableFiles: 0,
+    createDirs: 0,
+    deleteDirs: 0,
 };
 
 function f_Dry(over: Partial<itfDryRunSummary> = {}): itfDryRunSummary {
@@ -57,6 +61,15 @@ describe("planFromCompare / expectedDeletes", () => {
         expect(planFromCompare(SUMMARY, "copy")).toMatchObject({ deleteFiles: 0, deleteBytes: 0 });
         expect(expectedDeletes(SUMMARY, "sync")).toBe(2);
         expect(expectedDeletes(SUMMARY, "copy")).toBe(0);
+    });
+
+    it("폴더: 생성은 그대로, 삭제는 sync만 (INT-002 T-05)", () => {
+        const dirs = { ...SUMMARY, createDirs: 3, deleteDirs: 2 };
+        expect(planFromCompare(dirs, "sync")).toMatchObject({ createDirs: 3, deleteDirs: 2 });
+        expect(planFromCompare(dirs, "copy")).toMatchObject({ createDirs: 3, deleteDirs: 0 });
+        expect(expectedDeleteDirs(dirs, "sync")).toBe(2);
+        expect(expectedDeleteDirs(dirs, "copy")).toBe(0);
+        expect(plannedDeleteCount(planFromCompare(dirs, "sync"))).toBe(4);
     });
 });
 
@@ -127,5 +140,22 @@ describe("checkPreflight (사전 확인, S14)", () => {
         expect(checkPreflight(plan, f_Dry(), null).ok).toBe(false);
         const r = checkPreflight(plan, f_Dry({ deleteFiles: 3 }), f_Stats({ deletes: 3 }));
         expect(r.mismatches).toHaveLength(2);
+    });
+
+    it("compareDirs면 폴더 삭제 수(수집기·stats)도 맞춰 본다 (INT-002 T-05)", () => {
+        const dirPlan = planFromCompare({ ...SUMMARY, deleteDirs: 4 }, "sync");
+        const ok = checkPreflight(dirPlan, f_Dry({ removeDirs: 4 }), f_Stats({ deletedDirs: 4 }), {
+            compareDirs: true,
+        });
+        expect(ok).toEqual({ ok: true, mismatches: [] });
+        const r = checkPreflight(dirPlan, f_Dry({ removeDirs: 3 }), f_Stats({ deletedDirs: 5 }), {
+            compareDirs: true,
+        });
+        expect(r.mismatches).toEqual([
+            "폴더 삭제: 계획 4개, 사전 확인 3개",
+            "폴더 삭제(통계): 계획 4개, 사전 확인 5개",
+        ]);
+        // 파일만 범위(compareDirs 없음)는 폴더 수를 보지 않는다
+        expect(checkPreflight(dirPlan, f_Dry({ removeDirs: 3 }), f_Stats()).ok).toBe(true);
     });
 });

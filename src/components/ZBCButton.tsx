@@ -20,6 +20,8 @@ export interface itfZBCButtonProps {
     /** 비활성 이유 등 (title) */
     title?: string;
     "aria-label"?: string;
+    /** 설명 요소 id (예: 목록 한 줄의 실행 버튼 → 작업 이름) */
+    "aria-describedby"?: string;
     /** 모달이 열릴 때 처음 포커스를 받는다 (ZBCModal이 data-autofocus를 찾는다) */
     initialFocus?: boolean;
     onClick?: () => void;
@@ -54,6 +56,7 @@ export default function ZBCButton(props: itfZBCButtonProps) {
             disabled={disabled}
             title={title}
             aria-label={props["aria-label"]}
+            aria-describedby={props["aria-describedby"]}
             data-autofocus={initialFocus ? "" : undefined}
             onClick={onClick}
         >

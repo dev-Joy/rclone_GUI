@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import ZBCButton from "@/components/ZBCButton";
 import {
     compareStaleReason,
+    dirSummaryText,
     selectRowIndexes,
     type itfCompareViewState,
     type typCompareFilterStatus,
@@ -59,7 +60,7 @@ function f_MethodText(r: itfCompareResult): string {
         parts.push(`해시 없음 ${r.summary.hashUnavailableFiles}개(크기만 비교)`);
     }
     parts.push(`${formatLocalDateTime(r.createdAt)} 비교, ${formatDuration(r.durationMs)} 걸림`);
-    parts.push("빈 폴더 차이는 표시하지 않습니다");
+    if (r.scope === "files") parts.push("파일만 비교(빈 폴더 차이는 표시하지 않습니다)");
     return parts.join(" · ");
 }
 
@@ -95,6 +96,7 @@ export default function CompareView(props: itfCompareViewProps) {
         return selectRowIndexes(shown.entries, v);
     }, [shown, status, hideEqual, sortKey, sortDir, query]);
     const stale = shown ? compareStaleReason(shown, job, maxAgeMinutes, nowMs) : null;
+    const dirText = shown ? dirSummaryText(shown.summary, shown.mode) : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Cancel = () => void cancel();
@@ -170,6 +172,11 @@ export default function CompareView(props: itfCompareViewProps) {
                 </p>
             ))}
             <p className={styles.method}>{f_MethodText(shown)}</p>
+            {dirText && (
+                <p className={styles.method} data-kind="dirs">
+                    폴더: {dirText}
+                </p>
+            )}
             <CompareSummary
                 summary={shown.summary}
                 mode={shown.mode}

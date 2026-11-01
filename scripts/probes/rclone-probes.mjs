@@ -7,7 +7,7 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
- *       묶음 이름(copy-cancel-large, excl)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       묶음 이름(copy-cancel-large, excl, scope)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -137,6 +137,18 @@ async function f_ProbeKillOnTransfer(name, args) {
 function f_ListFiles(dir) {
     return readdirSync(dir, { recursive: true, withFileTypes: true })
         .filter((d) => d.isFile())
+        .map((d) =>
+            join(d.parentPath, d.name)
+                .slice(dir.length + 1)
+                .replaceAll("\\", "/"),
+        )
+        .toSorted();
+}
+
+/** 폴더 안 하위 폴더 이름(/ 구분) */
+function f_ListDirs(dir) {
+    return readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((d) => d.isDirectory())
         .map((d) =>
             join(d.parentPath, d.name)
                 .slice(dir.length + 1)
@@ -457,6 +469,70 @@ try {
                 `  P6 200개: lsjson ${lsSame ? "같음" : "다름"}(${f_LsPaths(lf.stdout)?.length}개), sync dry-run ${syncSame ? "같음" : "다름"}(${f_SkippedOps(sf.stderr).length}건), 인자 명령 길이 ${manyArgs.join(" ").length}자`,
             );
         }
+    }
+    // INT-002 Phase 4: 동기화 범위(--create-empty-src-dirs, 폴더 포함 목록, 빈 폴더 삭제와 --max-delete)
+    if (f_Selected("scope")) {
+        const g = "scope";
+        const sSrc = join(work, "scope-src");
+        const sDst = join(work, "scope-dst");
+        f_SetFile(join(sSrc, "file.txt"), "file", OLD);
+        f_SetFile(join(sSrc, "keep", "a.txt"), "a", OLD);
+        f_SetFile(join(sSrc, "newdir", "sub", "n.txt"), "n", OLD); // 파일이 든 원본 전용 폴더
+        for (const d of ["empty-src", "nest/a/b", "both-empty", "skip"]) {
+            mkdirSync(join(sSrc, d), { recursive: true });
+        }
+        const f_MakeScopeDest = (withFileDelete) => {
+            rmSync(sDst, { recursive: true, force: true });
+            f_SetFile(join(sDst, "file.txt"), "file", OLD);
+            f_SetFile(join(sDst, "keep", "a.txt"), "a", OLD);
+            f_SetFile(join(sDst, "skip", "keep.txt"), "excluded", OLD); // 제외된 폴더
+            for (const d of ["both-empty", "dst-only-empty", "dst-only-nest/x"]) {
+                mkdirSync(join(sDst, d), { recursive: true });
+            }
+            if (withFileDelete) f_SetFile(join(sDst, "gone", "old.txt"), "old", OLD);
+        };
+        const excl = ["--exclude", "skip/**"];
+        const cesd = "--create-empty-src-dirs";
+        const lsAll = ["lsjson", "--recursive", "--no-mimetype", ask, ...common, ...excl];
+        const f_Run = (name, cmd, extra) =>
+            f_Probe(
+                name,
+                [cmd, ask, ...common, ...excl, ...tx, ...mw, ...extra, ...log, "--", sSrc, sDst],
+                g,
+            );
+        const f_After = (name) => {
+            console.log(`  ${name} 대상 폴더: ${JSON.stringify(f_ListDirs(sDst))}`);
+            f_Probe(`scope-lsjson-dst-after-${name}`, [...lsAll, "--", sDst], g);
+        };
+        const f_Show = (r) =>
+            r && console.log(`  건너뛴 동작: ${JSON.stringify(f_SkippedOps(r.stderr))}`);
+        f_MakeScopeDest(true);
+        f_Probe("scope-lsjson-src-all", [...lsAll, "--", sSrc], g);
+        f_Probe("scope-lsjson-dst-all", [...lsAll, "--", sDst], g);
+        f_Show(f_Run("scope-copy-files-dryrun", "copy", ["--dry-run"]));
+        f_Show(f_Run("scope-copy-all-dryrun", "copy", [cesd, "--dry-run"]));
+        f_Show(f_Run("scope-sync-files-dryrun", "sync", ["--dry-run"]));
+        f_Show(f_Run("scope-sync-all-dryrun", "sync", [cesd, "--dry-run"]));
+        f_MakeScopeDest(true);
+        f_Run("scope-copy-files-real", "copy", []);
+        f_After("copy-files");
+        f_MakeScopeDest(true);
+        f_Run("scope-copy-all-real", "copy", [cesd]);
+        f_After("copy-all");
+        f_MakeScopeDest(true);
+        f_Run("scope-sync-files-real", "sync", ["--max-delete", "1"]);
+        f_After("sync-files");
+        f_MakeScopeDest(true);
+        f_Run("scope-sync-all-real", "sync", [cesd, "--max-delete", "1"]);
+        f_After("sync-all");
+        f_MakeScopeDest(true);
+        f_Run("scope-sync-all-maxdelete0", "sync", [cesd, "--max-delete", "0"]);
+        f_After("maxdelete0");
+        f_MakeScopeDest(false);
+        f_Show(f_Run("scope-sync-all-dirsonly-dryrun", "sync", [cesd, "--dry-run"]));
+        f_MakeScopeDest(false);
+        f_Run("scope-sync-all-dirsonly-maxdelete0", "sync", [cesd, "--max-delete", "0"]);
+        f_After("dirsonly-maxdelete0");
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

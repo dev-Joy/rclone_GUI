@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 
 // ========== Internal imports ==========
 import type { typIsoDateString, typRunMode } from "@/shared/schemas/common";
-import type { typJobRunOptions } from "@/shared/schemas/job";
+import type { typJobRunOptions, typSyncScope } from "@/shared/schemas/job";
 import type { itfCompareSummary } from "@/shared/types/compare";
 
 export interface itfPlanTokenInput {
@@ -21,6 +21,8 @@ export interface itfPlanTokenInput {
     source: string;
     destination: string;
     mode: typRunMode;
+    /** 동기화 범위(INT-002 T-05) */
+    scope: typSyncScope;
     /** 적용한 제외 패턴(공용 + 작업 전용)·전달 방식 해시(resolveEffectiveExcludes) */
     excludeSnapshotHash: string;
     options: Pick<
@@ -38,13 +40,14 @@ export function computePlanToken(input: itfPlanTokenInput): string {
     const s = input.summary;
     const o = input.options;
     const fields: unknown[] = [
-        2,
+        3,
         input.jobId,
         input.jobRev,
         input.createdAt,
         input.source,
         input.destination,
         input.mode,
+        input.scope,
         input.excludeSnapshotHash,
         [o.checkHashes, o.modtimeToleranceMs, o.skipLinks, o.fastList],
         input.caseInsensitive,
@@ -66,6 +69,8 @@ export function computePlanToken(input: itfPlanTokenInput): string {
             s.caseOnlyFiles,
             s.hashComparedFiles,
             s.hashUnavailableFiles,
+            s.createDirs,
+            s.deleteDirs,
         ],
     ];
     return createHash("sha256").update(JSON.stringify(fields)).digest("hex").slice(0, 32);

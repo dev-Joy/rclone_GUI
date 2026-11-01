@@ -18,7 +18,7 @@ import { getApi, unwrap } from "@/lib/api";
 import { appendTail, runStatusText } from "@/lib/run-view";
 import { ERROR_MESSAGES } from "@/shared/errors";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
-import { expectedDeletes } from "@/shared/run-plan";
+import { expectedDeleteDirs, expectedDeletes } from "@/shared/run-plan";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type {
@@ -77,7 +77,7 @@ function f_Call<T>(pending: Promise<typApiResult<T>>): Promise<typApiResult<T>> 
     }));
 }
 
-/** 실제 실행 입력: 화면에 있는 그 작업의 비교 결과에서 토큰·삭제 예정 수를 넣는다 */
+/** 실제 실행 입력: 화면에 있는 그 작업의 비교 결과에서 토큰·삭제 예정 수(파일·폴더)를 넣는다 */
 function f_Input(jobId: string, dryRun: boolean, confirm?: itfRunConfirm): typStartRunInput {
     if (dryRun) return { jobId, dryRun };
     const r = useCompareStore.getState().result;
@@ -87,6 +87,7 @@ function f_Input(jobId: string, dryRun: boolean, confirm?: itfRunConfirm): typSt
         dryRun,
         planToken: r.planToken,
         confirmedDeletes: expectedDeletes(r.summary, r.mode),
+        confirmedDeleteDirs: expectedDeleteDirs(r.summary, r.mode),
         ...(confirm?.largeDeletes ? { confirmLargeDeletes: true } : {}),
     };
 }

@@ -75,3 +75,35 @@ describe("createLsjsonLineParser (실제 rclone 1.75.1 출력)", () => {
         expect(() => parser.finish()).toThrow("끝나지 않았습니다");
     });
 });
+
+describe("폴더 포함 목록 listing() (INT-002 T-05)", () => {
+    it("scope-lsjson-src-all: 폴더는 dirs, 파일은 files로 나눈다", () => {
+        const parser = f_Feed(f_Lines(readFixture("scope-lsjson-src-all", "stdout")));
+        const listing = parser.listing();
+        expect(listing.dirs.toSorted()).toEqual([
+            "both-empty",
+            "empty-src",
+            "keep",
+            "nest",
+            "nest/a",
+            "nest/a/b",
+            "newdir",
+            "newdir/sub",
+        ]);
+        expect(listing.files.map((f) => f.path).toSorted()).toEqual([
+            "file.txt",
+            "keep/a.txt",
+            "newdir/sub/n.txt",
+        ]);
+        expect(parser.finish()).toEqual(listing.files);
+        expect(parser.count).toBe(3);
+    });
+
+    it("--files-only 출력이면 dirs는 비어 있다", () => {
+        expect(f_Feed(f_Lines(readFixture("lsjson-src", "stdout"))).listing().dirs).toEqual([]);
+    });
+
+    it("']' 전에 listing()을 부르면 오류", () => {
+        expect(() => f_Feed(["["]).listing()).toThrow(clsLsjsonParseError);
+    });
+});

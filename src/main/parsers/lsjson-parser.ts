@@ -27,13 +27,24 @@ const zLsjsonItem = z.object({
     Hashes: z.record(z.string(), z.string()).optional(),
 });
 
-/** 항목 하나를 검증해 비교용 값으로 바꾼다. 폴더면 null */
-function f_ToMeta(raw: unknown, index: number): itfFileMeta | null {
+type typLsjsonItem = z.infer<typeof zLsjsonItem>;
+
+/** 항목 하나를 검증한다 */
+function f_Item(raw: unknown, index: number): typLsjsonItem {
     const parsed = zLsjsonItem.safeParse(raw);
     if (!parsed.success) {
         throw new clsLsjsonParseError(`lsjson ${index}번째 항목 형식이 올바르지 않습니다.`);
     }
-    const item = parsed.data;
+    return parsed.data;
+}
+
+/** 항목 하나를 검증해 비교용 값으로 바꾼다. 폴더면 null */
+function f_ToMeta(raw: unknown, index: number): itfFileMeta | null {
+    return f_FileMeta(f_Item(raw, index));
+}
+
+/** 검증한 항목을 비교용 값으로. 폴더면 null */
+function f_FileMeta(item: typLsjsonItem): itfFileMeta | null {
     if (item.IsDir) return null;
     const ms = item.ModTime ? Date.parse(item.ModTime) : Number.NaN;
     let hashes: Record<string, string> | null = null;
@@ -68,10 +79,19 @@ export function parseLsjsonOutput(stdout: string): itfFileMeta[] {
     return files;
 }
 
+/** 폴더 포함 목록: 파일과 폴더 경로(INT-002 T-05) */
+export interface itfLsjsonListing {
+    files: itfFileMeta[];
+    /** IsDir 항목의 Path. --files-only로 받았으면 항상 [] */
+    dirs: string[];
+}
+
 /** lsjson stdout을 줄 단위로 읽는 파서(전체 출력을 모으지 않는다) */
 export interface itfLsjsonLineParser {
     /** 한 줄("[", "{...},", "{...}", "]")을 넣는다. 형식이 틀리면 clsLsjsonParseError */
     push(line: string): void;
+    /** "]"까지 받았는지 확인하고 파일과 폴더 목록을 돌려준다 */
+    listing(): itfLsjsonListing;
     /** "]"까지 받았는지 확인하고 파일 목록을 돌려준다. 폴더(IsDir) 항목은 버린다 */
     finish(): itfFileMeta[];
     /** 지금까지 받은 파일 수(진행 표시용) */
@@ -88,6 +108,7 @@ export function createLsjsonLineParser(): itfLsjsonLineParser {
     let state: "before" | "items" | "done" = "before";
     let index = 0;
     const files: itfFileMeta[] = [];
+    const dirs: string[] = [];
     return {
         push(line: string): void {
             const text = line.trim();
@@ -115,13 +136,18 @@ export function createLsjsonLineParser(): itfLsjsonLineParser {
             } catch {
                 throw new clsLsjsonParseError(`lsjson ${index}번째 항목이 올바른 JSON이 아닙니다.`);
             }
-            const meta = f_ToMeta(raw, index);
+            const item = f_Item(raw, index);
             index += 1;
+            const meta = f_FileMeta(item);
             if (meta) files.push(meta);
+            else dirs.push(item.Path);
+        },
+        listing(): itfLsjsonListing {
+            if (state !== "done") throw new clsLsjsonParseError("lsjson 출력이 끝나지 않았습니다.");
+            return { files, dirs };
         },
         finish(): itfFileMeta[] {
-            if (state !== "done") throw new clsLsjsonParseError("lsjson 출력이 끝나지 않았습니다.");
-            return files;
+            return this.listing().files;
         },
         get count(): number {
             return files.length;

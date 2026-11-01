@@ -40,7 +40,12 @@ export function createDefaultSettings(): typSettings {
         },
         scheduler: { paused: false },
         logs: { retentionDays: 30, historyLimit: 500 },
-        ui: { theme: "system", minimizeToTray: true, launchAtLogin: false },
+        ui: {
+            theme: "system",
+            minimizeToTray: true,
+            launchAtLogin: false,
+            showJobStatusText: true,
+        },
     };
 }
 
@@ -53,6 +58,7 @@ export function createJobDraft(settings: typSettings): typJobDraft {
         source: "",
         destination: "",
         mode: "copy",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options: { ...options },

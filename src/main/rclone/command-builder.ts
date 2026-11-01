@@ -12,7 +12,7 @@
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
 import { CMDLINE_SAFETY_MARGIN, WIN_CMDLINE_MAX } from "@/shared/option-limits";
-import type { typJobRunOptions } from "@/shared/schemas/job";
+import type { typJobRunOptions, typSyncScope } from "@/shared/schemas/job";
 import type { typRunMode } from "@/shared/schemas/common";
 
 export class clsCommandBlockedError extends Error {
@@ -182,6 +182,8 @@ export interface itfLsjsonArgsInput {
     skipLinks: boolean;
     /** 지원 remote(Drive 등)에서 목록 호출 수를 줄인다. local에서는 무시됨 */
     fastList: boolean;
+    /** files: 파일만(--files-only), all: 폴더도 목록에 넣는다(INT-002 T-05) */
+    scope: typSyncScope;
 }
 
 /**
@@ -192,12 +194,18 @@ export const COMPARE_HASH_TYPES: readonly string[] = ["md5", "sha1"];
 
 /**
  * 비교용 전체 목록:
- * lsjson --recursive --files-only --no-mimetype --ask-password=false
+ * lsjson --recursive [--files-only] --no-mimetype --ask-password=false
  *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--exclude P]...
  *        [--exclude-from F] -- <path>
  */
 export function buildLsjsonArgs(input: itfLsjsonArgsInput): string[] {
-    const args = ["lsjson", "--recursive", "--files-only", "--no-mimetype", NO_ASK_PASSWORD];
+    const args = [
+        "lsjson",
+        "--recursive",
+        ...(input.scope === "files" ? ["--files-only"] : []),
+        "--no-mimetype",
+        NO_ASK_PASSWORD,
+    ];
     if (input.withHash) {
         args.push("--hash");
         for (const t of input.hashTypes) args.push("--hash-type", t);
@@ -216,6 +224,8 @@ export interface itfTransferArgsInput {
     configPath: string | null;
     excludes: itfExcludeArgs;
     options: typJobRunOptions;
+    /** all이면 --create-empty-src-dirs (copy·sync, dry-run·실제 모두) */
+    scope: typSyncScope;
     dryRun: boolean;
     /**
      * 실제 sync에는 필수(비교 계획의 삭제 수). 0도 유효하며 모든 파일 삭제를 막는다.
@@ -235,6 +245,7 @@ export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     if (o.ignoreErrors) args.push("--ignore-errors");
     if (o.checkHashes) args.push("--checksum");
     args.push("--modify-window", `${o.modtimeToleranceMs}ms`);
+    if (input.scope === "all") args.push("--create-empty-src-dirs");
     if (input.dryRun) {
         args.push("--dry-run");
     } else if (input.mode === "sync") {

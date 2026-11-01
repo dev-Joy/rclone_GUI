@@ -46,6 +46,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         source: SRC,
         destination: DST,
         mode: "sync",
+        scope: "files",
         excludes: [...excludes],
         excludePatternIds: [],
         options,

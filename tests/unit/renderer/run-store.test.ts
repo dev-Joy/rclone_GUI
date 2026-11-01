@@ -28,10 +28,12 @@ function f_Compare(jobId: string, mode: "copy" | "sync" = "copy"): itfCompareRes
         createdAt: "2026-10-28T00:00:00.000Z",
         durationMs: 1,
         mode,
+        scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
         summary: { ...emptySummary(), createFiles: 2, deleteFiles: 3 },
         entries: [],
+        dirChanges: [],
         warnings: [],
         planToken: TOKEN,
         excludeHash: "0".repeat(32),
@@ -125,10 +127,20 @@ describe("run-store start", () => {
             dryRun: false,
             planToken: TOKEN,
             confirmedDeletes: 0,
+            confirmedDeleteDirs: 0,
         });
         useCompareStore.setState({ result: f_Compare(J1, "sync") });
         await f_S().start(J1, false);
         expect(fake.runStartInputs.at(-1)?.confirmedDeletes).toBe(3);
+        // 전체 범위 sync의 폴더 삭제 수도 보낸다(copy는 0) (INT-002 T-05)
+        const dirs = f_Compare(J1, "sync");
+        dirs.summary = { ...dirs.summary, deleteDirs: 2 };
+        useCompareStore.setState({ result: dirs });
+        await f_S().start(J1, false);
+        expect(fake.runStartInputs.at(-1)?.confirmedDeleteDirs).toBe(2);
+        useCompareStore.setState({ result: { ...dirs, mode: "copy" } });
+        await f_S().start(J1, false);
+        expect(fake.runStartInputs.at(-1)?.confirmedDeleteDirs).toBe(0);
     });
 
     it("대량 삭제 확인은 confirmLargeDeletes:true로만 보낸다(false·없음은 키 없음)", async () => {
@@ -139,6 +151,7 @@ describe("run-store start", () => {
             dryRun: false,
             planToken: TOKEN,
             confirmedDeletes: 3,
+            confirmedDeleteDirs: 0,
             confirmLargeDeletes: true,
         });
         await f_S().start(J1, false, { largeDeletes: false });

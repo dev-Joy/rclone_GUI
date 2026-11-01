@@ -25,8 +25,8 @@ function f_Sample(list: string[], object: string | null, limit: number): void {
 }
 
 /**
- * dry-run 로그 수집기. "update modification time"(파일)과 "set directory modification time"(폴더)은
- * 파서에서 둘 다 touch이므로 size 유무로 나눈다(폴더 줄에는 size가 없다, rclone-notes #6).
+ * dry-run 로그 수집기. 폴더 수정시간("set directory modification time")은 파서가 dirTime으로 나누므로
+ * 세지 않는다(rclone-notes #26). touch는 size가 있는 줄만 센다(rclone-notes #6).
  */
 export function createDryRunCollector(sampleLimit = DRY_RUN_SAMPLE_LIMIT): itfDryRunCollector {
     const s: itfDryRunSummary = {

@@ -130,3 +130,30 @@
 - 명령: `lsjson ... --exclude-from <없는 파일> -- <폴더>` (fixture `excl-missing-file`)
 - 결과: stdout 없음, stderr `CRITICAL: Failed to initialise global options: failed to reload "filter" options: open <파일>: The system cannot find the file specified.`, exit 1.
 - 영향: 파일이 실행 전에 지워져도 제외 없이 진행되지 않고 실패한다. 그래도 파일은 실행 직전에 만들고(`wx`) 다시 읽어 확인하며, 실행이 끝나면 지운다. 앱 시작 때 남은 `exclude-files/excl-*.txt`를 정리한다.
+
+## 2026-11-02 · rclone v1.75.1 · Windows 11 x64 (INT-002 Phase 4: 동기화 범위)
+
+### 22. `--create-empty-src-dirs`가 있으면 원본에만 있는 폴더마다 `make directory`가 나온다(파일이 든 폴더 포함)
+- 명령: 원본(`file.txt`, `keep/a.txt`, `newdir/sub/n.txt`, 빈 폴더 `empty-src`·`nest/a/b`·`both-empty`·`skip`), 대상(`file.txt`, `keep/a.txt`, `skip/keep.txt`, `gone/old.txt`, 빈 폴더 `both-empty`·`dst-only-empty`·`dst-only-nest/x`)에 `copy|sync ... --exclude "skip/**" [--create-empty-src-dirs] --dry-run -v --use-json-log` (fixture `scope-copy-files-dryrun`·`scope-copy-all-dryrun`·`scope-sync-all-dryrun`)
+- 결과: 옵션이 없으면 `make directory`가 없다. 있으면 `empty-src`, `nest`, `nest/a`, `nest/a/b`, `newdir`, `newdir/sub` 6개가 `skipped:"make directory"`로 나온다(파일 복사 때문에 어차피 생기는 `newdir`·`newdir/sub`도 포함). 실제 copy 뒤 대상에 빈 폴더 4개가 생긴다(`scope-copy-all-real`).
+- 영향: 비교 요약의 `createDirs`는 "파일이 없는 원본 전용 폴더"(옵션 때문에만 생기는 폴더)라 dry-run의 `make directory` 수와 다르다. 그래서 사전 확인은 폴더 생성 수를 비교하지 않고 화면 표시에만 쓴다.
+
+### 23. sync는 대상에만 있는 폴더를 모두 `remove directory`로 지우고, 최종 stats `deletedDirs`가 그 수와 같다
+- 명령: 같은 폴더로 `sync [--create-empty-src-dirs] --dry-run`, 실제 sync (fixture `scope-sync-files-dryrun`·`scope-sync-all-dryrun`·`scope-sync-all-real`·`scope-sync-all-dirsonly-dryrun`)
+- 결과: `dst-only-empty`, `dst-only-nest`, `dst-only-nest/x`, `gone`(파일 삭제로 비게 되는 폴더) 4개가 `remove directory`, 최종 stats `deletedDirs: 4`. 파일 삭제가 없을 때는 3개·`deletedDirs: 3`. 양쪽에 다 있는 빈 폴더 `both-empty`는 지우지 않는다. **파일만 범위(옵션 없음)에서도 같은 4개를 지운다.**
+- 영향: 전체 범위의 `deleteDirs`는 "대상에만 있는 폴더 전부"로 세고, 사전 확인에서 dry-run의 폴더 삭제 수와 `deletedDirs`를 함께 비교한다. 파일만 범위의 삭제 확인 창에는 "대상에만 있는 빈 폴더도 지워집니다"라고 쓴다.
+
+### 24. `--exclude "skip/**"`는 lsjson 목록에서 `skip` 폴더 자체도 빼고, sync도 그 폴더를 건드리지 않는다
+- 명령: `lsjson --recursive --no-mimetype --exclude "skip/**"` (fixture `scope-lsjson-src-all`·`scope-lsjson-dst-all`)와 위 sync
+- 결과: 원본의 빈 `skip`, 대상의 `skip`(안에 `keep.txt`) 모두 목록에 없다. sync 뒤에도 대상 `skip/keep.txt`가 남는다.
+- 영향: 폴더 포함 목록(`--files-only` 없음)으로 센 폴더 삭제 수가 rclone의 실제 폴더 삭제와 어긋나지 않는다.
+
+### 25. `--max-delete`는 폴더 삭제를 세지 않는다
+- 명령: `sync --create-empty-src-dirs --max-delete 0` (fixture `scope-sync-all-maxdelete0`, `scope-sync-all-dirsonly-maxdelete0`)
+- 결과: 파일 삭제가 있으면 exit 7(`--max-delete threshold reached`, `not deleting directories as there were IO errors`), 폴더는 하나도 지우지 않는다(빈 폴더 생성은 이미 됨). 파일 삭제 없이 폴더 삭제만 있으면 exit 0으로 빈 폴더 3개를 모두 지운다.
+- 영향: `--max-delete`에는 파일 삭제 수만 넘긴다. 폴더 삭제는 계획 토큰·확인한 폴더 삭제 수·사전 확인이 막는다. rmdir은 빈 폴더만 지우므로 파일은 잃지 않는다.
+
+### 26. `--create-empty-src-dirs`면 기존 폴더의 `set directory modification time`에도 `size: 0`이 붙는다
+- 명령: 위 `sync --create-empty-src-dirs --dry-run`(파일 삭제 없음, fixture `scope-sync-all-dirsonly-dryrun`)
+- 결과: 새로 만들 폴더의 줄은 `objectType:"string"`이고 size가 없지만, 양쪽에 있는 폴더(`both-empty`, `keep`)의 줄은 `objectType:"*local.Directory"`, `size:0`이다. #6의 "폴더 줄에는 size가 없다"가 이 옵션에서는 맞지 않는다.
+- 영향: 로그 파서가 `set directory modification time`을 파일 수정시간(`touch`)과 다른 종류(`dirTime`)로 나눈다. 나누지 않으면 사전 확인이 폴더를 "시간만 맞춤 파일"로 세어 전체 범위 sync가 매번 PLAN_DRIFT로 막힌다.

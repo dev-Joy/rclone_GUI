@@ -50,6 +50,21 @@ describe("createDryRunCollector (fixture)", () => {
         expect(s.deleteSamples.toSorted()).toEqual(["extra.txt", "gone/old.txt"]);
     });
 
+    it("전체 범위 dry-run: 기존 폴더의 수정시간 줄(size 0)은 시간만 맞춤으로 세지 않는다 (INT-002 T-05)", () => {
+        expect(f_Collect("scope-sync-all-dirsonly-dryrun")).toMatchObject({
+            copyFiles: 1,
+            touchFiles: 0,
+            deleteFiles: 0,
+            removeDirs: 3,
+        });
+        expect(f_Collect("scope-sync-all-dryrun")).toMatchObject({
+            copyFiles: 1,
+            touchFiles: 0,
+            deleteFiles: 1,
+            removeDirs: 4,
+        });
+    });
+
     it("샘플은 상한까지만 모으고 수는 모두 센다", () => {
         const s = f_Collect("copy-dryrun", 2);
         expect(s.copyFiles).toBe(3);

@@ -6,6 +6,7 @@ import {
     canStartCompare,
     compareStaleReason,
     DEFAULT_COMPARE_VIEW,
+    dirSummaryText,
     reasonText,
     selectRowIndexes,
     statusLabel,
@@ -63,6 +64,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         source: "C:\\tmp\\src",
         destination: "D:\\tmp\\dst",
         mode: "copy",
+        scope: "files",
         excludes,
         excludePatternIds: [],
         options,
@@ -168,6 +170,15 @@ describe("summaryCards", () => {
     it("형식 충돌은 있을 때만", () => {
         const cards = summaryCards({ ...s, conflictFiles: 2 }, "copy");
         expect(cards.at(-1)).toMatchObject({ filter: "typeConflict", label: "형식 충돌 2개" });
+    });
+});
+
+describe("dirSummaryText (INT-002 T-05)", () => {
+    it("폴더 생성·삭제 문구, copy는 유지, 둘 다 0이면 null", () => {
+        const s = { ...emptySummary(), createDirs: 3, deleteDirs: 2 };
+        expect(dirSummaryText(s, "sync")).toBe("빈 폴더 3개 생성, 폴더 2개 삭제");
+        expect(dirSummaryText(s, "copy")).toBe("빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)");
+        expect(dirSummaryText(emptySummary(), "sync")).toBeNull();
     });
 });
 

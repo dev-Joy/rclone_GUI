@@ -1,0 +1,13 @@
+[
+{"Path":"both-empty","Name":"both-empty","Size":0,"ModTime":"2026-11-02T08:04:46.8634431+09:00","IsDir":true},
+{"Path":"empty-src","Name":"empty-src","Size":0,"ModTime":"2026-11-02T08:04:46.8624407+09:00","IsDir":true},
+{"Path":"file.txt","Name":"file.txt","Size":4,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"keep","Name":"keep","Size":0,"ModTime":"2026-11-02T08:04:46.8614352+09:00","IsDir":true},
+{"Path":"nest","Name":"nest","Size":0,"ModTime":"2026-11-02T08:04:46.8634431+09:00","IsDir":true},
+{"Path":"newdir","Name":"newdir","Size":0,"ModTime":"2026-11-02T08:04:46.8624407+09:00","IsDir":true},
+{"Path":"newdir/sub","Name":"sub","Size":0,"ModTime":"2026-11-02T08:04:46.8624407+09:00","IsDir":true},
+{"Path":"keep/a.txt","Name":"a.txt","Size":1,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"nest/a","Name":"a","Size":0,"ModTime":"2026-11-02T08:04:46.8634431+09:00","IsDir":true},
+{"Path":"nest/a/b","Name":"b","Size":0,"ModTime":"2026-11-02T08:04:46.8634431+09:00","IsDir":true},
+{"Path":"newdir/sub/n.txt","Name":"n.txt","Size":1,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false}
+]

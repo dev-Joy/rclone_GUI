@@ -63,6 +63,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         source: src,
         destination: dst,
         mode: "sync",
+        scope: "files",
         excludes: [...excludes, "*.tmp"],
         excludePatternIds: [],
         options,

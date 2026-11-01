@@ -15,9 +15,11 @@ export type typLogLevel = "debug" | "info" | "notice" | "warning" | "error";
 
 /**
  * dry-run에서 건너뛴 동작.
- * copy/delete는 계획 수에 들어가고, touch(수정시간만 갱신)·dir 동작은 들어가지 않는다.
+ * copy/delete는 계획 수에 들어가고, touch(파일 수정시간만 갱신)·dir 동작은 들어가지 않는다.
+ * dirTime(폴더 수정시간)은 --create-empty-src-dirs에서 기존 폴더에도 size 0으로 나오므로
+ * touch와 나눈다(rclone-notes #26).
  */
-export type typSkipKind = "copy" | "delete" | "touch" | "removeDir" | "other";
+export type typSkipKind = "copy" | "delete" | "touch" | "dirTime" | "removeDir" | "other";
 
 export interface itfParsedLogLine {
     raw: boolean;
@@ -57,8 +59,9 @@ function f_Skip(value: unknown): typSkipKind | null {
         case "delete":
             return "delete";
         case "update modification time":
-        case "set directory modification time":
             return "touch";
+        case "set directory modification time":
+            return "dirTime";
         case "remove directory":
             return "removeDir";
         default:

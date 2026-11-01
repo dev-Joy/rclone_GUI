@@ -172,6 +172,8 @@ export default function SettingsPage(props: itfSettingsPageProps) {
     const h_Tray = (v: boolean) => f_Patch((d) => ({ ...d, ui: { ...d.ui, minimizeToTray: v } }));
     const h_LaunchAtLogin = (v: boolean) =>
         f_Patch((d) => ({ ...d, ui: { ...d.ui, launchAtLogin: v } }));
+    const h_ShowJobStatus = (v: boolean) =>
+        f_Patch((d) => ({ ...d, ui: { ...d.ui, showJobStatusText: v } }));
     const h_AskClear = () => setClearOpen(true);
     const h_CloseClear = () => setClearOpen(false);
     const h_ToggleAdvanced = (e: SyntheticEvent<HTMLDetailsElement>) =>
@@ -316,6 +318,14 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                         onChange={h_Theme}
                     />
                 </ZBCField>
+                <ZBCCheckbox
+                    id="settings-show-job-status"
+                    name="showJobStatusText"
+                    checked={draft.ui.showJobStatusText}
+                    onChange={h_ShowJobStatus}
+                    label="작업 목록에 최근 실행 상태 문구 표시"
+                    description="끄면 최근 실행 시각만 보이고 ‘성공’·‘실패’ 같은 문구는 숨깁니다."
+                />
             </section>
 
             <section className={styles.section} aria-labelledby="settings-app-title">

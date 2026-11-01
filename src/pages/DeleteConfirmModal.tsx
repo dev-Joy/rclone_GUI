@@ -1,6 +1,7 @@
 /**
  * 삭제가 있는 동기화 실제 실행 확인 (MVP_SPEC §9.2, S10·S11).
- * 작업·모드·원본·대상, 삭제 수·바이트·대상 대비 비율, 삭제 샘플(최대 20개), 빈 폴더 정리 안내,
+ * 작업·모드·원본·대상, 삭제 수·바이트·대상 대비 비율, 삭제 샘플(최대 20개), 전체 범위면 지울 폴더 수·샘플,
+ * 범위에 맞는 폴더 정리 안내,
  * 사전 확인이 꺼져 있으면 경고를 보여 준다. 샘플 중 rclone 임시 파일(.partial)은 "취소로 남은 임시 파일"로 표시한다. 체크박스 1은 항상, 대량 삭제면 체크박스 2도 체크해야 실행할 수 있다.
  * main은 화면 체크를 믿지 않고 삭제 수·대량 삭제 확인을 다시 검사한다.
  *
@@ -16,7 +17,12 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCCheckbox from "@/components/ZBCCheckbox";
 import ZBCModal from "@/components/ZBCModal";
 import { pathKindBadge } from "@/lib/path-display";
-import { deleteConfirmInfo, deleteSamples, realRunConfirmText } from "@/lib/run-view";
+import {
+    deleteConfirmInfo,
+    deleteDirSamples,
+    deleteSamples,
+    realRunConfirmText,
+} from "@/lib/run-view";
 import { formatBytes } from "@/shared/format";
 import { isRclonePartial, PARTIAL_BADGE_TEXT, PARTIAL_BADGE_TITLE } from "@/shared/partial-files";
 import type { typDeleteThresholds } from "@/shared/run-gates";
@@ -67,9 +73,13 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
     // ========== 내부 변수 (_V) ==========
     const info = deleteConfirmInfo(compare.summary, job.mode, safety);
     const samples = deleteSamples(compare, sampleLimit);
+    const dirSamples = deleteDirSamples(compare, sampleLimit);
     const preflightOn = job.options.preflightBeforeDestructive;
     const canConfirm = checked && (!info.large || checkedLarge);
     const count = info.deleteFiles.toLocaleString("ko-KR");
+    const dirCount = info.deleteDirs.toLocaleString("ko-KR");
+    const confirmText =
+        info.deleteFiles > 0 ? `${count}개 삭제 포함 실행` : `폴더 ${dirCount}개 삭제 포함 실행`;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Confirm = () => {
@@ -88,7 +98,7 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                         취소
                     </ZBCButton>
                     <ZBCButton variant="danger" onClick={h_Confirm} disabled={!canConfirm}>
-                        {count}개 삭제 포함 실행
+                        {confirmText}
                     </ZBCButton>
                 </>
             }
@@ -100,17 +110,20 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                 {f_Path("원본", job.source)}
                 {f_Path("대상", job.destination)}
                 <p className={styles.headline}>{realRunConfirmText(compare.summary, job.mode)}</p>
-                <p className={styles.deletes}>
-                    대상 파일 {info.destFiles.toLocaleString("ko-KR")}개 중 {count}개 삭제 (
-                    {formatBytes(info.deleteBytes)}
-                    {info.percentText ? `, ${info.percentText}` : ""})
-                    {info.large && (
-                        <>
-                            {" "}
-                            <ZBCBadge tone="danger">대량 삭제</ZBCBadge>
-                        </>
-                    )}
-                </p>
+                {info.deleteFiles > 0 && (
+                    <p className={styles.deletes}>
+                        대상 파일 {info.destFiles.toLocaleString("ko-KR")}개 중 {count}개 삭제 (
+                        {formatBytes(info.deleteBytes)}
+                        {info.percentText ? `, ${info.percentText}` : ""})
+                        {info.large && (
+                            <>
+                                {" "}
+                                <ZBCBadge tone="danger">대량 삭제</ZBCBadge>
+                            </>
+                        )}
+                    </p>
+                )}
+                {info.deleteDirs > 0 && <p className={styles.deletes}>폴더 {dirCount}개 삭제</p>}
                 {info.large && (
                     <p className={styles.warning} role="alert">
                         삭제가 기준({safety.deleteConfirmFiles}개 또는 대상의{" "}
@@ -118,30 +131,51 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                         확인하세요.
                     </p>
                 )}
-                <details className={styles.samples} open>
-                    <summary>
-                        삭제할 파일{" "}
-                        {samples.length < info.deleteFiles
-                            ? `(${samples.length}/${count}개)`
-                            : `(${count}개)`}
-                    </summary>
-                    <ul>
-                        {samples.map((s) => (
-                            <li key={s.path}>
-                                <span className={styles.samplePath}>{s.path}</span>
-                                {isRclonePartial(s.path) && (
-                                    <ZBCBadge tone="warning" title={PARTIAL_BADGE_TITLE}>
-                                        {PARTIAL_BADGE_TEXT}
-                                    </ZBCBadge>
-                                )}
-                                <span className={styles.sampleSize}>{formatBytes(s.size)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </details>
+                {info.deleteFiles > 0 && (
+                    <details className={styles.samples} open>
+                        <summary>
+                            삭제할 파일{" "}
+                            {samples.length < info.deleteFiles
+                                ? `(${samples.length}/${count}개)`
+                                : `(${count}개)`}
+                        </summary>
+                        <ul>
+                            {samples.map((s) => (
+                                <li key={s.path}>
+                                    <span className={styles.samplePath}>{s.path}</span>
+                                    {isRclonePartial(s.path) && (
+                                        <ZBCBadge tone="warning" title={PARTIAL_BADGE_TITLE}>
+                                            {PARTIAL_BADGE_TEXT}
+                                        </ZBCBadge>
+                                    )}
+                                    <span className={styles.sampleSize}>{formatBytes(s.size)}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )}
+                {info.deleteDirs > 0 && (
+                    <details className={styles.samples} open>
+                        <summary>
+                            삭제할 폴더{" "}
+                            {dirSamples.length < info.deleteDirs
+                                ? `(${dirSamples.length}/${dirCount}개)`
+                                : `(${dirCount}개)`}
+                        </summary>
+                        <ul>
+                            {dirSamples.map((p) => (
+                                <li key={p}>
+                                    <span className={styles.samplePath}>{p}/</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )}
                 <p className={styles.note}>
-                    파일을 지운 뒤 비게 된 폴더도 정리될 수 있습니다(빈 폴더는 삭제 한도에 세지
-                    않음). 취소해도 이미 복사·삭제된 파일은 되돌리지 않습니다.
+                    {job.scope === "all"
+                        ? "폴더는 비어 있을 때만 지워지고 삭제 한도에 세지 않습니다."
+                        : "대상에만 있는 빈 폴더와, 파일을 지운 뒤 비게 된 폴더도 지워집니다(폴더는 삭제 한도에 세지 않음)."}{" "}
+                    취소해도 이미 복사·삭제된 파일은 되돌리지 않습니다.
                 </p>
                 {preflightOn ? (
                     <p className={styles.note}>

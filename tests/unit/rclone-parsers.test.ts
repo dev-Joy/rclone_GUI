@@ -60,12 +60,16 @@ describe("parseLsjsonOutput (실제 rclone 1.75.1 출력)", () => {
 });
 
 describe("parseLogLine (실제 rclone 1.75.1 출력)", () => {
-    it("sync dry-run: copy 3, delete 2, touch 2, removeDir 1과 최종 stats", () => {
+    it("sync dry-run: copy 3, delete 2, touch 1, dirTime 1, removeDir 1과 최종 stats", () => {
         const parsed = fixtureLines("sync-dryrun").map(parseLogLine);
         const count = (k: string) => parsed.filter((p) => p.skipped === k).length;
-        expect([count("copy"), count("delete"), count("touch"), count("removeDir")]).toEqual([
-            3, 2, 2, 1,
-        ]);
+        expect([
+            count("copy"),
+            count("delete"),
+            count("touch"),
+            count("dirTime"),
+            count("removeDir"),
+        ]).toEqual([3, 2, 1, 1, 1]);
         expect(parsed.find((p) => p.skipped === "copy" && p.object === "한글 파일.txt")!.size).toBe(
             7,
         );

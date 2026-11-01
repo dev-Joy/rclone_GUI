@@ -28,6 +28,7 @@ export type typJobFormField =
     | "source"
     | "destination"
     | "mode"
+    | "scope"
     | "excludes"
     | "configPathOverride"
     | "options.checkers"
@@ -112,6 +113,8 @@ function f_StringIssueText(field: typJobFormField, issue: z.core.$ZodIssue): str
                 : "rclone.conf 파일을 고르세요.";
         case "mode":
             return "복사 또는 동기화를 고르세요.";
+        case "scope":
+            return "범위를 고르세요.";
         default:
             return issue.message;
     }
@@ -142,6 +145,7 @@ function f_MapIssue(
         head === "source" ||
         head === "destination" ||
         head === "mode" ||
+        head === "scope" ||
         head === "configPathOverride"
     ) {
         // 제어문자 등 custom 메시지는 이미 한국어
@@ -159,6 +163,7 @@ export function jobToDraft(job: typJob): typJobDraft {
         source: job.source,
         destination: job.destination,
         mode: job.mode,
+        scope: job.scope,
         excludes: [...job.excludes],
         excludePatternIds: [...job.excludePatternIds],
         options: { ...job.options },
