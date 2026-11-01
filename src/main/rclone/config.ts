@@ -13,9 +13,15 @@ import {
     hintForRcloneError,
     parseConfigFileOutput,
     parseListRemotes,
+    parseListRemotesLong,
     summarizeStderr,
+    type itfRemoteTypeRow,
 } from "@/main/parsers/rclone-env-parser";
-import { buildConfigFileArgs, buildListRemotesArgs } from "@/main/rclone/command-builder";
+import {
+    buildConfigFileArgs,
+    buildListRemotesArgs,
+    buildListRemotesLongArgs,
+} from "@/main/rclone/command-builder";
 import { clsProcessSpawnError, type typRunRclone } from "@/main/rclone/process";
 import type { typConfigSource } from "@/shared/ipc-contract";
 import { parsePath } from "@/shared/path-utils";
@@ -27,6 +33,8 @@ export const RCLONE_TIMEOUTS = {
     configFile: 10_000,
     listRemotes: 20_000,
     probe: 60_000,
+    /** 폴더 탐색(lsjson --max-depth 1 --dirs-only) */
+    listDir: 60_000,
     /** 비교용 전체 목록(lsjson --recursive) 한 쪽 */
     compare: 30 * 60_000,
 } as const;
@@ -152,4 +160,40 @@ export async function listRemotes(
         throw new clsAppError("RCLONE_FAILED", "remote 목록이 너무 커서 읽지 못했습니다.");
     }
     return parseListRemotes(r.stdout);
+}
+
+/** `rclone listremotes --long` 결과(이름 + 종류). 오류 처리는 listRemotes와 같다 */
+export async function listRemotesLong(
+    binary: string,
+    configPath: string | null,
+    deps: Pick<itfConfigDeps, "run">,
+): Promise<itfRemoteTypeRow[]> {
+    let r;
+    try {
+        r = await deps.run(binary, buildListRemotesLongArgs(configPath), {
+            timeoutMs: RCLONE_TIMEOUTS.listRemotes,
+        });
+    } catch (e) {
+        if (e instanceof clsProcessSpawnError) {
+            throw new clsAppError(
+                e.errno === "ENOENT" ? "RCLONE_NOT_FOUND" : "RCLONE_NOT_EXECUTABLE",
+            );
+        }
+        throw e;
+    }
+    if (r.timedOut) {
+        throw new clsAppError("RCLONE_FAILED", "remote 목록 조회가 시간 안에 끝나지 않았습니다.");
+    }
+    if (r.exitCode !== 0) {
+        const hint = hintForRcloneError(r.stderrTail, null);
+        throw new clsAppError(
+            "RCLONE_FAILED",
+            `remote 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
+            summarizeStderr(r.stderrTail),
+        );
+    }
+    if (r.stdoutTruncated) {
+        throw new clsAppError("RCLONE_FAILED", "remote 목록이 너무 커서 읽지 못했습니다.");
+    }
+    return parseListRemotesLong(r.stdout);
 }

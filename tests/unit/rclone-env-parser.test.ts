@@ -8,6 +8,7 @@ import {
     MIN_RCLONE_VERSION,
     parseConfigFileOutput,
     parseListRemotes,
+    parseListRemotesLong,
     parseRcloneVersion,
     summarizeStderr,
     VERIFIED_RCLONE_VERSION,
@@ -94,6 +95,30 @@ describe("parseListRemotes (실제 출력)", () => {
 
     it("빈 줄·공백·중복 제거", () => {
         expect(parseListRemotes("b:\r\n\r\n  a:  \nb:\n")).toEqual(["a", "b"]);
+    });
+});
+
+describe("parseListRemotesLong (실제 출력)", () => {
+    it("이름과 종류를 읽고 이름 순으로 정렬한다", () => {
+        expect(parseListRemotesLong(readFixture("listremotes-long", "stdout"))).toEqual([
+            { name: "ab", type: "crypt" },
+            { name: "test-alias", type: "alias" },
+            { name: "test-remote", type: "local" },
+        ]);
+    });
+
+    it("종류가 없는 줄은 빈 문자열, 콜론 없는 줄은 버린다", () => {
+        expect(parseListRemotesLong("b:\nnot a remote\na:   s3\n")).toEqual([
+            { name: "a", type: "s3" },
+            { name: "b", type: "" },
+        ]);
+    });
+
+    it("CRLF·빈 줄·중복은 처음 것만 남긴다", () => {
+        expect(parseListRemotesLong("b: local\r\n\r\n  a:   drive  \r\nb: crypt\r\n")).toEqual([
+            { name: "a", type: "drive" },
+            { name: "b", type: "local" },
+        ]);
     });
 });
 

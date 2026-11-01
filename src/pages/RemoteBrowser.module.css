@@ -1,0 +1,98 @@
+/**
+ * RemoteBrowser 스타일
+ *
+ * @author dev-Joy 2026-10-30
+ */
+
+@layer pages {
+    .RemoteBrowser {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: min(560px, 70vw);
+
+        .bookmark {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .location {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .current {
+            flex: 1 1 240px;
+            overflow: hidden;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .status {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .warning {
+            margin: 0;
+            color: var(--warning);
+            font-size: 13px;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            max-height: 320px;
+            margin: 0;
+            padding: 0;
+            overflow-y: auto;
+            list-style: none;
+
+            li {
+                margin: 0;
+            }
+        }
+
+        .entry {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid transparent;
+            border-radius: var(--radius);
+            background: none;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            overflow-wrap: anywhere;
+            cursor: pointer;
+
+            &:hover,
+            &:focus-visible {
+                border-color: var(--border);
+                background: var(--bg);
+            }
+        }
+    }
+}

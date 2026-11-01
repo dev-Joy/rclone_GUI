@@ -1,0 +1,3 @@
+test-remote: local
+test-alias:  alias
+ab:          crypt

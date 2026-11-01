@@ -52,6 +52,17 @@ export function remoteNameOf(p: itfParsedPath): string | null {
     return p.kind === "remote" ? p.root.slice(0, -1) : null;
 }
 
+/** 작업의 원본·대상이 쓰는 remote 이름(중복 제거). 로컬·UNC만 쓰면 빈 배열 */
+export function remoteNamesOfJob(job: Pick<typJob, "source" | "destination">): string[] {
+    const names = new Set<string>();
+    for (const raw of [job.source, job.destination]) {
+        const r = parsePath(raw);
+        if (!r.ok || r.path.kind !== "remote") continue;
+        names.add(r.path.root.slice(0, -1));
+    }
+    return [...names];
+}
+
 /**
  * 작업의 경로·rclone·설정 파일을 확인해 실행 문맥을 만든다.
  * 실패: 경로 오류(PATH_INVALID·SAFETY_BLOCKED 등), RCLONE_*, CONFIG_REQUIRED.

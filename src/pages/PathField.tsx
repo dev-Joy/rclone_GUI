@@ -140,7 +140,12 @@ export default function PathField(props: itfPathFieldProps) {
                     {checking ? "확인 중…" : "접근 확인"}
                 </ZBCButton>
             </div>
-            <RemotePicker id={`${id}-remote`} configPath={configPath} onPick={onChange} />
+            <RemotePicker
+                id={`${id}-remote`}
+                configPath={configPath}
+                value={value}
+                onPick={onChange}
+            />
             {fresh && probeError && (
                 <p className={styles.result} data-state="error" role="alert">
                     {probeError}

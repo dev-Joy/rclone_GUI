@@ -52,7 +52,12 @@ import {
 import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
 import type { clsCompareService } from "@/main/services/compare-service";
 import { writeExcludeFile, type itfExcludeFileHandle } from "@/main/services/exclude-file";
-import { remoteNameOf, resolveJobContext, type itfJobContext } from "@/main/services/job-context";
+import {
+    remoteNameOf,
+    remoteNamesOfJob,
+    resolveJobContext,
+    type itfJobContext,
+} from "@/main/services/job-context";
 import { clsRunEventBatcher, type itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunLogFile, maskArgsForLog, runLogFileName } from "@/main/services/run-log-file";
 import type { clsActiveRunStore } from "@/main/services/run-recovery";
@@ -334,6 +339,8 @@ export class clsRunService {
 
         const runId = this.deps.newId();
         const startedAtDate = this.deps.now();
+        // 같은 remote를 탐색 중이면 실행을 시작하지 않는다(게이트 확인과 락 사이에 await 없음)
+        this.deps.activity.assertNoBrowse(remoteNamesOfJob(job));
         const release = this.deps.activity.acquire(
             { kind: "run", jobId: job.id, runId, startedAt: startedAtDate.toISOString() },
             (cur) => busyMessageFor(cur, this.deps.jobs),
@@ -359,6 +366,8 @@ export class clsRunService {
         const job = this.deps.jobs.get(jobId);
         const runId = this.deps.newId();
         const startedAtDate = this.deps.now();
+        // 같은 remote를 탐색 중이면 자동 실행도 시작하지 않는다(첫 await 전에 동기로 확인)
+        this.deps.activity.assertNoBrowse(remoteNamesOfJob(job));
         const release = this.deps.activity.acquire(
             { kind: "run", jobId: job.id, runId, startedAt: startedAtDate.toISOString() },
             (cur) => busyMessageFor(cur, this.deps.jobs),

@@ -22,9 +22,9 @@ import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclon
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import {
     canonicalLocation,
-    isRemoteAbsolute,
     LONG_PATH_WARN_LENGTH,
     parsePath,
+    remoteParentOf,
     type itfParsedPath,
 } from "@/shared/path-utils";
 import type { typTestPathInput } from "@/shared/schemas/rclone";
@@ -148,17 +148,7 @@ function f_CommonWarnings(p: itfParsedPath): string[] {
     return warnings;
 }
 
-/**
- * remote 경로의 부모와 이름. 맨 앞 / 는 보존한다.
- * "rr:a/b" → { parent: "rr:a", name: "b" }, "rr:/a" → { parent: "rr:/", name: "a" }, "rr:" → null
- */
-export function remoteParentOf(p: itfParsedPath): { parent: string; name: string } | null {
-    if (p.kind !== "remote" || p.segments.length === 0) return null;
-    return {
-        parent: p.root + (isRemoteAbsolute(p) ? "/" : "") + p.segments.slice(0, -1).join("/"),
-        name: p.segments.at(-1)!,
-    };
-}
+export { remoteParentOf };
 
 export class clsPathService {
     private readonly deps: Required<itfPathServiceDeps>;

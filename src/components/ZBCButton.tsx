@@ -11,6 +11,8 @@ import type { ReactNode } from "react";
 export type typZBCButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
 export interface itfZBCButtonProps {
+    /** E2E·드라이브 스크립트용 (button[id]) */
+    id?: string;
     children: ReactNode;
     variant?: typZBCButtonVariant;
     type?: "button" | "submit";
@@ -32,6 +34,7 @@ const propsDefault = {
 
 export default function ZBCButton(props: itfZBCButtonProps) {
     const {
+        id,
         children,
         variant = propsDefault.variant,
         type = propsDefault.type,
@@ -45,6 +48,7 @@ export default function ZBCButton(props: itfZBCButtonProps) {
         <button
             // oxlint-disable-next-line react/button-has-type -- type은 "button" | "submit"으로 제한된 prop
             type={type}
+            id={id}
             className="zbc zbcButton"
             data-variant={variant}
             disabled={disabled}

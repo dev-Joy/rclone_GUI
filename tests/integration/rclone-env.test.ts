@@ -64,6 +64,8 @@ describe.skipIf(!HAS_RCLONE)("rclone 환경 감지 (실제 rclone, 임시 설정
             configSource: "manual",
             remotes: ["it-alias"],
         });
+        // listremotes --long의 종류 열까지 읽는다
+        expect(r.remoteTypes).toEqual({ "it-alias": "alias" });
     });
 
     it("RCLONE_CONFIG 환경 변수 → configSource env", async () => {

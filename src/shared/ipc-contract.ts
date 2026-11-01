@@ -18,6 +18,12 @@ import type {
 import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
+import type {
+    typListDirInput,
+    typRemoteCreateInput,
+    typRemoteIdInput,
+    typRemoteUpdateInput,
+} from "@/shared/schemas/remotes";
 import type { typSettings, typSettingsPatch } from "@/shared/schemas/settings";
 import type { typPickDirectoryInput, typPickFileInput } from "@/shared/schemas/system";
 import type {
@@ -26,6 +32,7 @@ import type {
     itfCompareResult,
 } from "@/shared/types/compare";
 import type { itfRunLogView } from "@/shared/types/history";
+import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
 
@@ -44,6 +51,11 @@ export const IPC_CHANNELS = {
     excludesCreate: "excludes:create",
     excludesUpdate: "excludes:update",
     excludesDelete: "excludes:delete",
+    remotesList: "remotes:list",
+    remotesCreate: "remotes:create",
+    remotesUpdate: "remotes:update",
+    remotesDelete: "remotes:delete",
+    remotesTest: "remotes:test",
     compareRun: "compare:run",
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
@@ -59,6 +71,7 @@ export const IPC_CHANNELS = {
     schedulerSetPaused: "scheduler:setPaused",
     rcloneDetect: "rclone:detect",
     rcloneListRemotes: "rclone:listRemotes",
+    rcloneListDir: "rclone:listDir",
     rcloneTestPath: "rclone:testPath",
     wslListDistros: "wsl:listDistros",
     dialogPickDirectory: "dialog:pickDirectory",
@@ -115,6 +128,8 @@ export interface itfRcloneEnvironment {
     configSource: typConfigSource;
     /** 끝의 ":"를 뗀 이름, 정렬 */
     remotes: string[];
+    /** remote 이름 → rclone 종류(local·crypt 등). 읽지 못하면 {} */
+    remoteTypes: Record<string, string>;
     /** RCLONE_NOT_FOUND | RCLONE_NOT_EXECUTABLE | RCLONE_VERSION_UNSUPPORTED | CONFIG_NOT_FOUND | null */
     problem: typAppErrorPayload | null;
     warnings: string[];
@@ -178,6 +193,16 @@ export interface itfRcloneGuiApi {
         /** 연결도 함께 지운다(jobs:changed). 확인·BUSY 규칙은 update와 같다 */
         remove(input: typExcludeDeleteInput): Promise<typApiResult<null>>;
     };
+    remotes: {
+        /** 별칭 순 */
+        list(): Promise<typApiResult<itfRemoteBookmark[]>>;
+        /** rclone.conf에 있는 remote만 저장한다. 별칭 중복은 VALIDATION */
+        create(input: typRemoteCreateInput): Promise<typApiResult<itfRemoteBookmark>>;
+        update(input: typRemoteUpdateInput): Promise<typApiResult<itfRemoteBookmark>>;
+        remove(input: typRemoteIdInput): Promise<typApiResult<null>>;
+        /** 기준 경로를 lsjson --max-depth 1로 확인한다(파일은 바꾸지 않음) */
+        test(input: typRemoteIdInput): Promise<typApiResult<itfPathProbe>>;
+    };
     compare: {
         /** 원본·대상 목록을 읽어 비교한다(파일은 바꾸지 않음). 다른 비교·실행 중이면 BUSY */
         run(jobId: string): Promise<typApiResult<itfCompareResult>>;
@@ -219,6 +244,8 @@ export interface itfRcloneGuiApi {
         /** force면 캐시를 무시하고 다시 감지한다 */
         detect(force?: boolean): Promise<typApiResult<itfRcloneEnvironment>>;
         listRemotes(configPath?: string | null): Promise<typApiResult<string[]>>;
+        /** remote 폴더 한 단계만 나열한다(--dirs-only). 다른 탐색·같은 remote 실행 중이면 BUSY */
+        listDir(input: typListDirInput): Promise<typApiResult<itfDirListing>>;
         testPath(path: string, configPath?: string | null): Promise<typApiResult<itfPathProbe>>;
     };
     wsl: {

@@ -141,6 +141,18 @@ export function isRemoteAbsolute(p: itfParsedPath): boolean {
     return p.kind === "remote" && p.normalized.startsWith(`${p.root}/`);
 }
 
+/**
+ * remote 경로의 부모와 이름. 맨 앞 / 는 보존한다.
+ * "rr:a/b" → { parent: "rr:a", name: "b" }, "rr:/a" → { parent: "rr:/", name: "a" }, "rr:" → null
+ */
+export function remoteParentOf(p: itfParsedPath): { parent: string; name: string } | null {
+    if (p.kind !== "remote" || p.segments.length === 0) return null;
+    return {
+        parent: p.root + (isRemoteAbsolute(p) ? "/" : "") + p.segments.slice(0, -1).join("/"),
+        name: p.segments.at(-1)!,
+    };
+}
+
 /** 경로 원문을 분류하고 정규화한다. 지원하지 않는 형태는 이유와 함께 거부한다. */
 export function parsePath(raw: string): typParseResult {
     const display = raw.trim();

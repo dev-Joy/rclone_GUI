@@ -123,6 +123,35 @@ export function buildListRemotesArgs(configPath: string | null): string[] {
     return f_Finish(args);
 }
 
+/** rclone listremotes --long — remote 이름과 종류를 함께 읽는다(설정 내용은 출력하지 않음) */
+export function buildListRemotesLongArgs(configPath: string | null): string[] {
+    const args = ["listremotes", "--long", NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+export interface itfListDirsArgsInput {
+    /** remote 경로("name:base") */
+    path: string;
+    configPath: string | null;
+}
+
+/** 폴더 탐색: lsjson --max-depth 1 --dirs-only (한 단계, 폴더만) */
+export function buildListDirsArgs(input: itfListDirsArgsInput): string[] {
+    const args = [
+        "lsjson",
+        "--max-depth",
+        "1",
+        "--dirs-only",
+        "--no-mimetype",
+        "--no-modtime",
+        NO_ASK_PASSWORD,
+    ];
+    if (input.configPath) args.push("--config", input.configPath);
+    args.push("--", input.path);
+    return f_Finish(args);
+}
+
 export interface itfProbeListArgsInput {
     /** 확인할 경로의 부모(remote 루트 포함) */
     parent: string;

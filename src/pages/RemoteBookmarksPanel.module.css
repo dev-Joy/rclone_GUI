@@ -1,0 +1,132 @@
+/**
+ * RemoteBookmarksPanel 스타일
+ *
+ * @author dev-Joy 2026-10-30
+ */
+
+@layer pages {
+    .RemoteBookmarksPanel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+
+        .header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .title {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .hint {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            min-width: 0;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .info {
+            flex: 1 1 220px;
+            min-width: 0;
+        }
+
+        .alias {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .path {
+            display: block;
+            overflow: hidden;
+            color: var(--muted);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .testResult {
+            margin: 0;
+            padding: 6px 10px;
+            border-left: 4px solid var(--success);
+            border-radius: var(--radius);
+            background: var(--bg);
+
+            &[data-state="error"] {
+                border-left-color: var(--danger);
+            }
+
+            p {
+                margin: 0;
+            }
+        }
+
+        .testMessage {
+            font-weight: 600;
+        }
+
+        .testPath {
+            overflow-wrap: anywhere;
+            color: var(--muted);
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .testWarning {
+            color: var(--warning);
+            font-size: 13px;
+        }
+
+        .testError {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+    }
+}

@@ -42,6 +42,13 @@ const api: itfRcloneGuiApi = {
         update: (input) => ipcRenderer.invoke(C.excludesUpdate, input),
         remove: (input) => ipcRenderer.invoke(C.excludesDelete, input),
     },
+    remotes: {
+        list: () => ipcRenderer.invoke(C.remotesList),
+        create: (input) => ipcRenderer.invoke(C.remotesCreate, input),
+        update: (input) => ipcRenderer.invoke(C.remotesUpdate, input),
+        remove: (input) => ipcRenderer.invoke(C.remotesDelete, input),
+        test: (input) => ipcRenderer.invoke(C.remotesTest, input),
+    },
     compare: {
         run: (jobId) => ipcRenderer.invoke(C.compareRun, { jobId }),
         cancel: (jobId) => ipcRenderer.invoke(C.compareCancel, { jobId }),
@@ -71,6 +78,7 @@ const api: itfRcloneGuiApi = {
         detect: (force) => ipcRenderer.invoke(C.rcloneDetect, { force: force ?? false }),
         listRemotes: (configPath) =>
             ipcRenderer.invoke(C.rcloneListRemotes, configPath === undefined ? {} : { configPath }),
+        listDir: (input) => ipcRenderer.invoke(C.rcloneListDir, input),
         testPath: (path, configPath) =>
             ipcRenderer.invoke(
                 C.rcloneTestPath,

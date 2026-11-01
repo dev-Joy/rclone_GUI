@@ -94,6 +94,31 @@ export function parseListRemotes(stdout: string): string[] {
     return [...names].toSorted((a, b) => a.localeCompare(b));
 }
 
+export interface itfRemoteTypeRow {
+    name: string;
+    /** rclone 종류(local·crypt 등). 알 수 없으면 "" */
+    type: string;
+}
+
+/**
+ * `rclone listremotes --long` stdout → 이름과 종류.
+ * 실제 출력은 이름 뒤 공백으로 종류를 맞춘다: "gdrive: drive", "ab:   crypt".
+ * 콜론이 없는 줄은 버리고, 같은 이름은 처음 것만 쓴다.
+ */
+export function parseListRemotesLong(stdout: string): itfRemoteTypeRow[] {
+    const rows = new Map<string, string>();
+    for (const line of f_Lines(stdout)) {
+        const m = /^(.*):(?:\s+(\S+))?\s*$/.exec(line);
+        if (!m) continue;
+        const name = m[1]!.trim();
+        if (name === "" || rows.has(name)) continue;
+        rows.set(name, m[2] ?? "");
+    }
+    return [...rows.entries()]
+        .map(([name, type]) => ({ name, type }))
+        .toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
 /** stderr 마지막 몇 줄을 날짜 접두어 없이, 비밀값을 가려서 돌려준다 */
 export function summarizeStderr(stderr: string, maxLines = 5): string {
     return f_Lines(stderr)

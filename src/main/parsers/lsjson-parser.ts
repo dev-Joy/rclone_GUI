@@ -157,3 +157,41 @@ export function parseLsjsonEntries(stdout: string): itfLsjsonEntry[] {
         return { path: item.Path, name: item.Name, isDir: item.IsDir, size: item.Size };
     });
 }
+
+/** 폴더 탐색용 `lsjson --max-depth 1 --dirs-only` 항목 */
+export interface itfLsjsonDirItem {
+    name: string;
+    path: string;
+}
+
+const zLsjsonDirItem = z.object({
+    Path: z.string().min(1),
+    Name: z.string().min(1).optional(),
+    IsDir: z.boolean(),
+});
+
+/** `lsjson --dirs-only` 결과에서 폴더만 이름·경로로 돌려준다. exit 0일 때만 호출한다 */
+export function parseLsjsonDirEntries(stdout: string): itfLsjsonDirItem[] {
+    let data: unknown;
+    try {
+        data = JSON.parse(stdout);
+    } catch {
+        throw new clsLsjsonParseError("lsjson 출력이 올바른 JSON이 아닙니다.");
+    }
+    if (!Array.isArray(data)) throw new clsLsjsonParseError("lsjson 출력이 배열이 아닙니다.");
+    const out: itfLsjsonDirItem[] = [];
+    for (const [index, raw] of data.entries()) {
+        const parsed = zLsjsonDirItem.safeParse(raw);
+        if (!parsed.success) {
+            throw new clsLsjsonParseError(`lsjson ${index}번째 항목 형식이 올바르지 않습니다.`);
+        }
+        const item = parsed.data;
+        if (item.IsDir !== true) continue;
+        const name = item.Name ?? item.Path.split(/[\\/]/).at(-1) ?? "";
+        if (name === "") {
+            throw new clsLsjsonParseError(`lsjson ${index}번째 항목에 폴더 이름이 없습니다.`);
+        }
+        out.push({ name, path: item.Path });
+    }
+    return out;
+}

@@ -20,6 +20,16 @@ export const JOB_EXCLUDES_MAX = 100;
 export const EXCLUDES_TOTAL_MAX = 500;
 /** 공용 제외 패턴 라이브러리 크기 */
 export const EXCLUDE_LIBRARY_MAX = 1000;
+/** remote 북마크 별칭 길이 */
+export const REMOTE_ALIAS_MAX = 64;
+/** rclone remote 이름 길이(":" 제외) */
+export const REMOTE_NAME_MAX = 128;
+/** remote 북마크 수 */
+export const REMOTE_BOOKMARKS_MAX = 200;
+/** 폴더 탐색 결과로 돌려줄 최대 항목 수 */
+export const LIST_DIR_MAX = 500;
+/** 폴더 탐색 화면에 한 번에 보여 줄 항목 수 */
+export const LIST_DIR_PAGE = 200;
 /** 패턴 수가 이보다 많으면 --exclude-from 파일을 쓴다 */
 export const EXCLUDE_FILE_MIN_COUNT = 64;
 /** 인자 길이 합(패턴마다 길이 + 12)이 이보다 크면 --exclude-from 파일을 쓴다 */

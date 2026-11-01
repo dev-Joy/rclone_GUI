@@ -136,6 +136,13 @@
 - 검증: `pnpm run check`(unit 57파일 819), `format:check`, `test:int` 38(+1 skip), `test:e2e` 6(콘솔 오류 0), `build:win`, `drive-app` 102 통과
 - 설계와 다름: (1) wx 충돌 때 남의 파일을 지우던 결함을 테스트로 찾아 "이 호출이 만든 파일만 dispose"로 고침 (2) 실행 로그에서 `--exclude-from` 값(userData 경로)을 `<제외 파일>`로 가림 (3) run-service의 제외 파일은 execute의 finally에서만 지움(finishEarly는 파일을 만들기 전 단계라 해당 없음) (4) 저장소 연결이 바뀌었을 때 편집기 저장본·초안에서 지워진 id를 빼는 처리를 job-editor-store syncFromJobs에 추가(같은 rev) (5) 화면 순수 도우미를 `src/lib/exclude-view.ts`로 분리 (6) RcloneSetupPanel 1024자 오류는 rclone-env-store가 고른 경로를 저장 전에 검사해 패널에 표시
 
+[TASK_015] : (2026-11-01) INT-002 Phase 3 — T-02 리모트 북마크·폴더 탐색 (관련 Intent: INT-002, T-02)
+- 신규: `src/shared/remote-path.ts`(정규화·조합·조각 검사), `schemas/remotes.ts`, `types/remotes.ts`, `src/main/parsers`의 listremotes --long·lsjson dirs 파서, `src/main/store/remote-store.ts`(remotes v1 DDL CRUD·검증), `services/remote-ops.ts`(전역 직렬 큐·같은 remote BUSY), `services/remote-service.ts`(북마크 CRUD·probe·listDir), `ipc/remotes.ts`, `src/stores/remotes-store.ts`, `src/lib/remote-browser.ts`, `src/pages/RemoteBrowser`·`RemoteBookmarkEditor`·`RemoteBookmarksPanel`(+module.css)
+- 변경: `option-limits`(REMOTE_*·LIST_DIR_*), `ipc-contract`(remotes·rclone.listDir·remoteTypes), `path-utils.remoteParentOf` 이동, `rclone-env-parser`·`lsjson-parser`, `command-builder`(listremotes --long·lsjson dirs), `config`(listRemotesLong·listDir 60초), `detect`(remoteTypes·long 실패 시 short 폴백), `activity-lock`(beginBrowse/assertNoBrowse), `job-context`(remoteNamesOfJob), `compare-service`·`run-service`(탐색 중 BUSY), `ipc/rclone`·`register`·`index`·preload, `RemotePicker`(북마크 select·탐색·자동 선택)·`PathField`(value 전달)·`SettingsPage`(패널 삽입), `ZBCButton`(id prop)
+- 테스트: 단위 remote-path·remote-store·remote-ops·remote-service·activity-lock browse·rclone-env-parser long·command-builder·renderer remotes-store·remote-browser 신규/갱신, fixture `listremotes-long.stdout.txt`. 통합 `remote-bookmarks.test.ts`(실제 rclone alias remote: listDir·PATH_NOT_FOUND·probe·BUSY·인자 캡처), `rclone-env.test.ts`(remoteTypes). E2E `remote-bookmarks.spec.ts`(설정에서 북마크 추가·연결 테스트 → 작업 편집기에서 두 단계 탐색·저장, 콘솔 오류 0)
+- 검증: `pnpm run check`(unit 63파일 879), `format:check`, `test:int` 42(+1 skip), `test:e2e` 7, `build` 통과
+- 설계와 다름: (1) `clsRemoteService`의 `run` 의존성을 optional로 두고 기본 `runRclone` 주입(테스트 대체) (2) `ZBCButton`에 optional `id`(E2E·drive 스크립트) (3) `RemoteBrowser`에 `configPath` prop을 더해 작업별 rclone.conf로 listDir (4) `RemotePicker`에 `value` prop을 더해 빈 값·북마크 1개일 때만 1회 자동 선택 (5) React `set-state-in-effect` 린트 대응으로 모달 내용을 key로 다시 마운트(`RemoteBookmarkEditor`·`RemoteBrowser`)하고, `RemotePicker` 자동 선택은 파생값+ref로 처리(동작 동일)
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

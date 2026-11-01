@@ -9,7 +9,9 @@ import {
     assertCommandLength,
     assertNoBlockedFlags,
     buildConfigFileArgs,
+    buildListDirsArgs,
     buildListRemotesArgs,
+    buildListRemotesLongArgs,
     buildLsjsonArgs,
     buildProbeListArgs,
     buildTransferArgs,
@@ -270,6 +272,53 @@ describe("환경 감지·경로 확인 빌더", () => {
         ]);
     });
 
+    it("listremotes --long: 이름과 종류, --config는 뒤", () => {
+        expect(buildListRemotesLongArgs(null)).toEqual([
+            "listremotes",
+            "--long",
+            "--ask-password=false",
+        ]);
+        expect(buildListRemotesLongArgs("C:\\tmp\\rclone.conf")).toEqual([
+            "listremotes",
+            "--long",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+        ]);
+    });
+
+    it("폴더 탐색: --max-depth 1 --dirs-only, 경로는 -- 뒤", () => {
+        const args = buildListDirsArgs({
+            path: "test-remote:base/a",
+            configPath: "C:\\tmp\\rclone.conf",
+        });
+        expect(args).toEqual([
+            "lsjson",
+            "--max-depth",
+            "1",
+            "--dirs-only",
+            "--no-mimetype",
+            "--no-modtime",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+            "--",
+            "test-remote:base/a",
+        ]);
+        expect(args).not.toContain("--files-only");
+        expect(buildListDirsArgs({ path: "test-remote:", configPath: null })).toEqual([
+            "lsjson",
+            "--max-depth",
+            "1",
+            "--dirs-only",
+            "--no-mimetype",
+            "--no-modtime",
+            "--ask-password=false",
+            "--",
+            "test-remote:",
+        ]);
+    });
+
     it("probe 목록: --max-depth 1, --files-only 없음, 경로는 -- 뒤", () => {
         const args = buildProbeListArgs({
             parent: "--delete-excluded",
@@ -305,6 +354,8 @@ describe("환경 감지·경로 확인 빌더", () => {
             buildVersionArgs(),
             buildConfigFileArgs(),
             buildListRemotesArgs(null),
+            buildListRemotesLongArgs(null),
+            buildListDirsArgs({ path: "a:", configPath: null }),
             buildProbeListArgs({ parent: "a:", configPath: null }),
         ]) {
             expect(() => assertAllowedCommand(args)).not.toThrow();

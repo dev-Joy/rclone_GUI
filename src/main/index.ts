@@ -42,6 +42,8 @@ import { clsExcludeService } from "@/main/services/exclude-service";
 import { clsCompareService } from "@/main/services/compare-service";
 import { pruneRunLogs } from "@/main/services/log-retention";
 import { clsPathService } from "@/main/services/path-service";
+import { clsRemoteOps } from "@/main/services/remote-ops";
+import { clsRemoteService } from "@/main/services/remote-service";
 import { clsActiveRunStore, recoverActiveRun } from "@/main/services/run-recovery";
 import { clsRunService } from "@/main/services/run-service";
 import { clsScheduler } from "@/main/services/scheduler";
@@ -50,6 +52,7 @@ import { openAppDb } from "@/main/store/app-db";
 import { clsExcludeStore } from "@/main/store/exclude-store";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
+import { clsRemoteStore } from "@/main/store/remote-store";
 import { clsSettingsStore } from "@/main/store/settings-store";
 import type { clsSqliteDb } from "@/main/store/sqlite-db";
 import { createTray, type itfAppTray } from "@/main/tray";
@@ -412,6 +415,8 @@ async function f_Start(): Promise<void> {
     await jobs.load();
     const excludeStore = new clsExcludeStore({ db });
     excludeStore.load();
+    const remoteStore = new clsRemoteStore({ db });
+    remoteStore.load();
     // 지난번 비정상 종료로 남은 --exclude-from 임시 파일 정리
     const excludeFileDir = join(paths.userData, EXCLUDE_FILE_DIR);
     const leftover = await cleanupExcludeFiles(excludeFileDir);
@@ -439,6 +444,13 @@ async function f_Start(): Promise<void> {
     const wsl = new clsWslService();
     // 비교·실행·자동 실행이 함께 쓰는 전역 활동 락
     const activity = new clsActivityLock();
+    const remoteOps = new clsRemoteOps({ activity, jobs });
+    const remoteService = new clsRemoteService({
+        store: remoteStore,
+        rcloneEnv,
+        pathService,
+        remoteOps,
+    });
     const compare = new clsCompareService({
         jobs,
         settings,
@@ -510,13 +522,14 @@ async function f_Start(): Promise<void> {
         paths,
         notices: () => [...notices],
         rcloneEnv,
-        pathService,
+        remoteService,
         wsl,
         compare,
         runs,
         history,
         scheduler,
         excludes,
+        remotes: remoteService,
         getWindow: () => mainWindow,
     });
 

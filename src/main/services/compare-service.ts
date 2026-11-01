@@ -35,7 +35,12 @@ import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclon
 import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
 import { resolveEffectiveExcludes } from "@/main/services/effective-excludes";
 import { writeExcludeFile, type itfExcludeFileHandle } from "@/main/services/exclude-file";
-import { remoteNameOf, resolveJobContext, type itfJobContext } from "@/main/services/job-context";
+import {
+    remoteNameOf,
+    remoteNamesOfJob,
+    resolveJobContext,
+    type itfJobContext,
+} from "@/main/services/job-context";
 import { PROBE_MISSING_MESSAGE, type clsPathService } from "@/main/services/path-service";
 import { computePlanToken } from "@/main/services/plan-token";
 import type { clsExcludeStore } from "@/main/store/exclude-store";
@@ -128,6 +133,8 @@ export class clsCompareService {
     async run(jobId: string): Promise<itfCompareResult> {
         const job = this.deps.jobs.get(jobId);
         const startedAt = this.deps.now().toISOString();
+        // 같은 remote를 탐색 중이면 비교를 시작하지 않는다(탐색은 한 번에 하나)
+        this.deps.activity.assertNoBrowse(remoteNamesOfJob(job));
         const release = this.deps.activity.acquire({ kind: "compare", jobId, startedAt }, (cur) =>
             busyMessageFor(cur, this.deps.jobs),
         );

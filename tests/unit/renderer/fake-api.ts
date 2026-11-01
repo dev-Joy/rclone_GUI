@@ -11,7 +11,7 @@
 // ========== Internal imports ==========
 import { createDefaultSettings } from "@/shared/defaults";
 import { ERROR_MESSAGES, type typErrorCode } from "@/shared/errors";
-import type { itfJobsChangedEvent, itfRcloneGuiApi } from "@/shared/ipc-contract";
+import type { itfJobsChangedEvent, itfPathProbe, itfRcloneGuiApi } from "@/shared/ipc-contract";
 import type {
     itfCompareActive,
     itfCompareProgress,
@@ -25,6 +25,7 @@ import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
 import type { itfRunLogView } from "@/shared/types/history";
+import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
 
@@ -75,6 +76,14 @@ export interface itfFakeApi {
     setExcludes: (items: itfExcludePatternUsage[]) => void;
     /** 다음 excludes.update/remove 응답 실패(예: CONFIRM_REQUIRED) */
     setExcludeWriteError: (e: typAppErrorPayload | null) => void;
+    /** remotes.list가 돌려줄 북마크 */
+    setRemotes: (items: itfRemoteBookmark[]) => void;
+    /** remotes.test가 돌려줄 결과(id별). 없으면 NOT_FOUND */
+    setRemoteTestResult: (id: string, probe: itfPathProbe) => void;
+    /** 다음 remotes.create/update/remove 응답 실패 */
+    setRemoteWriteError: (e: typAppErrorPayload | null) => void;
+    /** rclone.listDir이 돌려줄 결과(경로별). 없으면 NOT_FOUND */
+    setDirListing: (path: string, listing: itfDirListing | typAppErrorPayload) => void;
 }
 
 let uuidSeq = 0;
@@ -155,6 +164,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     const notifyListeners = new Set<(e: itfAppNotify) => void>();
     let excludes: itfExcludePatternUsage[] = [];
     let excludeWriteError: typAppErrorPayload | null = null;
+    let remotes: itfRemoteBookmark[] = [];
+    const remoteTestResults = new Map<string, itfPathProbe>();
+    let remoteWriteError: typAppErrorPayload | null = null;
+    const dirListings = new Map<string, itfDirListing | typAppErrorPayload>();
     // 시드(fakeUuid(1~99))와 겹치지 않게 100부터
     let seq = 100;
 
@@ -290,6 +303,62 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 return f_Ok(null);
             },
         },
+        remotes: {
+            list: () => {
+                calls.push("remotes.list");
+                return f_Ok(structuredClone(remotes));
+            },
+            create: (input) => {
+                calls.push("remotes.create");
+                if (remoteWriteError) {
+                    return Promise.resolve({ ok: false as const, error: remoteWriteError });
+                }
+                const item: itfRemoteBookmark = {
+                    id: fakeUuid(8000 + remotes.length),
+                    alias: input.alias,
+                    remoteName: input.remoteName,
+                    basePath: input.basePath,
+                    path: `${input.remoteName}:${input.basePath}`,
+                    createdAt: "2026-10-30T00:00:00.000Z",
+                    updatedAt: "2026-10-30T00:00:00.000Z",
+                };
+                remotes = [...remotes, item];
+                return f_Ok(structuredClone(item));
+            },
+            update: (input) => {
+                calls.push("remotes.update");
+                if (remoteWriteError) {
+                    return Promise.resolve({ ok: false as const, error: remoteWriteError });
+                }
+                const cur = remotes.find((r) => r.id === input.id);
+                if (!cur) return f_Fail("NOT_FOUND");
+                const item: itfRemoteBookmark = {
+                    ...cur,
+                    alias: input.alias,
+                    remoteName: input.remoteName,
+                    basePath: input.basePath,
+                    path: `${input.remoteName}:${input.basePath}`,
+                };
+                remotes = remotes.map((r) => (r.id === input.id ? item : r));
+                return f_Ok(structuredClone(item));
+            },
+            remove: (input) => {
+                calls.push("remotes.remove");
+                if (remoteWriteError) {
+                    return Promise.resolve({ ok: false as const, error: remoteWriteError });
+                }
+                if (!remotes.some((r) => r.id === input.id)) return f_Fail("NOT_FOUND");
+                remotes = remotes.filter((r) => r.id !== input.id);
+                return f_Ok(null);
+            },
+            test: (input) => {
+                calls.push("remotes.test");
+                const r = remoteTestResults.get(input.id);
+                return r
+                    ? Promise.resolve({ ok: true as const, data: structuredClone(r) })
+                    : f_Fail("NOT_FOUND");
+            },
+        },
         compare: {
             run: (jobId) => {
                 calls.push(`compare.run:${jobId}`);
@@ -377,6 +446,14 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                     });
                 });
             },
+            listDir: (input) => {
+                calls.push(`rclone.listDir:${input.path}`);
+                const r = dirListings.get(input.path);
+                if (!r) return f_Fail("PATH_NOT_FOUND");
+                return "entries" in r
+                    ? f_Ok(structuredClone(r))
+                    : Promise.resolve({ ok: false as const, error: r });
+            },
             testPath: () => notImplemented("rclone.testPath"),
         },
         wsl: { listDistros: () => notImplemented("wsl.listDistros") },
@@ -461,6 +538,18 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         setExcludeWriteError: (e) => {
             excludeWriteError = e;
+        },
+        setRemotes: (items) => {
+            remotes = structuredClone(items);
+        },
+        setRemoteTestResult: (id, probe) => {
+            remoteTestResults.set(id, structuredClone(probe));
+        },
+        setRemoteWriteError: (e) => {
+            remoteWriteError = e;
+        },
+        setDirListing: (path, listing) => {
+            dirListings.set(path, structuredClone(listing));
         },
     };
 }
