@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/planned/INT-003-os-schedule-backup-gcs-followup/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-02 (INT-002 구현 반영 표 추가)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-02 (INT-003 Phase 2 Windows 작업 스케줄러 구현 반영 표 추가)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2 반영 (2026-11-02), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -107,6 +107,20 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 | cron (§2.2) | Post-MVP | 매일·요일 예약은 구현, cron 표현은 계속 미지원 |
 | 패키징 (§17) | - | NSIS 설치본 하나, portable exe 없음(실행 파일 위치가 바뀌면 로그인 항목·예약 경로가 깨짐) |
 | 테스트 (§18) | - | GCS 수용 테스트 `tests/integration/gcs-acceptance.test.ts`: `RCLONEGUI_TEST_GCS_CONFIG`·`_REMOTE`·`_BUCKET`이 있을 때만, `rclonegui-test-` 접두사가 아니거나 conf가 저장소 안·기본 위치면 거부, 실행별 고유 경로 정리 |
+
+### 구현 반영 (INT-003 Phase 2 — Windows 작업 스케줄러, 2026-11-02)
+
+INT-003 T-01(`docs/intent/planned/INT-003-os-schedule-backup-gcs-followup/` spec §4.2·§5)로 바뀐 항목이다. 본문·위 표보다 이 표가 우선한다.
+
+| 항목 | 이 문서·이전 표 | 실제 구현 |
+| :--- | :--- | :--- |
+| 예약 방식 (§10) | 앱 상주 스케줄러만 | `autoSync.backend`: `app`(기본, 기존 그대로)·`os`. `os`는 `nextRunAt = null`이고 앱 스케줄러(`isAppScheduled`)·트레이 종료 경고에서 빠진다. 저장 입력은 backend 필수, 예전 데이터는 `app`으로 읽음(DDL 없음) |
+| OS 예약 등록 | - | `src/main/services/os-scheduler.ts`: `\rcloneGUI\<jobId>` 작업을 UTF-16LE(BOM) XML 임시 파일(`userData\os-tasks\`, `wx`)로 `schtasks /Create /XML … /F`. 동작은 `<exe> --run-job <jobId>`뿐, `InteractiveToken`·`LeastPrivilege`(비밀번호 없음), `IgnoreNew`, 배터리 제한 없음, `StartWhenAvailable`, `ExecutionTimeLimit PT13H`, `RestartOnFailure` 없음, StartBoundary는 항상 다음 미래 시각. `<Description>rcloneGUI;spec=<hash>`로 우리 쪽 변경만 감지. job-store `onChange` 한 경로에서 바뀐 것만 등록·삭제, 시작 때(GUI·헤드리스) 목록과 맞춤(고아 삭제, 실행·대기 중 작업은 재등록 건너뜀). 설치본·Windows·E2E 아님·임시 프로필 아님(설치 스모크만 `RCLONEGUI_OS_SCHEDULER_TEST=1`)일 때만 schtasks를 부른다. 파이프 출력은 CP949라 해독이 불확실하면 exe 경로를 비교하지 않는다 |
+| 헤드리스 실행 | - | `--run-job <uuid>`(`src/main/launch-args.ts`, 값 없음·uuid 아님·`=` 형식·두 번·위치 인자는 exit 2, 그 밖의 `--` 스위치 무시). 저장소·서비스만 만들고 창·트레이·IPC·앱 스케줄러·보관 정리 없이 `os-run-queue.ts` 대기열(FIFO, 같은 작업 중복 무시)로 `runs.startAuto(id, "os-scheduler")`만 거친다. 진입 검사(작업 있음·켜짐·backend os·일시정지 아님, 실패 시 `SCHEDULE_SKIPPED` blocked 이력, 일시정지는 알림 생략), BUSY는 5초마다 최대 60분 대기, 경로 확인은 락 밖에서 2분 간격 3번 재시도, 실행 12시간 넘으면 `cancel(runId, "timeLimit")`. 종료 코드 0 성공·바꿀 것 없음 / 1 실패·일부·중지 / 2 인자 오류·차단 / 3 시작 실패(대화상자 없음). DB를 닫고 `app.exit` |
+| 단일 인스턴스 | second-instance → 창 보이기 | `requestSingleInstanceLock({ runJob })`: 앱이 켜져 있으면 두 번째 프로세스는 넘기고 0으로 끝나며, 받은 쪽은 창을 보이지 않고 대기열에 넣는다. 데이터 없는 second-instance(사용자가 앱을 엶)는 창을 보이고, 헤드리스 중이면 GUI로 바뀐다(실행 계속) |
+| 이력·화면 | 종류 수동/자동/미리보기 | trigger `os-scheduler` → 종류 `Windows 예약`. 편집기 `예약 실행 방식` 선택(쓸 수 없으면 비활성 + 이유), 암호화 rclone.conf 미지원 안내, `OS 예약 미등록` 배지·경고, 등록 실패 토스트. IPC `scheduler:osStatus`·이벤트 `scheduler:osStatusChanged` |
+| 패키징 (§17) | - | 제거 시(업데이트 아님) `build/installer.nsh`가 `Schedule.Service` COM으로 `\rcloneGUI\` 작업과 폴더를 지운다. `electronFuses`: runAsNode·NODE_OPTIONS·--inspect 끔, asar 무결성 확인·asar에서만 로드 |
+| 범위 밖 | - | 암호화된 rclone.conf 헤드리스 실행(안내만), 로그오프 상태 실행, 작업 스케줄러 화면에서 트리거만 바꾼 것 감지, "로그온 직후 실행" 표시(경로 재시도 횟수는 app.log에만) |
 
 ---
 

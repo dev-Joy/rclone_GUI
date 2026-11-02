@@ -1,13 +1,16 @@
 /**
  * 설치 파일(dist/rcloneGUI-Setup-<버전>.exe) 스모크 확인. 임시 폴더에 설치 → 확인 → 제거까지 한 번에 한다.
  *
- * 1. 사전 확인: Windows인지, 이미 설치된 rcloneGUI(HKCU Uninstall)·실행 중인 rcloneGUI.exe·로그인 항목 값이 없는지
- *    (하나라도 있으면 사용자 환경을 건드리지 않도록 중단)
+ * 1. 사전 확인: Windows인지, 이미 설치된 rcloneGUI(HKCU Uninstall)·실행 중인 rcloneGUI.exe·로그인 항목 값·
+ *    Windows 작업 스케줄러의 `\rcloneGUI\` 예약이 없는지(하나라도 있으면 사용자 환경을 건드리지 않도록 중단, 제거하지 않음).
+ *    `\rcloneGUI`로 시작하는 예약 이름 목록을 기록해 두고 끝에서 같은지 비교한다(사용자 예약을 지우지 않았는지).
  * 2. 임시 폴더에 사용자 단위 무인 설치(/S /currentuser /D=<임시>) → exe·제거 프로그램·바로가기·Uninstall 키 확인
  * 3. app.asar 목록(out/·package.json·node_modules/zod만), 언어 팩(ko·en-US만)
- * 4. 임시 userData로 한 번 띄워 데이터 폴더 생성 → drive-app --exe(임시 userData·임시 rclone.conf)
+ * 4. 임시 userData로 한 번 띄워 데이터 폴더 생성 → drive-app --exe --os-schedule(임시 userData·임시 rclone.conf,
+ *    OS 예약 AC-2~AC-6, 매일 OS 예약 하나를 남김) → fuses: ELECTRON_RUN_AS_NODE=1 -e "process.exit(7)"이 7로 끝나지 않음
  * 5. (--login-item일 때만) drive-app이 로그인 시 시작을 켜고, HKCU Run 값이 설치 exe + --hidden인지 확인
- * 6. 무인 제거 → 설치 폴더·바로가기·Uninstall 키·로그인 항목 값 없음, 임시 userData는 남음 확인
+ * 6. 무인 제거 → 설치 폴더·바로가기·Uninstall 키·로그인 항목 값·`\rcloneGUI\` 예약(AC-7) 없음, 임시 userData는 남음 확인.
+ *    중간에 실패해 스모크가 만든 `\rcloneGUI\` 예약이 남으면(사전 확인으로 원래 0개) 지우고 실패로 알린다.
  * 7. 실제 %APPDATA%\rcloneGUI는 존재 여부·수정 시각만 전후 비교(내용은 읽지 않는다) → 임시 폴더 삭제
  *
  * 출력에는 실제 사용자 경로를 쓰지 않는다(<TMP>·<APPDATA> 등으로 바꾼다).
@@ -34,6 +37,9 @@ const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const APPROVED_KEY =
     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
 const INSTALL_TIMEOUT_MS = 180_000;
+const SCHTASKS = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\schtasks.exe`;
+/** OS 예약 폴더(src/main/services/os-scheduler.ts OS_TASK_FOLDER) */
+const OS_TASK_FOLDER = "\\rcloneGUI\\";
 const UNINSTALL_WAIT_MS = 60_000;
 
 function f_Sleep(ms) {
@@ -114,6 +120,31 @@ async function f_RegValue(key, name) {
     return r.code === 0 ? r.stdout : null;
 }
 
+/**
+ * 작업 스케줄러 예약 이름 중 `\rcloneGUI`로 시작하는 것(대소문자 무시, 정렬). 목록을 얻지 못하면 null.
+ * 파이프 출력은 콘솔 코드페이지라 latin1로 읽고 첫 필드만 쓴다(ASCII 이름은 그대로, 그 밖은 전후 비교용 바이트 그대로).
+ */
+async function f_OsTaskNames() {
+    const r = await new Promise((done) => {
+        execFile(
+            SCHTASKS,
+            ["/Query", "/FO", "CSV", "/NH"],
+            { shell: false, windowsHide: true, encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
+            (err, stdout) =>
+                done({ code: err ? -1 : 0, text: Buffer.from(stdout ?? []).toString("latin1") }),
+        );
+    });
+    if (r.code !== 0) return null;
+    const names = new Set();
+    for (const line of r.text.split(/\r?\n/)) {
+        const m = /^"(\\[^"]*)"/.exec(line);
+        if (m && m[1].toLowerCase().startsWith("\\rclonegui")) names.add(m[1]);
+    }
+    return [...names].toSorted();
+}
+
+const f_IsOurTask = (name) => name.toLowerCase().startsWith(OS_TASK_FOLDER.toLowerCase());
+
 async function f_ShellFolders() {
     const out = await f_Ps(
         `ConvertTo-Json -Compress @{ desktop = [Environment]::GetFolderPath('Desktop'); programs = [Environment]::GetFolderPath('Programs') }`,
@@ -175,6 +206,14 @@ if (await f_RcloneGuiRunning())
     f_Abort(`실행 중인 ${PRODUCT}.exe가 있습니다. 끝낸 뒤 다시 실행하세요.`);
 if ((await f_RegValue(RUN_KEY, APP_ID)) !== null) {
     f_Abort(`로그인 항목(${APP_ID})이 이미 있습니다. 기존 설치를 정리한 뒤 다시 실행하세요.`);
+}
+// 설치본은 시작할 때 DB에 없는 \rcloneGUI\ 예약을 지운다 → 사용자 예약이 있으면 시작하지 않는다
+const osTasksBefore = await f_OsTaskNames();
+if (osTasksBefore === null) f_Abort("작업 스케줄러 예약 목록을 읽지 못했습니다.");
+if (osTasksBefore.some(f_IsOurTask)) {
+    f_Abort(
+        `작업 스케줄러에 ${OS_TASK_FOLDER} 예약이 ${osTasksBefore.filter(f_IsOurTask).length}개 있습니다(사용 중인 rcloneGUI의 OS 예약). 지우지 않고 중단합니다.`,
+    );
 }
 
 const realAppData = join(process.env.APPDATA ?? "", PRODUCT);
@@ -275,12 +314,23 @@ try {
     await f_WaitExit(first, 10_000);
     f_Check("설치본 실행 → 임시 userData 생성", userDataMade);
 
-    const driveArgs = [join(repoRoot, "scripts", "dev", "drive-app.mjs"), "--exe", exe];
+    const driveArgs = [
+        join(repoRoot, "scripts", "dev", "drive-app.mjs"),
+        "--exe",
+        exe,
+        "--os-schedule",
+    ];
     if (LOGIN_ITEM) driveArgs.push("--login-item");
     const drive = await f_Exec(process.execPath, driveArgs, { cwd: repoRoot, timeout: 600_000 });
     console.log(f_Mask(drive.stdout.trim()));
     if (drive.stderr.trim()) console.log(f_Mask(drive.stderr.trim()));
-    f_Check("drive-app --exe 통과", drive.code === 0, `code=${drive.code}`);
+    f_Check("drive-app --exe --os-schedule 통과", drive.code === 0, `code=${drive.code}`);
+    const osLeft = ((await f_OsTaskNames()) ?? []).filter(f_IsOurTask);
+    f_Check(
+        `제거 전 ${OS_TASK_FOLDER} 예약 1개(drive-app이 남긴 매일 예약)`,
+        osLeft.length === 1,
+        `count=${osLeft.length}`,
+    );
 
     // ========== 5. 로그인 항목(명시할 때만) ==========
     if (LOGIN_ITEM) {
@@ -293,6 +343,28 @@ try {
             runValue ?? "없음",
         );
     }
+
+    // ========== fuses(FR-21): ELECTRON_RUN_AS_NODE를 무시하고 앱으로 뜬다 ==========
+    // 로그인 항목 확인 뒤에 한다(앱으로 뜨면 임시 프로필 설정대로 로그인 항목을 끈다)
+    const fuse = f_Spawn(exe, ["-e", "process.exit(7)"], {
+        cwd: instDir,
+        env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: "1",
+            RCLONEGUI_USER_DATA: join(root, "fuse-userdata"),
+            RCLONE_CONFIG: join(confDir, "rclone.conf"),
+        },
+    });
+    const fuseCode = await f_WaitExit(fuse, 6000);
+    if (fuseCode === "timeout") {
+        await f_Exec("taskkill", ["/PID", String(fuse.pid), "/T", "/F"]);
+        await f_WaitExit(fuse, 10_000);
+    }
+    f_Check(
+        'fuses: ELECTRON_RUN_AS_NODE=1 -e "process.exit(7)"이 7로 끝나지 않음(node로 실행 불가)',
+        fuseCode !== 7,
+        `code=${fuseCode}`,
+    );
 
     // ========== 6. 제거 ==========
     const unCode = await f_Uninstall();
@@ -309,6 +381,12 @@ try {
             (await f_RegValue(APPROVED_KEY, APP_ID)) === null,
     );
     f_Check("제거 뒤 사용자 데이터 보존(임시 userData 남음)", existsSync(join(userData, "logs")));
+    const osAfterUninstall = ((await f_OsTaskNames()) ?? ["?"]).filter(f_IsOurTask);
+    f_Check(
+        `제거 뒤 ${OS_TASK_FOLDER} 예약 없음(AC-7)`,
+        osAfterUninstall.length === 0,
+        `count=${osAfterUninstall.length}`,
+    );
 } finally {
     if (installed && !uninstalled) {
         // 중간에 실패해도 설치본을 남기지 않는다(사전 확인으로 다른 rcloneGUI.exe는 없었다)
@@ -316,6 +394,26 @@ try {
         await f_Sleep(1000);
         if (existsSync(uninstaller)) await f_Uninstall();
     }
+    // 스모크가 만든 \rcloneGUI\ 예약이 남았으면 지운다(사전 확인으로 원래 0개였으므로 사용자 예약이 아니다)
+    const before = new Set(osTasksBefore);
+    const leftovers = ((await f_OsTaskNames()) ?? []).filter(
+        (n) => f_IsOurTask(n) && !before.has(n),
+    );
+    for (const n of leftovers) await f_Exec(SCHTASKS, ["/Delete", "/TN", n, "/F"]);
+    if (leftovers.length > 0) {
+        f_Check(
+            "스모크가 만든 OS 예약 정리(남아 있으면 안 됨)",
+            false,
+            `지운 수=${leftovers.length}`,
+        );
+    }
+    // 실제 예약 목록(\rcloneGUI로 시작) 전후 비교
+    const osTasksAfter = await f_OsTaskNames();
+    f_Check(
+        "작업 스케줄러 \\rcloneGUI* 예약 목록 전후 같음(사용자 예약 불변)",
+        osTasksAfter !== null && osTasksAfter.join("\n") === osTasksBefore.join("\n"),
+        `before=${osTasksBefore.length} after=${osTasksAfter?.length ?? "?"}`,
+    );
     // ========== 7. 실제 데이터 폴더 불변 확인 ==========
     const appDataAfter = f_AppDataStamp();
     f_Check(

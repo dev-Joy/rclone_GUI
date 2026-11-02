@@ -23,7 +23,12 @@ import { registerWslIpc, type itfWslIpcDeps } from "@/main/ipc/wsl";
 import type { clsJobStore } from "@/main/store/job-store";
 import type { clsSettingsStore } from "@/main/store/settings-store";
 import { IPC_CHANNELS, type itfAppInfo, type itfAppNotice } from "@/shared/ipc-contract";
-import { zJobCreateInput, zJobId, zJobUpdateInput } from "@/shared/schemas/job";
+import {
+    zJobCreateInput,
+    zJobId,
+    zJobUpdateInput,
+    type typScheduleBackend,
+} from "@/shared/schemas/job";
 import { zSettingsPatch } from "@/shared/schemas/settings";
 
 export interface itfIpcServices
@@ -50,6 +55,20 @@ function f_AssertNotRunning(s: itfIpcServices, jobId: string, action: string): v
         "BUSY",
         `실행 중인 작업은 ${action} 수 없습니다. 끝나거나 취소한 뒤 다시 시도하세요.`,
     );
+}
+
+/** OS 예약 사용 불가 환경에서 예약 방식을 os로 바꾸는 저장을 막는다(화면 비활성화의 방어선, FR-11) */
+export const OS_BACKEND_UNAVAILABLE_TEXT =
+    "Windows 작업 스케줄러 예약은 설치한 앱에서만 쓸 수 있습니다.";
+
+function f_AssertOsBackendAllowed(
+    s: Pick<itfIpcServices, "osScheduler">,
+    prev: typScheduleBackend | null,
+    next: typScheduleBackend | undefined,
+): void {
+    if (next !== "os" || prev === "os") return;
+    if (s.osScheduler.status().available) return;
+    throw new clsAppError("VALIDATION", OS_BACKEND_UNAVAILABLE_TEXT);
 }
 
 export function registerIpc(s: itfIpcServices): void {
@@ -87,12 +106,27 @@ export function registerIpc(s: itfIpcServices): void {
     );
 
     handle(s, IPC_CHANNELS.jobsList, () => s.jobs.list());
-    handle(s, IPC_CHANNELS.jobsCreate, (draft) => s.jobs.create(draft), zJobCreateInput);
+    handle(
+        s,
+        IPC_CHANNELS.jobsCreate,
+        (draft) => {
+            f_AssertOsBackendAllowed(s, null, draft.autoSync.backend);
+            return s.jobs.create(draft);
+        },
+        zJobCreateInput,
+    );
     handle(
         s,
         IPC_CHANNELS.jobsUpdate,
         ({ id, patch }) => {
             f_AssertNotRunning(s, id, "고칠");
+            if (patch.autoSync) {
+                f_AssertOsBackendAllowed(
+                    s,
+                    s.jobs.get(id).autoSync.backend,
+                    patch.autoSync.backend,
+                );
+            }
             return s.jobs.update(id, patch);
         },
         zJobUpdateInput,

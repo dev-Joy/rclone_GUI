@@ -32,6 +32,7 @@ export const ERROR_CODES = [
     "STORE_VERSION_UNSUPPORTED",
     "FORBIDDEN_SENDER",
     "CONFIRM_REQUIRED",
+    "SCHEDULE_SKIPPED",
     "INTERNAL",
 ] as const;
 
@@ -65,5 +66,6 @@ export const ERROR_MESSAGES: Record<typErrorCode, string> = {
     STORE_VERSION_UNSUPPORTED: "지원하지 않는 저장 파일 버전입니다.",
     FORBIDDEN_SENDER: "허용되지 않은 요청입니다.",
     CONFIRM_REQUIRED: "이 패턴을 쓰는 작업이 바뀌었습니다. 목록을 다시 확인하세요.",
+    SCHEDULE_SKIPPED: "예약 실행 조건에 맞지 않아 실행하지 않았습니다.",
     INTERNAL: "내부 오류가 발생했습니다.",
 };

@@ -34,7 +34,11 @@ import type {
 import type { itfRunLogView } from "@/shared/types/history";
 import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
-import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
+import type {
+    itfAppNotify,
+    itfOsScheduleStatus,
+    itfSchedulerState,
+} from "@/shared/types/scheduler";
 
 export const IPC_CHANNELS = {
     appGetInfo: "app:getInfo",
@@ -69,6 +73,7 @@ export const IPC_CHANNELS = {
     historyClear: "history:clear",
     schedulerGetState: "scheduler:getState",
     schedulerSetPaused: "scheduler:setPaused",
+    schedulerOsStatus: "scheduler:osStatus",
     rcloneDetect: "rclone:detect",
     rcloneListRemotes: "rclone:listRemotes",
     rcloneListDir: "rclone:listDir",
@@ -84,6 +89,7 @@ export const IPC_EVENTS = {
     compareProgress: "compare:progress",
     runEvent: "run:event",
     schedulerState: "scheduler:state",
+    schedulerOsStatus: "scheduler:osStatusChanged",
     appNotify: "app:notify",
 } as const;
 
@@ -239,6 +245,8 @@ export interface itfRcloneGuiApi {
         getState(): Promise<typApiResult<itfSchedulerState>>;
         /** 자동 실행 일시정지·해제(진행 중 실행은 계속). 해제하면 지난 예약은 30초 뒤로 미룬다 */
         setPaused(paused: boolean): Promise<typApiResult<itfSchedulerState>>;
+        /** Windows 작업 스케줄러 예약 사용 가능 여부와 작업별 등록 상태 */
+        osStatus(): Promise<typApiResult<itfOsScheduleStatus>>;
     };
     rclone: {
         /** force면 캐시를 무시하고 다시 감지한다 */
@@ -265,6 +273,8 @@ export interface itfRcloneGuiApi {
         onCompareProgress(cb: (e: itfCompareProgress) => void): () => void;
         onRunEvent(cb: (e: typRunEvent) => void): () => void;
         onSchedulerState(cb: (e: itfSchedulerState) => void): () => void;
+        /** OS 예약 등록·삭제 결과가 바뀌었을 때 */
+        onSchedulerOsStatus(cb: (e: itfOsScheduleStatus) => void): () => void;
         /** 창이 보일 때 main이 보내는 알림(자동 실행 결과 등) */
         onAppNotify(cb: (e: itfAppNotify) => void): () => void;
     };

@@ -176,6 +176,7 @@ describe("clsJobStore", () => {
                     kind: "interval",
                     timeOfDay: "09:00",
                     weekdays: 62,
+                    backend: "app",
                 },
             }),
         );
@@ -189,6 +190,7 @@ describe("clsJobStore", () => {
                 kind: "interval",
                 timeOfDay: "09:00",
                 weekdays: 62,
+                backend: "app",
                 nextRunAt: null,
             },
         } as unknown as Parameters<typeof jobs.update>[1];
@@ -216,6 +218,7 @@ describe("clsJobStore", () => {
                 kind: "interval",
                 timeOfDay: "09:00",
                 weekdays: 62,
+                backend: "app",
             },
         });
         expect(f_Mins(on.autoSync.nextRunAt)).toBeCloseTo(30, 0);
@@ -230,6 +233,7 @@ describe("clsJobStore", () => {
                 kind: "interval",
                 timeOfDay: "09:00",
                 weekdays: 62,
+                backend: "app",
             },
         });
         expect(f_Mins(faster.autoSync.nextRunAt)).toBeCloseTo(2, 0);
@@ -244,6 +248,7 @@ describe("clsJobStore", () => {
                 kind: "interval",
                 timeOfDay: "09:00",
                 weekdays: 62,
+                backend: "app",
             },
         });
         expect(disabled.autoSync.nextRunAt).toBeNull();
@@ -256,6 +261,7 @@ describe("clsJobStore", () => {
                     kind: "interval",
                     timeOfDay: "09:00",
                     weekdays: 62,
+                    backend: "app",
                 },
             }),
         );

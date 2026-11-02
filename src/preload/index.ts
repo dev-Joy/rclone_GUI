@@ -73,6 +73,7 @@ const api: itfRcloneGuiApi = {
     scheduler: {
         getState: () => ipcRenderer.invoke(C.schedulerGetState),
         setPaused: (paused) => ipcRenderer.invoke(C.schedulerSetPaused, { paused }),
+        osStatus: () => ipcRenderer.invoke(C.schedulerOsStatus),
     },
     rclone: {
         detect: (force) => ipcRenderer.invoke(C.rcloneDetect, { force: force ?? false }),
@@ -100,6 +101,7 @@ const api: itfRcloneGuiApi = {
         onCompareProgress: (cb) => f_Subscribe(E.compareProgress, cb),
         onRunEvent: (cb) => f_Subscribe(E.runEvent, cb),
         onSchedulerState: (cb) => f_Subscribe(E.schedulerState, cb),
+        onSchedulerOsStatus: (cb) => f_Subscribe(E.schedulerOsStatus, cb),
         onAppNotify: (cb) => f_Subscribe(E.appNotify, cb),
     },
 };

@@ -24,6 +24,16 @@
  *   app:getInfo isPackaged === true, 설정의 로그인 시 시작은 활성. 설치본은 개발 실행 전용 환경 변수를 무시하므로
  *   2회차의 자동 실행·실행 중 종료와 3회차는 건너뛰고, 재시작 유지·창 X 숨김·second-instance·--hidden·콘솔 오류만 본다.
  *   --login-item을 함께 주면 설정에서 로그인 시 시작을 켠다(HKCU Run에 값이 생긴다. 명시할 때만).
+ *   --os-schedule을 함께 주면 5회차로 Windows 작업 스케줄러 예약(INT-003 T-01)을 확인한다(설치 스모크가 준다).
+ *   RCLONEGUI_OS_SCHEDULER_TEST=1로 임시 userData에서도 OS 예약을 허용한다. 실제 `\rcloneGUI\` 예약이 없을 때만 써야 한다
+ *   (앱이 시작 때 DB에 없는 `\rcloneGUI\` 예약을 지우므로 installer-smoke가 사전 확인한다).
+ *     - 편집기에서 예약 실행 방식을 Windows 작업 스케줄러로 저장 → `schtasks /Query /XML`로 내용 확인(AC-2)
+ *       → 앱 예약으로 바꾸면 OS 예약 삭제(AC-6). 스모크가 등록하는 예약은 모두 매일(지금 − 2분 = 약 24시간 뒤)이라
+ *       중간에 멈춰도 스모크 중 발화하지 않는다(발화하면 env 없이 실제 %APPDATA%로 돌기 때문).
+ *     - 매일(지금 − 2분 = 약 24시간 뒤) OS 예약으로 바꾼 뒤 앱을 끄고 설치 exe를 `--run-job`으로 직접 실행(AC-3·AC-5:
+ *       창 없음·종료 코드 0/2·이력 trigger os-scheduler·차단 기록). `schtasks /Run`은 env 없이 실제 %APPDATA%로 돌므로 쓰지 않는다.
+ *     - 앱이 켜진 상태에서 `--run-job` → 두 번째 프로세스 0으로 끝나고 첫 프로세스가 실행(AC-4)
+ *     - 매일 OS 예약 하나를 남기고 끝낸다(installer-smoke가 제거 뒤 남지 않는지 본다, AC-7). 중간 실패면 지운다.
  *
  * 실행: pnpm run build 후 node scripts/dev/drive-app.mjs   (Windows node)
  *       개발 서버(HMR·개발 CSP)로 확인: node scripts/dev/drive-app.mjs --dev
@@ -59,6 +69,7 @@ const exeArgAt = process.argv.indexOf("--exe");
 const EXE = exeArgAt > 0 ? resolve(process.argv[exeArgAt + 1] ?? "") : null;
 const PACKAGED = EXE !== null;
 const LOGIN_ITEM = process.argv.includes("--login-item");
+const OS_SCHEDULE = process.argv.includes("--os-schedule");
 if (PACKAGED && (DEV || !existsSync(EXE))) {
     console.error("--exe에는 설치된 rcloneGUI.exe 경로를 주고 --dev와 함께 쓰지 않습니다.");
     process.exit(2);
@@ -66,6 +77,62 @@ if (PACKAGED && (DEV || !existsSync(EXE))) {
 if (LOGIN_ITEM && !PACKAGED) {
     console.error("--login-item은 --exe(설치본)와 함께만 씁니다.");
     process.exit(2);
+}
+if (OS_SCHEDULE && !PACKAGED) {
+    console.error("--os-schedule은 --exe(설치본)와 함께만 씁니다.");
+    process.exit(2);
+}
+
+const SCHTASKS = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\schtasks.exe`;
+
+/** schtasks(셸 없음). 출력은 바이트 → latin1(파이프 출력은 콘솔 코드페이지라 ASCII 부분만 비교한다) */
+function f_Schtasks(args) {
+    return new Promise((done) => {
+        execFile(
+            SCHTASKS,
+            args,
+            { shell: false, windowsHide: true, encoding: "buffer", timeout: 30_000 },
+            (err, stdout) =>
+                done({
+                    code: err ? (typeof err.code === "number" ? err.code : -1) : 0,
+                    text: Buffer.from(stdout ?? []).toString("latin1"),
+                }),
+        );
+    });
+}
+
+/** 설치 exe를 --run-job으로 직접 실행한다(헤드리스). 도는 동안 창이 보였는지도 본다 */
+async function f_RunHeadless(userData, args, timeoutMs = 180_000) {
+    const child = spawn(EXE, args, {
+        cwd: dirname(EXE),
+        env: { ...process.env, RCLONEGUI_USER_DATA: userData, RCLONE_CONFIG: smokeConf },
+        stdio: "ignore",
+        shell: false,
+        windowsHide: false,
+    });
+    const state = { exitCode: null };
+    const exited = new Promise((r) =>
+        child.once("exit", (code) => {
+            state.exitCode = code;
+            r();
+        }),
+    );
+    let shown = false;
+    const started = Date.now();
+    while (state.exitCode === null && Date.now() - started < timeoutMs) {
+        if (await f_WindowShown(child.pid)) shown = true;
+        await Promise.race([exited, f_Sleep(300)]);
+    }
+    if (state.exitCode === null) {
+        execFile("taskkill", ["/PID", String(child.pid), "/T", "/F"], { shell: false }, () => {});
+        await exited;
+        return { code: "timeout", shown };
+    }
+    return { code: state.exitCode, shown };
+}
+
+function f_Pad2(n) {
+    return String(n).padStart(2, "0");
 }
 
 /** 앱이 끝난 뒤 저장소 DB(rclonegui-store.sqlite)에서 실행 이력 하나를 읽는다. 없으면 null */
@@ -437,7 +504,7 @@ try {
     f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
     const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy", scope: "files",
         excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null,
-        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62 },
+        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62, backend: "app" },
         options: { checkers: 8, transfers: 4, fastList: true, skipLinks: true, ignoreErrors: false,
             checkHashes: false, modtimeToleranceMs: 2000, preflightBeforeDestructive: true } } })`;
     const created = await a.evaluate(`window.rclonegui.jobs.create(${draft})`);
@@ -1219,7 +1286,7 @@ try {
         mkdirSync(autoCopyDst);
         mkdirSync(autoSyncDst);
         writeFileSync(join(autoSyncDst, "extra.txt"), "extra");
-        const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62 }`;
+        const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62, backend: "app" }`;
         const autoCopy = await b.evaluate(
             `window.rclonegui.jobs.create({ ...${draft}, name: "자동 copy", source: ${js(smokeSrc)}, destination: ${js(autoCopyDst)}, ${autoOn} })`,
         );
@@ -1457,9 +1524,201 @@ try {
     const errors = [...errors1, ...errorsB, ...errorsC, ...d.consoleErrors];
     f_Check("콘솔 오류 0건", errors.length === 0, errors.join(" | "));
     await f_Close(d);
+
+    // ===== 5회차(--os-schedule, 설치본만): Windows 작업 스케줄러 예약 =====
+    if (OS_SCHEDULE) await f_OsScheduleRound(draft);
 } finally {
     rmSync(userData, { recursive: true, force: true });
     rmSync(smokeRoot, { recursive: true, force: true });
+}
+
+/** 5회차. 자세한 순서는 파일 머리말(--os-schedule) */
+async function f_OsScheduleRound(draft) {
+    const osUserData = mkdtempSync(join(tmpdir(), "rclonegui-smoke-os-"));
+    const osSrc = join(smokeRoot, "os-src");
+    const osDst = join(smokeRoot, "os-dst");
+    mkdirSync(osSrc);
+    mkdirSync(osDst);
+    writeFileSync(join(osSrc, "os.txt"), "os");
+    const osEnv = { RCLONEGUI_OS_SCHEDULER_TEST: "1" };
+    const appLog = join(osUserData, "logs", "app.log");
+    const readLog = () => (existsSync(appLog) ? readFileSync(appLog, "utf8") : "");
+    const osErrors = [];
+    let jobId = null;
+    /** 남겨도 되는(약 24시간 뒤 발화하는) 매일 예약으로 바꿨는지 */
+    let safeToKeep = false;
+    let app = null;
+    try {
+        app = await f_Launch(osUserData, { env: osEnv });
+        const ui = f_Ui(app);
+        // 새 임시 프로필은 로그인 시 시작이 꺼져 있어 시작 때 Run 값을 지운다 → --login-item이면 다시 켠다
+        if (LOGIN_ITEM) {
+            await app.evaluate(`window.rclonegui.settings.update({ ui: { launchAtLogin: true } })`);
+        }
+        const st = await app.evaluate("window.rclonegui.scheduler.osStatus()");
+        f_Check(
+            "OS 예약: 설치본 + 스모크 허용(RCLONEGUI_OS_SCHEDULER_TEST)이면 쓸 수 있음",
+            st.ok && st.data.available === true,
+            JSON.stringify(st),
+        );
+        // 매일 지금 − 2분 → OS 예약의 다음 발화는 약 24시간 뒤(스모크 중 실제로 발화하지 않음)
+        const t = new Date(Date.now() - 2 * 60_000);
+        const hhmm = `${f_Pad2(t.getHours())}:${f_Pad2(t.getMinutes())}`;
+        const daily = (backend) =>
+            `autoSync: { enabled: true, intervalMinutes: 5, allowDeletes: false, kind: "daily", timeOfDay: ${js(hhmm)}, weekdays: 62, backend: ${js(backend)} }`;
+        const appAuto = `autoSync: { enabled: true, intervalMinutes: 600, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62, backend: "app" }`;
+        const created = await app.evaluate(
+            `window.rclonegui.jobs.create({ ...${draft}, name: "OS 예약", source: ${js(osSrc)}, destination: ${js(osDst)}, excludes: [], ${daily("app")} })`,
+        );
+        jobId = created.ok ? created.data.id : null;
+        const appJob = await app.evaluate(
+            `window.rclonegui.jobs.create({ ...${draft}, name: "앱 예약", source: ${js(osSrc)}, destination: ${js(osDst)}, excludes: [], ${appAuto} })`,
+        );
+        f_Check(
+            "OS 예약: 작업 2개 저장",
+            created.ok && appJob.ok,
+            JSON.stringify(created).slice(0, 200),
+        );
+        const taskName = `\\rcloneGUI\\${jobId}`;
+        const osStatusOf = (cond) =>
+            `window.rclonegui.scheduler.osStatus().then((r) => r.ok && (${cond})(r.data.tasks.find((t) => t.jobId === ${js(jobId)}) ?? null))`;
+
+        // AC-2: 편집기에서 예약 실행 방식을 Windows 작업 스케줄러로 저장
+        await ui.clickJob("OS 예약");
+        await ui.click("작업 설정");
+        const enabled = await ui.until(
+            `document.querySelector("#job-auto-backend option[value=os]")?.disabled === false`,
+        );
+        f_Check(
+            "OS 예약: 편집기 선택지 활성(이유 문구 없음)",
+            enabled && !(await ui.text()).includes("Windows 작업 스케줄러 예약:"),
+        );
+        await ui.fill("#job-auto-backend", "os");
+        const hint = await ui.until(`document.querySelector("#job-auto-encrypted-hint") !== null`);
+        f_Check("OS 예약: 암호화 rclone.conf 안내 표시", hint);
+        await ui.click("저장");
+        const registered = await ui.untilAsync(
+            osStatusOf("(t) => t !== null && t.registered && t.error === null"),
+            30_000,
+        );
+        f_Check("OS 예약: 저장하면 등록(osStatus registered)", registered);
+        f_Check(
+            "OS 예약: 목록·작업 화면에 ‘Windows 예약’ 배지, 미등록 배지 없음",
+            await ui.until(
+                `document.body.innerText.includes("Windows 예약") && !document.body.innerText.includes("OS 예약 미등록")`,
+            ),
+        );
+        const q = await f_Schtasks(["/Query", "/TN", taskName, "/XML"]);
+        const x = q.text;
+        const asciiExe = /^[\x20-\x7e]+$/.test(EXE);
+        const firstStart = Date.parse(/<StartBoundary>([^<]+)<\/StartBoundary>/.exec(x)?.[1] ?? "");
+        f_Check(
+            "OS 예약 XML: --run-job <id>·StartWhenAvailable·배터리 false·IgnoreNew·PT13H·RestartOnFailure 없음·매일·약 24시간 뒤 시작",
+            q.code === 0 &&
+                x.includes("<ScheduleByDay>") &&
+                firstStart > Date.now() + 23 * 3_600_000 &&
+                x.includes(`--run-job ${jobId}`) &&
+                x.includes("<StartWhenAvailable>true</StartWhenAvailable>") &&
+                x.includes("<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>") &&
+                x.includes("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>") &&
+                x.includes("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>") &&
+                x.includes("<ExecutionTimeLimit>PT13H</ExecutionTimeLimit>") &&
+                !x.includes("RestartOnFailure") &&
+                (!asciiExe || x.toLowerCase().includes(`<command>${EXE.toLowerCase()}</command>`)),
+            `exit=${q.code}`,
+        );
+
+        // AC-6: 앱 예약으로 바꾸면 OS 예약을 지운다
+        await ui.fill("#job-auto-backend", "app");
+        await ui.click("저장");
+        const removed = await ui.untilAsync(osStatusOf("(t) => t === null"), 30_000);
+        const gone = await f_Schtasks(["/Query", "/TN", taskName]);
+        f_Check(
+            "OS 예약: 앱 예약으로 바꾸면 작업 스케줄러에서 삭제",
+            removed && gone.code !== 0,
+            `exit=${gone.code}`,
+        );
+
+        // 다시 매일 OS 예약으로 바꾼다(API 저장 경로, 다음 발화 약 24시간 뒤)
+        const upd = await app.evaluate(
+            `window.rclonegui.jobs.update(${js(jobId)}, { ${daily("os")} })`,
+        );
+        const again = await ui.untilAsync(osStatusOf("(t) => t !== null && t.registered"), 30_000);
+        const q2 = await f_Schtasks(["/Query", "/TN", taskName, "/XML"]);
+        const sb = /<StartBoundary>([^<]+)<\/StartBoundary>/.exec(q2.text)?.[1] ?? "";
+        const startMs = Date.parse(sb);
+        safeToKeep = upd.ok && again && q2.code === 0 && startMs > Date.now() + 23 * 3_600_000;
+        f_Check(
+            "OS 예약: 매일 예약 다시 등록, StartBoundary가 미래(약 24시간 뒤)",
+            safeToKeep && q2.text.includes("<ScheduleByDay>"),
+            `start=${sb}`,
+        );
+        osErrors.push(...app.consoleErrors);
+        await f_Close(app);
+        app = null;
+
+        // AC-3·AC-5: 앱이 꺼진 상태에서 설치 exe를 --run-job으로 직접 실행(임시 userData를 env로 준다)
+        const r1 = await f_RunHeadless(osUserData, ["--run-job", jobId]);
+        const log1 = readLog();
+        const runId = new RegExp(
+            `자동 실행 시작: run=(\\S+) job=${jobId} [^\\n]*trigger=os-scheduler`,
+        ).exec(log1)?.[1];
+        const rec = f_ReadRunRecord(osUserData, runId);
+        f_Check(
+            "헤드리스 --run-job: 창 없음·종료 코드 0·mode=headless·이력 trigger os-scheduler 성공·대상 반영",
+            r1.code === 0 &&
+                !r1.shown &&
+                log1.includes("mode=headless") &&
+                rec?.trigger === "os-scheduler" &&
+                (rec?.status === "success" || rec?.status === "noop") &&
+                existsSync(join(osDst, "os.txt")),
+            `code=${r1.code} shown=${r1.shown} status=${rec?.status} trigger=${rec?.trigger}`,
+        );
+        const r2 = await f_RunHeadless(osUserData, ["--run-job", "not-a-uuid"]);
+        f_Check(
+            "헤드리스 --run-job 잘못된 값 → 종료 코드 2·창 없음",
+            r2.code === 2 && !r2.shown,
+            `code=${r2.code}`,
+        );
+        const r3 = await f_RunHeadless(osUserData, ["--run-job", appJob.data.id]);
+        f_Check(
+            "헤드리스 --run-job 앱 예약 작업 → 종료 코드 2·차단 기록(SCHEDULE_SKIPPED)",
+            r3.code === 2 &&
+                readLog().includes(`OS 예약 차단: job=${appJob.data.id} code=SCHEDULE_SKIPPED`),
+            `code=${r3.code}`,
+        );
+
+        // AC-4: 앱이 켜져 있으면 두 번째 프로세스는 넘기고 0으로 끝나고, 첫 프로세스가 실행한다(창은 그대로)
+        app = await f_Launch(osUserData, { env: osEnv });
+        const doneRe = new RegExp(`OS 예약 처리 끝: job=${jobId} exit=0`, "g");
+        const before = (readLog().match(doneRe) ?? []).length;
+        const started = Date.now();
+        const r4 = await f_RunHeadless(osUserData, ["--run-job", jobId], 30_000);
+        const handMs = Date.now() - started;
+        let ran = false;
+        for (let i = 0; i < 120 && !ran; i += 1) {
+            ran = (readLog().match(doneRe) ?? []).length > before;
+            if (!ran) await f_Sleep(500);
+        }
+        f_Check(
+            "앱 실행 중 --run-job → 두 번째 프로세스 0으로 곧 끝남, 첫 프로세스가 실행",
+            r4.code === 0 && handMs < 15_000 && ran && (await f_PidAlive(app.child.pid)),
+            `code=${r4.code} ms=${handMs} ran=${ran}`,
+        );
+        osErrors.push(...app.consoleErrors);
+        f_Check("OS 예약 회차 콘솔 오류 0건", osErrors.length === 0, osErrors.join(" | "));
+        await f_Close(app);
+        app = null;
+        if (safeToKeep)
+            console.log("OS 예약 하나(매일, 약 24시간 뒤)를 남김: 제거 프로그램이 지워야 한다");
+    } finally {
+        if (app) await f_Close(app).catch(() => undefined);
+        // 남겨도 안전한 매일 예약이 아니면(중간 실패) 이 회차가 만든 예약을 지운다
+        if (jobId && !safeToKeep) {
+            await f_Schtasks(["/Delete", "/TN", `\\rcloneGUI\\${jobId}`, "/F"]);
+        }
+        rmSync(osUserData, { recursive: true, force: true });
+    }
 }
 
 for (const r of results)

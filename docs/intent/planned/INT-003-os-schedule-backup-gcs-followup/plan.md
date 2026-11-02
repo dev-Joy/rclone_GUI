@@ -66,7 +66,7 @@
 
 **S2-6 패키징: 제거 정리·fuses·설치 스모크**
 - 목표: FR-20·FR-21, AC-2~AC-7을 설치본으로 확인.
-- 변경: `build/installer.nsh`(`${ifNot} ${isUpdated}`에서 PowerShell `Get-ScheduledTask -TaskPath "\rcloneGUI\" | Unregister-ScheduledTask -Confirm:$false`), `electron-builder.yml`(`electronFuses` — 26.18.0이 지원함을 확인, 새 의존성 없음, spec A-1), `scripts/dev/installer-smoke.mjs`(`--run-job` 시나리오: 임시 userData로 작업 생성 → OS 예약 등록 확인 → `schtasks /Run` → 이력·종료 코드 → 제거 후 예약 없음).
+- 변경: `build/installer.nsh`(`${ifNot} ${isUpdated}`에서 PowerShell `Get-ScheduledTask -TaskPath "\rcloneGUI\" | Unregister-ScheduledTask -Confirm:$false`), `electron-builder.yml`(`electronFuses` — 26.18.0이 지원함을 확인, 새 의존성 없음, spec A-1), `scripts/dev/installer-smoke.mjs`·`scripts/dev/drive-app.mjs --os-schedule`(`--run-job` 시나리오: `\rcloneGUI\` 예약이 이미 있으면 중단 → 임시 userData + `RCLONEGUI_OS_SCHEDULER_TEST=1`로 작업 생성 → OS 예약 등록·XML 확인 → 앱 예약으로 바꾸면 삭제 → 설치 exe를 `RCLONEGUI_USER_DATA=<임시>`로 직접 `--run-job` 실행해 창 없음·이력·종료 코드 확인(`schtasks /Run`은 env 없이 실제 %APPDATA%로 돌기 때문에 쓰지 않는다, 설계 M-10) → 앱이 켜져 있을 때 넘기기 → 제거 후 예약 없음·`\rcloneGUI*` 예약 목록 전후 같음). 제거 정리는 `Get-ScheduledTask` 대신 `Schedule.Service` COM으로 작업과 빈 폴더까지 지운다(결과 같음).
 - 검증: `pnpm run build:win`, `pnpm run smoke:installer`, `pnpm run test:e2e`.
 - 롤백: 커밋 되돌림. fuses만 문제면 해당 fuse만 끈다.
 

@@ -49,7 +49,9 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱입니다. 
 - 바탕 화면·시작 메뉴 바로가기 생성
 - 코드 서명이 없어 **Windows SmartScreen 경고**가 뜰 수 있습니다. 배포처(이 저장소)를 확인한 뒤
   “추가 정보 → 실행”을 선택하세요.
-- 제거해도 `%APPDATA%\rcloneGUI`의 작업·설정·이력·로그는 지우지 않습니다.
+- 제거해도 `%APPDATA%\rcloneGUI`의 작업·설정·이력·로그는 지우지 않습니다. 로그인 시 시작 항목과
+  Windows 작업 스케줄러의 `\rcloneGUI\` 예약은 지웁니다(업데이트 설치 때는 그대로). 다시 설치하면 첫 실행 때
+  저장된 작업대로 예약을 다시 등록합니다.
 - 배포 형태는 NSIS 설치본 하나입니다. 실행 파일 위치가 바뀌면 로그인 시 시작·예약 경로가 깨지므로
   portable exe는 만들지 않습니다.
 
@@ -143,8 +145,18 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
   `자동 실행 때 삭제 허용`, `자동 실행 최대 삭제 수`(기본 50, 0이면 금지, 폴더 삭제 포함), 대량 삭제 아님,
   사전 확인 켜짐을 모두 만족할 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알림·이력(`blocked`)을
   남깁니다.
-  - 앱이 켜져 있을 때만 돕니다(트레이 포함). 꺼져 있는 동안 놓친 예약은 시작·절전 재개 60초 뒤 한 번만
-    실행하고(몰아서 따라잡지 않음), 매일·요일 예약은 그 실행이 성공하면 1시간 안의 정시를 건너뜁니다.
+  - `예약 실행 방식`이 `앱이 켜져 있을 때`(기본)면 앱이 켜져 있을 때만 돕니다(트레이 포함). 꺼져 있는 동안
+    놓친 예약은 시작·절전 재개 60초 뒤 한 번만 실행하고(몰아서 따라잡지 않음), 매일·요일 예약은 그 실행이
+    성공하면 1시간 안의 정시를 건너뜁니다.
+  - `Windows 작업 스케줄러(앱이 꺼져 있어도)`를 고르면 저장할 때 `\rcloneGUI\<작업 id>` 예약을 사용자 권한
+    (비밀번호 없음, 로그온한 동안)으로 등록하고, 예약 시각에 앱을 창 없이 `--run-job <작업 id>`로 실행합니다.
+    삭제 조건은 위와 같고, 결과는 Windows 알림과 이력(종류 `Windows 예약`)에 남습니다. 앱이 켜져 있으면 켜진
+    앱이 받아서 실행합니다(창은 그대로). 다른 실행이 끝나기를 최대 60분 기다리고, 경로를 열 수 없으면 2분
+    간격으로 3번 다시 보며, 12시간이 넘으면 중지합니다. 놓친 예약은 PC를 켠 뒤 한 번 실행합니다.
+    작업을 지우거나 앱 예약으로 바꾸면 예약도 지웁니다. 등록하지 못하면(회사 PC 정책 등) 편집기·목록에
+    `OS 예약 미등록`과 이유를 보입니다.
+  - Windows 작업 스케줄러 예약은 **암호화된 rclone.conf를 쓸 수 없습니다**(암호를 물을 수 없어 실패합니다).
+    설치한 앱에서만 고를 수 있고, 개발 실행·E2E·임시 프로필(`RCLONEGUI_USER_DATA`)에서는 선택지가 비활성입니다.
   - 트레이 `종료`를 누르면 다음 예약을 알려 주고 확인을 받습니다(창 X로 끝낼 때는 묻지 않음).
   - 자동 실행을 처음 켤 때 `로그인 시 시작`이 꺼져 있으면 안내합니다.
 - **목록에서 실행**: 왼쪽 작업 목록에는 원본 → 대상, 예약 요약, 최근 실행, 상태 문구(설정에서 숨김 가능)가
@@ -237,6 +249,7 @@ pnpm install
 | `pnpm run dist` | `build:win`과 같음(호환용 이름) |
 | `pnpm run smoke:installer` | 설치본을 임시 폴더에 설치·실행·제거하고 데이터 보존을 확인 |
 | `node scripts/probes/rclone-probes.mjs` | rclone 동작 실측(임시 폴더만, fixture 갱신) |
+| `node scripts/probes/schtasks-probes.mjs` | Windows 작업 스케줄러 동작 실측(`\rcloneGUI-probe\`만 쓰고 지움, fixture 갱신) |
 | `node scripts/dev/make-icon.mjs` | `build/icon.ico` 재생성(도형만 그림) |
 | `node scripts/dev/drive-app.mjs [--dev\|--exe <설치본>]` | 빌드본·개발 서버·설치본을 임시 userData로 띄워 조작 확인 |
 
@@ -257,7 +270,7 @@ pnpm run test:e2e
 - `tests/e2e/job-list.spec.ts`: 작업 목록 표시, 목록에서 실행(삭제 확인 창), 전체 범위 빈 폴더 복사
 - `tests/e2e/migration.spec.ts`: 예전 JSON 저장소를 SQLite로 이전
 - `tests/e2e/remote-bookmarks.spec.ts`: 리모트 북마크 추가·연결 테스트, 편집기에서 폴더 탐색
-- `tests/e2e/schedule.spec.ts`: 요일·시각 예약 저장과 목록 요약
+- `tests/e2e/schedule.spec.ts`: 요일·시각 예약 저장과 목록 요약, Windows 작업 스케줄러 선택지 비활성·이유
 - `RCLONEGUI_USER_DATA`를 임시 폴더로, `RCLONEGUI_E2E=1`로 트레이 없이 실행하며,
   `RCLONE_CONFIG`도 빈 임시 파일로 두어 실제 remote 설정을 읽지 않습니다.
 - 콘솔 오류 0건을 확인합니다. rclone이 없으면 비교·복사 테스트만 skip됩니다.
@@ -279,10 +292,14 @@ pnpm run smoke:installer -- --login-item
 - `app.asar`에 `out/`, `package.json`, 운영 의존성(`zod`)만 포함(소스·테스트·문서 제외)
 - 언어 팩 `ko`·`en-US`, 트레이 아이콘 포함
 - 임시 userData로 실행, 설치본 `drive-app` 스모크 통과
-- 무인 제거 후 설치 폴더·바로가기·Uninstall 키·로그인 항목 없음, userData 보존
+- Windows 작업 스케줄러 예약(`drive-app --os-schedule`): 편집기에서 등록 → 예약 XML 확인 → 앱 예약으로
+  바꾸면 삭제, 설치 exe를 `--run-job`으로 직접 실행(창 없음·종료 코드·이력), 앱이 켜져 있을 때 넘기기
+- fuses: `ELECTRON_RUN_AS_NODE=1`로 설치 exe를 node처럼 실행할 수 없음
+- 무인 제거 후 설치 폴더·바로가기·Uninstall 키·로그인 항목·`\rcloneGUI\` 예약 없음, userData 보존
 - 실제 `%APPDATA%\rcloneGUI`는 존재 여부·수정 시각만 전후 비교
 
-이미 설치된 rcloneGUI가 있거나 실행 중이면 사용자 환경을 건드리지 않도록 중단합니다.
+이미 설치된 rcloneGUI가 있거나 실행 중이거나, 작업 스케줄러에 `\rcloneGUI\` 예약이 있으면 사용자 환경을
+건드리지 않도록 중단합니다. `\rcloneGUI`로 시작하는 예약 목록은 전후가 같은지 비교합니다.
 `dist\`에는 설치본 exe 하나(`rcloneGUI-Setup-<버전>.exe`)만 만들고 portable exe는 만들지 않습니다.
 `.blockmap`·`latest.yml`·`builder-debug.yml`·`win-unpacked\`는 electron-builder 부산물입니다.
 
@@ -300,9 +317,9 @@ src/shared        타입·zod 스키마·IPC 계약·diff/args/parser (Node·DOM
 tests/unit        Vitest 단위
 tests/integration 실제 rclone(임시 폴더)
 tests/e2e         Playwright Electron
-scripts/probes    rclone 동작 실측
+scripts/probes    rclone·작업 스케줄러 동작 실측
 scripts/dev       빌드본·설치본 확인 도구
-docs              specs(MVP_SPEC)·intent·knowhow(rclone-notes)·works·CHANGELOG
+docs              specs(MVP_SPEC)·intent·knowhow(rclone-notes·windows-task-scheduler-notes)·works·CHANGELOG
 ```
 
 `@/`는 어느 프로세스에서나 `src`를 가리킵니다. main·preload·shared·renderer 경계와 안전 규칙은
@@ -374,8 +391,9 @@ docs              specs(MVP_SPEC)·intent·knowhow(rclone-notes)·works·CHANGEL
 - Windows x64만 지원합니다(macOS/Linux 패키징 없음).
 - 코드 서명이 없습니다. 자동 업데이트·telemetry·계정 로그인은 없습니다.
 - 선택한 파일만 복사, 파일 감시(watcher), `rclone bisync`는 범위 밖입니다.
-- Windows 작업 스케줄러·헤드리스 실행은 없습니다. 자동 실행은 앱이 켜져 있어야 돌고, cron 표현은
-  지원하지 않습니다.
+- cron 표현은 지원하지 않습니다. Windows 작업 스케줄러 예약은 로그온한 동안만 돌고(PC를 켜 두고 로그오프한
+  상태에서는 돌지 않음), 암호화된 rclone.conf를 쓸 수 없습니다. 작업 스케줄러 화면에서 트리거만 직접 바꾼 것은
+  앱이 알아채지 못합니다(작업을 다시 저장하면 앱 값으로 덮어씀).
 - 비교는 `rclone lsjson` 메타데이터 기반이며, 해시 비교는 작업 옵션으로 켤 때만 합니다.
   Google Drive처럼 수정시간이 정확하지 않은 remote는 허용오차(기본 2초)를 씁니다.
 - 비교 표에는 파일만 나옵니다. 전체 범위의 빈 폴더 생성·폴더 삭제 수는 비교 요약에 한 줄로 나옵니다.

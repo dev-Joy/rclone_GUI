@@ -11,6 +11,11 @@
  * - `--hidden`(로그인 시 시작)이면 창을 보이지 않고 트레이로 시작한다. 로그인 항목은 설치본에서만 바꾼다.
  * - 저장소(SQLite, INT-002 T-01)는 창을 띄우기 전에 한 번 연다(무결성 검사·복구·마이그레이션·JSON 이전·일일 백업).
  *   will-quit에서 닫는다. 열지 못하면 오류 창을 보이고 끝낸다.
+ * - `--run-job <id>`(Windows 작업 스케줄러, INT-003 T-01)이면 헤드리스로 시작한다: 저장소·서비스만 만들고
+ *   창·트레이·IPC·앱 스케줄러·보관 정리 없이 OS 예약 대기열만 돌린 뒤, 대기열이 비면 DB를 닫고 첫 항목의
+ *   종료 코드(0 성공·1 실패·2 인자 오류·차단·3 시작 실패)로 끝난다. 대화상자를 띄우지 않는다.
+ *   이미 앱이 실행 중이면 second-instance additionalData로 넘기고 0으로 끝난다(넘겨받은 쪽은 창을 보이지 않음).
+ *   헤드리스 중 사용자가 앱을 열면(데이터 없는 second-instance·알림 클릭) GUI로 바뀌고 실행은 계속된다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -36,6 +41,7 @@ import {
 import { setupAppPaths } from "@/main/app-paths";
 import trayIconPath from "@/main/assets/tray.png?asset";
 import { registerIpc } from "@/main/ipc/register";
+import { HIDDEN_ARG, parseLaunchArgs } from "@/main/launch-args";
 import { clsLogger } from "@/main/lib/logger";
 import { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsActivityLock } from "@/main/services/activity-lock";
@@ -43,6 +49,13 @@ import { cleanupExcludeFiles, EXCLUDE_FILE_DIR } from "@/main/services/exclude-f
 import { clsExcludeService } from "@/main/services/exclude-service";
 import { clsCompareService } from "@/main/services/compare-service";
 import { pruneRunLogs } from "@/main/services/log-retention";
+import {
+    clsOsRunQueue,
+    headlessExitDecision,
+    precheckJobPaths,
+    type typHeadlessExitCode,
+} from "@/main/services/os-run-queue";
+import { clsOsScheduler, osSchedulerAvailability } from "@/main/services/os-scheduler";
 import { clsPathService } from "@/main/services/path-service";
 import { clsRemoteOps } from "@/main/services/remote-ops";
 import { clsRemoteService } from "@/main/services/remote-service";
@@ -62,6 +75,7 @@ import { createMainWindow, isAppUrl } from "@/main/window";
 import { formatLocalDateTime } from "@/shared/format";
 import { IPC_EVENTS, type itfAppNotice } from "@/shared/ipc-contract";
 import { quitScheduleWarning } from "@/shared/schedule";
+import { zRunJobAdditionalData } from "@/shared/schemas/scheduler";
 import type { typSettings } from "@/shared/schemas/settings";
 import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
 
@@ -87,9 +101,14 @@ const QUIT_WAIT_MS = 10_000;
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** electron-builder.yml appId와 같아야 Windows 알림이 앱 이름으로 뜬다 */
 const APP_USER_MODEL_ID = "com.rclonegui.app";
-/** 로그인 시 시작 인자: 창 없이 트레이로 시작 */
-const HIDDEN_ARG = "--hidden";
-const START_HIDDEN = process.argv.includes(HIDDEN_ARG);
+/** 시작 인자(첫 프로세스에서만 본다. second-instance는 additionalData만 본다) */
+const LAUNCH = parseLaunchArgs(process.argv, process.defaultApp ? 2 : 1);
+/** 로그인 시 시작(--hidden): 창 없이 트레이로 시작 */
+const START_HIDDEN = LAUNCH.hidden;
+/** 헤드리스 종료 전 OS 알림이 사라지지 않게 기다리는 시간 */
+const HEADLESS_NOTIFY_SETTLE_MS = 1_500;
+/** 헤드리스 종료 전 진행 중인 schtasks 등록·삭제를 기다리는 최대 시간 */
+const HEADLESS_OS_IDLE_WAIT_MS = 10_000;
 /**
  * Playwright E2E: 트레이를 만들지 않고 창을 닫으면 앱을 끝낸다.
  * 임시 userData(RCLONEGUI_USER_DATA)와 함께 써서 실제 사용자 환경을 건드리지 않는다.
@@ -102,16 +121,35 @@ let allowQuit = false;
 let quitPending = false;
 let trayHintShown = false;
 let retentionTimer: NodeJS.Timeout | null = null;
-/** 저장소 DB. will-quit에서 닫는다 */
+/** 저장소 DB. will-quit(GUI) 또는 f_HeadlessExit(헤드리스)에서 닫는다 */
 let appDb: clsSqliteDb | null = null;
 
-/** f_Start가 만든 서비스. 만들기 전에는 null */
+type typAppMode = "gui" | "headless";
+/** 헤드리스(--run-job)로 시작해도 사용자가 앱을 열면 gui로 바뀐다(되돌아가지 않음) */
+let appMode: typAppMode = LAUNCH.runJob.kind === "ok" ? "headless" : "gui";
+/** 서비스가 준비되기 전에 도착한 second-instance 요청 */
+const pendingSecond: { runJobs: string[]; gui: boolean } = { runJobs: [], gui: false };
+/** GUI 시작(IPC 등록·창·트레이)은 한 번만 한다(ipcMain.handle 중복 금지) */
+let guiStarted = false;
+/** 헤드리스에서 OS 알림을 보냈는지(보냈으면 종료 전 잠깐 기다린다) */
+let headlessNotified = false;
+/** f_HeadlessExit가 기다리는 중(재진입 금지). 기다리는 동안 다시 불리면 again을 켜 한 번 더 판단한다 */
+const headlessExit = { running: false, again: false };
+
+/** f_InitCore가 만든 서비스. 만들기 전에는 null */
 interface itfServices {
     settings: clsSettingsStore;
+    jobs: clsJobStore;
     history: clsHistoryStore;
     compare: clsCompareService;
     runs: clsRunService;
     scheduler: clsScheduler;
+    osScheduler: clsOsScheduler;
+    osRuns: clsOsRunQueue;
+    rcloneEnv: clsRcloneEnv;
+    remoteService: clsRemoteService;
+    wsl: clsWslService;
+    excludes: clsExcludeService;
 }
 let svc: itfServices | null = null;
 
@@ -158,6 +196,7 @@ function f_Notify(n: itfAppNotify): void {
         w.webContents.send(IPC_EVENTS.appNotify, n);
         return;
     }
+    if (appMode === "headless" && Notification.isSupported()) headlessNotified = true;
     f_OsNotify(n.message, n.level === "info" || n.level === "success");
 }
 
@@ -178,13 +217,19 @@ function f_SyncLoginItem(enabled: boolean): void {
 
 function f_ApplySettings(s: typSettings, prev: typSettings | null): void {
     nativeTheme.themeSource = s.ui.theme;
+    // 로그인 항목은 GUI에서만 맞춘다(헤드리스는 레지스트리를 건드리지 않는다. GUI 시작 때 f_StartGui가 맞춤)
+    if (!guiStarted) return;
     if (prev === null || prev.ui.launchAtLogin !== s.ui.launchAtLogin) {
         f_SyncLoginItem(s.ui.launchAtLogin);
     }
 }
 
-/** 창을 보이고 앞으로 가져온다. 없으면 다시 만든다(시작이 끝난 뒤에만) */
+/** 창을 보이고 앞으로 가져온다. 없으면 다시 만든다(시작이 끝난 뒤에만). 헤드리스면 GUI로 바꾼다 */
 function f_ShowWindow(): void {
+    if (appMode === "headless") {
+        f_EnterGui();
+        return;
+    }
     if (!svc) return;
     const w = mainWindow;
     if (!w || w.isDestroyed()) {
@@ -233,6 +278,8 @@ function f_SendState(state: itfSchedulerState): void {
 function f_FinalQuit(): void {
     allowQuit = true;
     svc?.scheduler.stop();
+    // 대기 중인 OS 예약 요청은 버린다(이력 없음, 다음 예약 때 다시 돈다)
+    svc?.osRuns.dispose();
     if (retentionTimer) clearInterval(retentionTimer);
     retentionTimer = null;
     tray?.destroy();
@@ -328,6 +375,21 @@ function f_RequestQuit(source: typQuitSource = "app"): void {
         app.quit();
         return;
     }
+    if (appMode === "headless") {
+        // 헤드리스는 대화상자 없이 실행을 취소하고(최대 10초 대기) 끝낸다
+        if (quitPending) return;
+        quitPending = true;
+        void (async () => {
+            const runs = svc?.runs;
+            const run = runs?.getActive();
+            if (runs && run) {
+                runs.cancel(run.runId);
+                await runs.whenIdle(QUIT_WAIT_MS);
+            }
+            await f_HeadlessExit(1, true);
+        })();
+        return;
+    }
     if (quitPending) return;
     quitPending = true;
     f_QuitFlow(source)
@@ -411,12 +473,99 @@ function f_ApplySecurityPolicy(): void {
     });
 }
 
-async function f_Start(): Promise<void> {
-    logger.info(
-        `시작: v${app.getVersion()} electron ${process.versions.electron} node ${process.versions.node} hidden=${START_HIDDEN}`,
-    );
-    f_ApplySecurityPolicy();
+function f_Delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
+/**
+ * 헤드리스 종료: 알림·진행 중인 schtasks를 잠깐 기다리고 DB를 닫은 뒤 app.exit(code).
+ * app.exit은 before-quit·will-quit을 내지 않으므로 DB를 직접 닫는다.
+ * 기다리는 동안 GUI로 바뀌었거나 second-instance로 새 요청이 들어와 대기열이 비지 않았으면 끝내지 않는다
+ * (그 요청이 끝나면 onIdle이 다시 부른다). force는 종료 요청(f_RequestQuit)으로, 대기열이 남아도 끝낸다.
+ */
+async function f_HeadlessExit(code: typHeadlessExitCode, force = false): Promise<void> {
+    if (headlessExit.running) {
+        headlessExit.again = true;
+        return;
+    }
+    headlessExit.running = true;
+    try {
+        for (;;) {
+            headlessExit.again = false;
+            const before = headlessExitDecision({
+                headless: appMode === "headless",
+                quitting: allowQuit,
+                queueIdle: svc?.osRuns.isIdle() ?? true,
+                force,
+            });
+            if (before === "stay") return;
+            // 알림을 보냈으면 OS 알림이 사라지지 않게 잠깐 기다린다
+            if (headlessNotified) await f_Delay(HEADLESS_NOTIFY_SETTLE_MS);
+            const os = svc?.osScheduler;
+            if (os) await Promise.race([os.idle(), f_Delay(HEADLESS_OS_IDLE_WAIT_MS)]);
+            const after = headlessExitDecision({
+                headless: appMode === "headless",
+                quitting: allowQuit,
+                queueIdle: svc?.osRuns.isIdle() ?? true,
+                force,
+            });
+            if (after === "exit") break;
+            // 대기열에 새 요청이 있으면 그 처리가 끝난 뒤 onIdle이 다시 부른다(기다리는 사이 이미 불렸으면 다시 판단)
+            if (!headlessExit.again) return;
+        }
+        allowQuit = true;
+        svc?.osRuns.dispose();
+        try {
+            appDb?.close();
+        } catch (e) {
+            logger.warn("저장소를 닫지 못함", e);
+        }
+        appDb = null;
+        logger.info(`헤드리스 종료: code=${code}`);
+        app.exit(code);
+    } finally {
+        headlessExit.running = false;
+    }
+}
+
+/** 헤드리스 → GUI(사용자가 앱을 열었음). 진행 중인 OS 실행·대기열은 계속된다 */
+function f_EnterGui(): void {
+    if (appMode === "gui") {
+        f_ShowWindow();
+        return;
+    }
+    appMode = "gui";
+    logger.info("헤드리스 → GUI 전환");
+    f_StartGui(false).catch((e: unknown) => logger.error("GUI 전환 실패", e));
+}
+
+/** 두 번째 프로세스의 요청. argv는 보지 않고 additionalData만 본다(FR-14) */
+function f_OnSecondInstance(data: unknown): void {
+    const r = zRunJobAdditionalData.safeParse(data);
+    if (r.success) {
+        // OS 예약 넘김: 창은 보이지 않는다(GUI 모드여도)
+        const jobId = r.data.runJob.toLowerCase();
+        if (!svc) {
+            pendingSecond.runJobs.push(jobId);
+            return;
+        }
+        svc.osRuns.enqueue(jobId);
+        return;
+    }
+    // 그 밖(데이터 없음·형식 다름·예전 버전) = 사용자가 앱을 연 것
+    if (!svc) {
+        pendingSecond.gui = true;
+        return;
+    }
+    if (appMode === "headless") f_EnterGui();
+    else f_ShowWindow();
+}
+
+/**
+ * 저장소·복구·서비스를 만든다(GUI·헤드리스 공통). 창·트레이·IPC·앱 스케줄러 시작은 하지 않는다.
+ */
+async function f_InitCore(): Promise<itfServices> {
+    f_ApplySecurityPolicy();
     const { db } = await openAppDb({ userDataDir: paths.userData, logger, onNotice: f_AddNotice });
     appDb = db;
     // 늦게 끝난 이력 갱신은 닫힌 뒤 STORE_ERROR로 실패한다(다음 시작 때 markInterrupted가 정리)
@@ -430,6 +579,25 @@ async function f_Start(): Promise<void> {
     });
 
     let scheduler: clsScheduler | null = null;
+    // OS 예약(INT-003 T-01): 설치본·실제 프로필에서만 schtasks를 부른다(임시 프로필이면 아무것도 하지 않음).
+    // 설치 스모크만 RCLONEGUI_OS_SCHEDULER_TEST=1로 임시 프로필에서도 허용한다
+    const osScheduler = new clsOsScheduler({
+        userDataDir: paths.userData,
+        execPath: process.execPath,
+        availability: osSchedulerAvailability({
+            platform: process.platform,
+            isPackaged: app.isPackaged,
+            e2e: E2E,
+            userDataOverride: Boolean(process.env.RCLONEGUI_USER_DATA),
+            smokeOptIn: process.env.RCLONEGUI_OS_SCHEDULER_TEST === "1",
+        }),
+        logger,
+        onStatus: (st) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(IPC_EVENTS.schedulerOsStatus, st);
+            }
+        },
+    });
     const settings = new clsSettingsStore(db, f_AddNotice, (s, prev) => f_ApplySettings(s, prev));
     await settings.load();
     f_ApplySettings(settings.get(), null);
@@ -440,6 +608,8 @@ async function f_Start(): Promise<void> {
         onChange: (list) => {
             mainWindow?.webContents.send(IPC_EVENTS.jobsChanged, { jobs: list });
             scheduler?.emitState();
+            // 생성·수정·삭제·복제·백엔드 변경 모두 이 한 경로로 등록·삭제한다(바뀐 것만)
+            osScheduler.syncJobs(list);
         },
     });
     await jobs.load();
@@ -532,16 +702,54 @@ async function f_Start(): Promise<void> {
         emitState: f_SendState,
         ...(devTickMs ? { tickMs: devTickMs } : {}),
     });
-    svc = { settings, history, compare, runs, scheduler };
+    const osRuns = new clsOsRunQueue({
+        jobs,
+        settings,
+        runs,
+        checkPaths: (job) => precheckJobPaths(job, { pathService, settings }),
+        notify: f_Notify,
+        logger,
+        onIdle: (code) => {
+            void f_HeadlessExit(code ?? 2);
+        },
+    });
 
+    // 헤드리스는 app.exit만 쓰므로 오지 않지만, 대화상자를 띄우지 않도록 막는다
     app.on("before-quit", (event) => {
-        if (allowQuit) return;
+        if (allowQuit || appMode === "headless") return;
         event.preventDefault();
         f_RequestQuit();
     });
+
+    return {
+        settings,
+        jobs,
+        history,
+        compare,
+        runs,
+        scheduler,
+        osScheduler,
+        osRuns,
+        rcloneEnv,
+        remoteService,
+        wsl,
+        excludes,
+    };
+}
+
+/**
+ * GUI 시작(처음 GUI로 시작하거나 헤드리스에서 바뀔 때 한 번): resume·IPC·창·트레이·보관 정리·앱 스케줄러.
+ */
+async function f_StartGui(hidden: boolean): Promise<void> {
+    if (guiStarted || !svc) return;
+    guiStarted = true;
+    const { settings, jobs, history, compare, runs, scheduler, osScheduler } = svc;
+    const { rcloneEnv, remoteService, wsl, excludes } = svc;
+    f_SyncLoginItem(settings.get().ui.launchAtLogin);
+
     powerMonitor.on("resume", () => {
         logger.info("절전에서 깨어남: 지난 자동 실행 예약 조정");
-        void scheduler?.onResume();
+        void scheduler.onResume();
     });
 
     registerIpc({
@@ -558,15 +766,16 @@ async function f_Start(): Promise<void> {
         runs,
         history,
         scheduler,
+        osScheduler,
         excludes,
         remotes: remoteService,
         getWindow: () => mainWindow,
     });
 
-    f_OpenWindow(START_HIDDEN && !E2E);
+    f_OpenWindow(hidden && !E2E);
     if (E2E) {
         // 트레이가 없으므로 --hidden으로 시작해도 창을 보인다(E2E가 화면을 조작한다)
-        if (START_HIDDEN) f_ShowWindow();
+        if (hidden) f_ShowWindow();
     } else {
         try {
             tray = createTray({
@@ -576,7 +785,7 @@ async function f_Start(): Promise<void> {
                     void shell.openPath(paths.logs);
                 },
                 onTogglePause: (paused) => {
-                    scheduler?.setPaused(paused).catch((e: unknown) => {
+                    scheduler.setPaused(paused).catch((e: unknown) => {
                         logger.warn("일시정지 변경 실패", e);
                     });
                 },
@@ -586,7 +795,7 @@ async function f_Start(): Promise<void> {
             logger.error("트레이 아이콘을 만들지 못함", e);
             tray = null;
             // 트레이가 없으면 숨긴 창을 다시 찾을 방법이 없으므로 보인다
-            if (START_HIDDEN) f_ShowWindow();
+            if (hidden) f_ShowWindow();
         }
     }
 
@@ -597,23 +806,69 @@ async function f_Start(): Promise<void> {
     await scheduler.start();
 }
 
-if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+/** 서비스 준비 전에 온 second-instance 요청: 실행 요청을 도착 순서로 넣는다(창 요청은 f_Main이 마지막에 처리) */
+function f_FlushPendingRuns(): void {
+    const ids = pendingSecond.runJobs.splice(0);
+    for (const id of ids) svc?.osRuns.enqueue(id);
+}
 
-if (!app.requestSingleInstanceLock()) {
+async function f_Main(): Promise<void> {
+    logger.info(
+        `시작: v${app.getVersion()} electron ${process.versions.electron} node ${process.versions.node} mode=${appMode} hidden=${START_HIDDEN}`,
+    );
+    svc = await f_InitCore();
+    const { jobs, osScheduler, osRuns } = svc;
+    if (LAUNCH.runJob.kind === "ok" && appMode === "headless") {
+        // 첫 항목 = 종료 코드 대상
+        osRuns.enqueue(LAUNCH.runJob.jobId);
+    }
+    f_FlushPendingRuns();
+    // GUI·헤드리스 모두(FR-10). 실행·대기 중인 작업은 다시 등록하지 않는다. 시작을 막지 않고 실패는 app.log에만
+    void osScheduler.reconcile(jobs.list(), osRuns.activeJobIds());
+    if (appMode === "gui") await f_StartGui(START_HIDDEN);
+    if (pendingSecond.gui) {
+        pendingSecond.gui = false;
+        if (appMode === "headless") f_EnterGui();
+        else f_ShowWindow();
+    }
+}
+
+function f_StartFailed(e: unknown): void {
+    logger.error("시작 실패", e);
+    if (LAUNCH.runJob.kind === "ok") {
+        // 헤드리스로 시작한 경우: 대화상자 없이 끝낸다(NFR-3)
+        allowQuit = true;
+        try {
+            appDb?.close();
+        } catch {
+            // 닫지 못해도 끝낸다
+        }
+        appDb = null;
+        app.exit(3);
+        return;
+    }
+    f_ShowStartError(e);
+    allowQuit = true;
     app.quit();
+}
+
+if (LAUNCH.runJob.kind === "invalid") {
+    // 값은 남기지 않는다. 이력도 남기지 않는다(FR-13)
+    logger.warn(`--run-job 인자 오류: reason=${LAUNCH.runJob.reason}`);
+    app.exit(2);
 } else {
-    // 이미 실행 중이면 숨겨진 창을 보인다(없으면 다시 만든다)
-    app.on("second-instance", () => f_ShowWindow());
-    // 트레이 모드에서는 창이 없어도 끝내지 않는다. 종료는 f_RequestQuit 흐름으로만 한다
-    app.on("window-all-closed", () => {
-        if (allowQuit || !tray) f_RequestQuit();
-    });
-    app.whenReady()
-        .then(f_Start)
-        .catch((e: unknown) => {
-            logger.error("시작 실패", e);
-            f_ShowStartError(e);
-            allowQuit = true;
-            app.quit();
+    if (process.platform === "win32") app.setAppUserModelId(APP_USER_MODEL_ID);
+    const runJobData = LAUNCH.runJob.kind === "ok" ? { runJob: LAUNCH.runJob.jobId } : undefined;
+    if (!app.requestSingleInstanceLock(runJobData)) {
+        // 이미 실행 중: 요청을 넘겼으므로 성공(0)으로 끝난다
+        if (runJobData) logger.info(`OS 예약 요청을 실행 중인 앱에 넘김: job=${runJobData.runJob}`);
+        app.quit();
+    } else {
+        app.on("second-instance", (_e, _argv, _cwd, data) => f_OnSecondInstance(data));
+        // 트레이 모드에서는 창이 없어도 끝내지 않는다. 종료는 f_RequestQuit 흐름으로만 한다
+        app.on("window-all-closed", () => {
+            if (allowQuit || !tray) f_RequestQuit();
         });
+        app.whenReady().then(f_Main).catch(f_StartFailed);
+    }
 }

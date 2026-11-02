@@ -269,6 +269,14 @@ describe("초안 변환·비교", () => {
         expect(isDraftEqual(f_Draft({ scope: "files" }), f_Draft({ scope: "all" }))).toBe(false);
     });
 
+    it("jobToDraft는 예약 방식을 복사하고, 다르면 isDraftEqual이 다르다 (INT-003 T-01)", () => {
+        const base = f_Job("00000000-0000-4000-8000-000000000001", "a");
+        const job = { ...base, autoSync: { ...base.autoSync, backend: "os" as const } };
+        expect(jobToDraft(job).autoSync.backend).toBe("os");
+        const d = f_Draft();
+        expect(isDraftEqual(d, { ...d, autoSync: { ...d.autoSync, backend: "os" } })).toBe(false);
+    });
+
     it("잘못된 범위는 scope 필드 오류", () => {
         const bad = { ...f_Draft(), scope: "dirs" } as unknown as Parameters<
             typeof validateJobDraft

@@ -44,6 +44,8 @@ describe("history-view", () => {
         expect(historyKind(f_Rec({ dryRun: true, trigger: "scheduler" }))).toBe("dryRun");
         expect(historyKind(f_Rec({ trigger: "scheduler" }))).toBe("auto");
         expect(historyKind(f_Rec({}))).toBe("manual");
+        expect(historyKind(f_Rec({ trigger: "os-scheduler" }))).toBe("os");
+        expect(historyKind(f_Rec({ dryRun: true, trigger: "os-scheduler" }))).toBe("dryRun");
     });
 
     it("필터: 종류·결과(실패에는 일부 실패·중단됨 포함)", () => {
@@ -102,6 +104,16 @@ describe("history-view", () => {
                 t,
             ),
         ).toBe("자동 실행 중: ‘백업’");
+        expect(
+            nextAutoRunText(
+                {
+                    paused: false,
+                    running: { jobId: "j", jobName: "백업", trigger: "os-scheduler" },
+                    next: null,
+                },
+                t,
+            ),
+        ).toBe("Windows 예약 실행 중: ‘백업’");
         expect(nextAutoRunText({ paused: false, running: null, next: null }, t)).toBe(
             "예약된 자동 실행 없음",
         );

@@ -24,6 +24,7 @@ import type { clsJobStore, itfJobBookkeeping } from "@/main/store/job-store";
 import { ERROR_MESSAGES } from "@/shared/errors";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE_SHORT } from "@/shared/partial-files";
 import {
+    isAppScheduled,
     nextAfterFinish,
     nextAutoRun,
     nextOccurrence,
@@ -237,7 +238,7 @@ export class clsScheduler {
         try {
             if (job) {
                 await this.book(o.jobId, {
-                    nextRunAt: job.autoSync.enabled
+                    nextRunAt: isAppScheduled(job.autoSync)
                         ? nextAfterFinish(
                               o.finishedAt,
                               job.autoSync,

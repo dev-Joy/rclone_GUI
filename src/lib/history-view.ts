@@ -1,5 +1,5 @@
 /**
- * 이력 화면의 순수 로직: 실행 종류(수동·자동·미리보기)·상태 필터, 배지 색, 요약 문구, 다음 자동 실행 문구.
+ * 이력 화면의 순수 로직: 실행 종류(수동·자동·Windows 예약·미리보기)·상태 필터, 배지 색, 요약 문구, 다음 자동 실행 문구.
  * DOM·window 의존 없음 (단위 테스트는 node 환경).
  *
  * @author dev-Joy 2026-10-29
@@ -11,7 +11,7 @@ import type { typRunStatus } from "@/shared/schemas/common";
 import type { typRunRecord } from "@/shared/schemas/run";
 import type { itfSchedulerState } from "@/shared/types/scheduler";
 
-export type typHistoryKind = "manual" | "auto" | "dryRun";
+export type typHistoryKind = "manual" | "auto" | "os" | "dryRun";
 /** ZBCBadge tone과 같은 값 */
 export type typHistoryTone = "neutral" | "accent" | "success" | "warning" | "danger";
 export type typHistoryKindFilter = "all" | typHistoryKind;
@@ -28,6 +28,7 @@ export const DEFAULT_HISTORY_FILTER: itfHistoryFilter = { kind: "all", status: "
 export const HISTORY_KIND_LABEL: Record<typHistoryKind, string> = {
     manual: "수동",
     auto: "자동",
+    os: "Windows 예약",
     dryRun: "미리보기",
 };
 
@@ -35,6 +36,7 @@ export const HISTORY_KIND_OPTIONS: ReadonlyArray<{ value: typHistoryKindFilter; 
     { value: "all", label: "모든 실행" },
     { value: "manual", label: "수동 실행" },
     { value: "auto", label: "자동 실행" },
+    { value: "os", label: "Windows 예약 실행" },
     { value: "dryRun", label: "미리보기" },
 ];
 
@@ -60,10 +62,11 @@ const STATUS_GROUP: Record<typRunStatus, typHistoryStatusFilter | null> = {
     noop: null,
 };
 
-/** 미리보기 > 자동 > 수동 */
+/** 미리보기 > 자동(앱·Windows 예약) > 수동 */
 export function historyKind(r: Pick<typRunRecord, "dryRun" | "trigger">): typHistoryKind {
     if (r.dryRun) return "dryRun";
-    return r.trigger === "scheduler" ? "auto" : "manual";
+    if (r.trigger === "scheduler") return "auto";
+    return r.trigger === "os-scheduler" ? "os" : "manual";
 }
 
 export function filterHistory(
@@ -116,6 +119,9 @@ export function nextAutoRunText(
     if (!state) return "";
     if (state.paused) return "자동 실행 일시정지됨";
     if (state.running?.trigger === "scheduler") return `자동 실행 중: ‘${state.running.jobName}’`;
+    if (state.running?.trigger === "os-scheduler") {
+        return `Windows 예약 실행 중: ‘${state.running.jobName}’`;
+    }
     if (!state.next) return "예약된 자동 실행 없음";
     return `다음 자동 실행 ${formatTime(state.next.at)} ‘${state.next.jobName}’`;
 }

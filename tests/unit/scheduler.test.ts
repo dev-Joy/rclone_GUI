@@ -48,6 +48,7 @@ function f_Job(
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             nextRunAt,
             lastAutoRunAt: null,
             ...over,
@@ -280,6 +281,28 @@ describe("clsScheduler tick", () => {
         const h = f_Harness([f_Job(1, iso(-MIN), { enabled: false })]);
         await h.sched.tick();
         expect(h.started).toHaveLength(0);
+    });
+
+    it("Windows 작업 스케줄러 작업은 시작하지 않고, 시작 시 예약을 null로 둔다 (INT-003 T-01)", async () => {
+        const h = f_Harness([f_Job(1, iso(-MIN), { backend: "os" })]);
+        await h.sched.tick();
+        expect(h.started).toHaveLength(0);
+        await h.sched.start();
+        expect(h.job(1).autoSync.nextRunAt).toBeNull();
+        h.advance(2 * MIN);
+        await h.sched.tick();
+        expect(h.started).toHaveLength(0);
+    });
+
+    it("실행 중에 OS 예약으로 바뀐 작업은 끝난 뒤 nextRunAt을 null로 남긴다", async () => {
+        const h = f_Harness([f_Job(1, iso(-MIN))]);
+        await h.sched.tick();
+        expect(h.started).toHaveLength(1);
+        const j = h.job(1);
+        j.autoSync = { ...j.autoSync, backend: "os" };
+        h.started[0]!.resolve({ status: "success" });
+        await h.flush();
+        expect(h.job(1).autoSync).toMatchObject({ nextRunAt: null, lastAutoRunAt: h.nowIso() });
     });
 
     it("주기 변경 뒤 끝나면 새 주기로 예약한다", async () => {

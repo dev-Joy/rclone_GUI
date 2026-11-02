@@ -70,6 +70,7 @@ export function createJobDraft(settings: typSettings): typJobDraft {
             kind: "interval",
             timeOfDay: DEFAULT_TIME_OF_DAY,
             weekdays: WEEKDAYS_WEEKDAYS,
+            backend: "app",
         },
     };
 }

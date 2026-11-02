@@ -112,6 +112,43 @@ function f_SettingsKey(s: typSettings): string {
     return JSON.stringify([s.rclonePath, s.configPath, s.compare.caseInsensitivePaths]);
 }
 
+/**
+ * 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다.
+ * 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다).
+ */
+export function checkSourceProbe(p: itfParsedPath, probe: itfPathProbe): void {
+    if (probe.readable === false) {
+        throw new clsAppError("PATH_NOT_FOUND", "원본: 읽을 권한이 없습니다.");
+    }
+    if (!probe.exists) throw new clsAppError("PATH_NOT_FOUND", `원본: ${probe.message}`);
+    if (!probe.isDirectory) {
+        throw new clsAppError("PATH_NOT_DIRECTORY", `원본: ${probe.message}`);
+    }
+    // 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다)
+    if (p.kind !== "remote" && probe.readable !== true) {
+        throw new clsAppError("PATH_NOT_FOUND", `원본: ${probe.message}`);
+    }
+}
+
+/** 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 */
+export function checkDestProbe(p: itfParsedPath, probe: itfPathProbe): boolean {
+    if (probe.readable === false) {
+        throw new clsAppError("PATH_NOT_FOUND", "대상: 읽을 권한이 없습니다.");
+    }
+    if (!probe.exists) {
+        // "경로가 없습니다."만 새 폴더로 본다(네트워크·시간 초과는 막는다)
+        if (probe.message.startsWith(PROBE_MISSING_MESSAGE)) return true;
+        throw new clsAppError("PATH_NOT_FOUND", `대상: ${probe.message}`);
+    }
+    if (!probe.isDirectory) {
+        throw new clsAppError("PATH_NOT_DIRECTORY", `대상: ${probe.message}`);
+    }
+    if (p.kind !== "remote" && probe.readable !== true) {
+        throw new clsAppError("PATH_NOT_FOUND", `대상: ${probe.message}`);
+    }
+    return false;
+}
+
 export class clsCompareService {
     private readonly deps: Required<itfCompareServiceDeps>;
     private readonly cache = new Map<string, itfCacheEntry>();
@@ -326,8 +363,8 @@ export class clsCompareService {
             this.probeSide("대상", job.destination, job.configPathOverride),
         ]);
         this.throwIfCanceled(active);
-        this.checkSource(src, sp);
-        const destMissing = this.checkDest(dst, dp);
+        checkSourceProbe(src, sp);
+        const destMissing = checkDestProbe(dst, dp);
 
         // 4) 목록
         this.setPhase(active, "list");
@@ -454,39 +491,6 @@ export class clsCompareService {
             }
             throw e;
         }
-    }
-
-    private checkSource(p: itfParsedPath, probe: itfPathProbe): void {
-        if (probe.readable === false) {
-            throw new clsAppError("PATH_NOT_FOUND", "원본: 읽을 권한이 없습니다.");
-        }
-        if (!probe.exists) throw new clsAppError("PATH_NOT_FOUND", `원본: ${probe.message}`);
-        if (!probe.isDirectory) {
-            throw new clsAppError("PATH_NOT_DIRECTORY", `원본: ${probe.message}`);
-        }
-        // 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다)
-        if (p.kind !== "remote" && probe.readable !== true) {
-            throw new clsAppError("PATH_NOT_FOUND", `원본: ${probe.message}`);
-        }
-    }
-
-    /** 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 */
-    private checkDest(p: itfParsedPath, probe: itfPathProbe): boolean {
-        if (probe.readable === false) {
-            throw new clsAppError("PATH_NOT_FOUND", "대상: 읽을 권한이 없습니다.");
-        }
-        if (!probe.exists) {
-            // "경로가 없습니다."만 새 폴더로 본다(네트워크·시간 초과는 막는다)
-            if (probe.message.startsWith(PROBE_MISSING_MESSAGE)) return true;
-            throw new clsAppError("PATH_NOT_FOUND", `대상: ${probe.message}`);
-        }
-        if (!probe.isDirectory) {
-            throw new clsAppError("PATH_NOT_DIRECTORY", `대상: ${probe.message}`);
-        }
-        if (p.kind !== "remote" && probe.readable !== true) {
-            throw new clsAppError("PATH_NOT_FOUND", `대상: ${probe.message}`);
-        }
-        return false;
     }
 
     /** 모든 쪽을 병렬로 나열한다. 한쪽이 실패하면 다른 쪽도 끝내고 먼저 난 오류를 던진다 */

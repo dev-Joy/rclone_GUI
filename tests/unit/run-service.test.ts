@@ -15,7 +15,11 @@ import {
 import { clsActivityLock } from "@/main/services/activity-lock";
 import { resolveEffectiveExcludes } from "@/main/services/effective-excludes";
 import type { itfBatcherTimers } from "@/main/services/run-events";
-import { clsRunService, type itfRunServiceDeps } from "@/main/services/run-service";
+import {
+    clsRunService,
+    TIME_LIMIT_CANCELED_TEXT,
+    type itfRunServiceDeps,
+} from "@/main/services/run-service";
 import { createDefaultSettings } from "@/shared/defaults";
 import { mayLeavePartial } from "@/shared/partial-files";
 import type { typJob } from "@/shared/schemas/job";
@@ -57,6 +61,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -956,6 +961,7 @@ function f_AutoJob(
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
         },
     });
 }
@@ -1381,5 +1387,113 @@ describe("clsRunService 동기화 범위 (INT-002 T-05)", () => {
         expect(o.status).toBe("success");
         expect(h.procs).toHaveLength(1);
         expect(h.procs[0]!.args).toContain("--create-empty-src-dirs");
+    });
+});
+
+async function f_WaitProcs(h: ReturnType<typeof f_Harness>, n: number): Promise<void> {
+    for (let i = 0; i < 50 && h.procs.length < n; i += 1) {
+        await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(h.procs).toHaveLength(n);
+}
+
+describe("clsRunService OS 예약 (INT-003 T-01)", () => {
+    const SKIPPED = { code: "SCHEDULE_SKIPPED" as const, message: "예약 실행 조건에 맞지 않음" };
+
+    it("startAuto(id, os-scheduler): 이력·스냅샷·로그에 trigger os-scheduler", async () => {
+        const h = f_Harness({ job: f_AutoJob(), script: { lines: fixtureLines("copy-real") } });
+        const { done } = await h.svc.startAuto(JOB_ID, "os-scheduler");
+        const started = h.events[0]!;
+        if (started.type !== "started") throw new Error("started 아님");
+        expect(started.snapshot.trigger).toBe("os-scheduler");
+        const o = await done;
+        expect(o.status).toBe("success");
+        expect(h.begun[0]).toMatchObject({ trigger: "os-scheduler", dryRun: false });
+        expect(h.logs.some((l) => l.includes("trigger=os-scheduler"))).toBe(true);
+    });
+
+    it("recordAutoBlocked: 락·진행 중 실행과 무관하게 blocked 이력 1건 + lastRun, 프로세스 없음", async () => {
+        const h = f_Harness({ script: null });
+        const { runId: busyRun } = await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        expect(h.activity.current()).not.toBeNull();
+        const o = await h.svc.recordAutoBlocked(JOB_ID, "os-scheduler", SKIPPED);
+        expect(o).toMatchObject({
+            jobId: JOB_ID,
+            status: "blocked",
+            error: SKIPPED,
+            recorded: true,
+            transferStarted: false,
+        });
+        expect(o.runId).not.toBe(busyRun);
+        const rec = h.begun.find((r) => r.id === o.runId)!;
+        expect(rec).toMatchObject({
+            trigger: "os-scheduler",
+            status: "blocked",
+            dryRun: false,
+            logFile: null,
+        });
+        expect(h.bookkeeping).toContainEqual(
+            expect.objectContaining({
+                lastRun: expect.objectContaining({ runId: o.runId, status: "blocked" }),
+            }),
+        );
+        expect(h.events.some((e) => e.type === "finished" && e.runId === o.runId)).toBe(true);
+        // 진행 중 실행과 락은 그대로
+        expect(h.svc.getActive()?.runId).toBe(busyRun);
+        expect(h.activity.current()).toMatchObject({ kind: "run", runId: busyRun });
+        expect(h.procs).toHaveLength(1);
+        h.procs[0]!.finish([]);
+        expect(await h.svc.whenIdle(2000)).toBe(true);
+    });
+
+    it("recordAutoBlocked: 없는 작업은 NOT_FOUND, 이력 없음", async () => {
+        const h = f_Harness();
+        const e = await f_Err(
+            h.svc.recordAutoBlocked(
+                "00000000-0000-4000-8000-000000000999",
+                "os-scheduler",
+                SKIPPED,
+            ),
+        );
+        expect(e.code).toBe("NOT_FOUND");
+        expect(h.begun).toEqual([]);
+    });
+
+    it("시간 제한 취소(전송 중): canceled + 시간 제한 문구, 코드 CANCELED", async () => {
+        const h = f_Harness({ job: f_AutoJob(), script: null });
+        const { runId, done } = await h.svc.startAuto(JOB_ID, "os-scheduler");
+        await f_WaitProcs(h, 1);
+        h.svc.cancel(runId, "timeLimit");
+        const o = await done;
+        expect(o.status).toBe("canceled");
+        expect(o.error).toEqual({ code: "CANCELED", message: TIME_LIMIT_CANCELED_TEXT });
+        expect(h.patches.at(-1)?.error).toEqual({
+            code: "CANCELED",
+            message: TIME_LIMIT_CANCELED_TEXT,
+        });
+        expect(h.logs.some((l) => l.includes("reason=timeLimit"))).toBe(true);
+        const log = readFileSync(join(h.logsDir, readdirSync(h.logsDir)[0]!), "utf8");
+        expect(log).toContain("# 취소 요청(시간 제한)");
+    });
+
+    it("시간 제한 취소(비교 중)도 시간 제한 문구, 사용자 취소가 먼저면 사용자 문구 그대로", async () => {
+        const h = f_Harness({ job: f_AutoJob(), autoCompare: "hang" });
+        const { runId, done } = await h.svc.startAuto(JOB_ID, "os-scheduler");
+        for (let i = 0; i < 20 && h.autoCompareCalls.length === 0; i += 1) {
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        h.svc.cancel(runId, "timeLimit");
+        const o = await done;
+        expect(o.error?.message).toBe(TIME_LIMIT_CANCELED_TEXT);
+        expect(h.begun[0]).toMatchObject({ status: "canceled" });
+
+        const u = f_Harness({ job: f_AutoJob(), autoCompare: "hang" });
+        const s2 = await u.svc.startAuto(JOB_ID, "os-scheduler");
+        for (let i = 0; i < 20 && u.autoCompareCalls.length === 0; i += 1) {
+            await new Promise((r) => setTimeout(r, 0));
+        }
+        u.svc.cancel(s2.runId);
+        u.svc.cancel(s2.runId, "timeLimit");
+        expect((await s2.done).error?.message).toContain("비교 중에 중지");
     });
 });

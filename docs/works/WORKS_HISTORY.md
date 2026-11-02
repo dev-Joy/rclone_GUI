@@ -179,6 +179,20 @@
 - 검증: `pnpm run check`(unit 977), `format:check`, `test:int` 51(+8 skip: GCS 7·기존 1) 통과
 - 설계와 다름: FR-2의 "같은 conf 안 두 번째 remote" 대신 연결 문자열(`<remote>,directory_markers=true:<bucket>`)로 비교 — 테스트 conf를 바꿀 필요 없음
 
+[TASK_020] : (2026-11-02) INT-003 Phase 2 — T-01 Windows 작업 스케줄러·헤드리스 (관련 Intent: INT-003, T-01)
+- S2-1 probe: `scripts/probes/schtasks-probes.mjs`(임시 `\rcloneGUI-probe\` 작업만 만들고 지움), fixture `tests/fixtures/schtasks/`(query-csv-probe.bin·query-xml-nonascii.bin·probe-results.json), `docs/knowhow/windows-task-scheduler-notes.md` — `/Query /XML` 파이프 출력이 콘솔 코드페이지라는 점(Q-1), 0이 아닌 종료 코드로는 재시작하지 않음(Q-2), `ExecutionTimeLimit` 강제 종료 뒤 자식 프로세스(Q-8)
+- shared: `zScheduleBackend`·`autoSync.backend`(읽기 기본 `"app"`)·`zRunJobAdditionalData`, `isAppScheduled()` — OS 백엔드 작업은 앱 스케줄러가 `nextRunAt`을 두지 않도록 `pickDue`·`nextAutoRun`·`reconcileNextRun`·`rescheduleOnUnpause`·`nextRunAfterEdit`에 반영
+- `services/os-scheduler.ts`: `\rcloneGUI\<jobId>` 하나만 `/XML`로 등록, `<Description>spec=<hash>`(XML 틀·exe·jobId·예약 값)로 재등록 판정, `StartBoundary`는 항상 다음 미래 시각, `PT13H`·배터리 조건 끔·`IgnoreNew`·`StartWhenAvailable`, `RestartOnFailure` 없음, `schtasks.exe`는 `%SystemRoot%\System32` 절대 경로 + `execFile(shell:false)`(사용자 문자열 인자 금지), 임시 XML은 userData에 `wx`로 만든 뒤 등록 후 삭제, 시작 시 reconcile(고아 삭제·exe 경로 변경 재등록·목록은 ASCII 이름 정규식), `app.isPackaged`에서만 활성
+- `launch-args.ts`: `--hidden`·`--run-job <uuid>` 파싱(값 없음·uuid 아님·`=` 형식·중복·위치 인자 4종 invalid, 그 밖의 `--xxx` 무시)
+- `services/os-run-queue.ts`: FIFO 1건씩, 같은 jobId 중복 무시, 시작할 때마다 진입 검사 재확인(작업 없음=이력 없음, 그 밖의 차단=`SCHEDULE_SKIPPED` blocked 이력), BUSY 5초 폴링·60분 초과 blocked, 전송 전 경로 확인 2분 간격 3회, 시작 12시간 초과 시 `cancel(timeLimit)`, 대기열이 비면 종료 — 실제 전송은 `startAuto`만 거침
+- `run-service.ts`: `startAuto` trigger `"os-scheduler"`, `recordAutoBlocked`(락 없이 blocked 이력), 취소 사유 `timeLimit` 문구(`TIME_LIMIT_CANCELED_TEXT`, 코드는 CANCELED 유지)
+- `main/index.ts`: gui/headless 모드 분기, `f_HeadlessExit`(알림 대기·OS 대기 확인·재진입), `f_EnterGui`·second-instance `additionalData`, OS 예약 상태 IPC(`scheduler:osStatus`·이벤트)
+- 화면: 편집기 예약 방식 선택(개발 실행 비활성·이유·암호화 conf 안내·등록 실패 표시), 작업 목록 배지, 이력 "Windows 예약"
+- 패키징: `build/installer.nsh`가 `${isUpdated}`가 아닐 때 Schedule.Service COM으로 작업과 빈 `\rcloneGUI` 폴더 삭제(실패해도 제거 진행), `electron-builder.yml` `electronFuses`(runAsNode·NODE_OPTIONS·--inspect 차단, asar 무결성), `installer-smoke`·`drive-app --os-schedule`에 등록·`--run-job` 직접 실행·제거 정리 확인
+- 문서: AGENTS 안전 규칙 1·2와 명령·구조, README, MVP_SPEC 구현 반영, CHANGELOG 1줄, `docs/code-asset-index/COMPONENTS.md`
+- 검증: `pnpm run check`(단위 68파일 1066), `format:check`(322파일), `test:int` 55(+8 skip, GCS 환경 변수 없음 사유 출력), `test:e2e`, `build:win`, `smoke:installer -- --login-item` 125항목(asar·바로가기·데이터 보존·OS 예약 XML·헤드리스 정상/잘못된 id/예약 아님 `SCHEDULE_SKIPPED`/동시 실행·로그인 항목·fuses·제거 뒤 예약 0건) 통과
+- 특이: 이전 중단 스모크가 남긴 `\rcloneGUI\` 예약 1건(이미 지워진 임시 설치 폴더를 가리킴)이 검증 착수 때 있었고 실행 전에 사라져 확인 후 진행했다 — 앱 시작 reconcile과 제거 스크립트가 정리하는 경로로 보이며 결함은 아니다
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

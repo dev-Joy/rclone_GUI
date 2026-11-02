@@ -3,6 +3,7 @@
  * (저장·표시만 확인하고 실행하지 않는다).
  * 새 작업에서 요일 지정(월·수 09:00)으로 저장하면 목록에 "매주 월·수 09:00"이 보이고,
  * 로그인 시 시작이 꺼져 있으면 안내가 한 번 뜬다. 작업 화면의 탭은 단계 순서이고, 대기 중에는 중지 버튼이 없다.
+ * 예약 실행 방식의 Windows 작업 스케줄러 선택지는 비패키징(out/) 실행이라 비활성이고 이유가 보인다(INT-003 T-01 AC-8).
  *
  * @author dev-Joy 2026-11-02
  */
@@ -91,5 +92,29 @@ test("요일 지정 예약 저장 → 목록 표시·로그인 안내, 단계 �
         expectNoConsoleErrors(harness.consoleErrors);
     } finally {
         await harness.close({ keepFiles: true });
+    }
+});
+
+test("예약 실행 방식: Windows 작업 스케줄러 선택지는 비활성이고 이유가 보인다", async () => {
+    const harness = await launchApp({ root: join(root, "app-os") });
+    try {
+        const { page } = harness;
+        await waitForApp(page);
+        const sidebar = page.locator('nav[aria-labelledby="jobs-title"]');
+        await sidebar.getByRole("button", { name: "새 작업", exact: true }).click();
+        const backend = page.locator("#job-auto-backend");
+        await expect(backend).toHaveValue("app");
+        await expect(backend.locator('option[value="os"]')).toBeDisabled();
+        await expect(backend.locator('option[value="app"]')).toBeEnabled();
+        await expect(page.locator("#job-auto-backend-reason")).toContainText(
+            "설치한 앱에서만 쓸 수 있습니다",
+        );
+        // 앱 예약에서는 암호화 conf 안내·미등록 경고가 없다
+        await expect(page.locator("#job-auto-encrypted-hint")).toHaveCount(0);
+        await expect(page.locator("#job-auto-os-warning")).toHaveCount(0);
+
+        expectNoConsoleErrors(harness.consoleErrors);
+    } finally {
+        await harness.close();
     }
 });

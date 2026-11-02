@@ -1,0 +1,96 @@
+{
+    "windows": "10.0.26300",
+    "node": "v24.20.0",
+    "createNoUserId": {
+        "exit": 0,
+        "stderr": ""
+    },
+    "queryXml": {
+        "exit": 0,
+        "bytes": 1286,
+        "headHex": "3c 3f 78 6d 6c 20 76 65",
+        "encoding": "latin1",
+        "bom": false,
+        "koreanPathIntact": false,
+        "commandLine": "<Command>C:\\probe\\ÇÑ±Û\\dummy.cmd</Command>"
+    },
+    "queryCsv": {
+        "exit": 0,
+        "encoding": "latin1",
+        "bom": false,
+        "crlf": true,
+        "probeLines": 2,
+        "koreanNameIntact": false,
+        "sample": [
+            "\"\\rcloneGUI-probe\\00000000\",\"2027-11-02 ¿ÀÈÄ 3:28:12\",\"ÁØºñ\"",
+            "\"\\rcloneGUI-probe\\ÇÑ±Û-00000000\",\"2027-11-02 ¿ÀÈÄ 3:28:12\",\"ÁØºñ\""
+        ]
+    },
+    "queryFolder": {
+        "exit": 0,
+        "lines": [
+            "\"\\rcloneGUI-probe\\00000000\",\"2027-11-02 ¿ÀÈÄ 3:28:12\",\"ÁØºñ\"",
+            "\"\\rcloneGUI-probe\\ÇÑ±Û-00000000\",\"2027-11-02 ¿ÀÈÄ 3:28:12\",\"ÁØºñ\""
+        ],
+        "missingFolderExit": 1,
+        "missingFolderStderr": "¿À·ù: ÁöÁ¤µÈ ÆÄÀÏÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù.",
+        "missingTaskExit": 1
+    },
+    "delete": {
+        "exit": 0,
+        "queryAfterExit": 1,
+        "deleteAgainExit": 1
+    },
+    "appTriggers": {
+        "interval": {
+            "createExit": 0,
+            "interval": "PT5M",
+            "days": [],
+            "limit": "PT13H",
+            "startWhenAvailable": true
+        },
+        "daily": {
+            "createExit": 0,
+            "interval": null,
+            "days": [],
+            "limit": "PT13H",
+            "startWhenAvailable": true
+        },
+        "weekly": {
+            "createExit": 0,
+            "interval": null,
+            "days": [
+                "Sunday",
+                "Monday",
+                "Saturday"
+            ],
+            "limit": "PT13H",
+            "startWhenAvailable": true
+        }
+    },
+    "overwriteRunning": {
+        "parentStarted": true,
+        "recreateExit": 0,
+        "aliveAfterCreateF": true,
+        "deleteExit": 0,
+        "aliveAfterDelete": true
+    },
+    "timeLimit": {
+        "createExit": 0,
+        "runExit": 0,
+        "parentStarted": true,
+        "childStarted": true,
+        "parentEndedAfterMs": 63375,
+        "childAliveAfterParentEnd": false
+    },
+    "pastStartBoundary": {
+        "createExit": 0,
+        "runsIn150s": 0
+    },
+    "restartOnFailure": {
+        "createExit": 0,
+        "runExit": 0,
+        "runsIn200s": 1
+    },
+    "leftProbeTasks": 0
+}

@@ -25,3 +25,21 @@ export interface itfAppNotify {
     level: typAppNotifyLevel;
     message: string;
 }
+
+/** Windows 작업 스케줄러에 등록한 작업 하나의 상태 (INT-003 T-01) */
+export interface itfOsTaskStatus {
+    jobId: string;
+    registered: boolean;
+    /** 등록된 <Command>가 지금 exe와 같은지. 출력 해독이 불확실하면 null */
+    exeMatches: boolean | null;
+    /** 마지막 등록·삭제 실패 문구(경로 없음). 없으면 null */
+    error: string | null;
+}
+
+/** scheduler:osStatus 결과와 scheduler:osStatusChanged 이벤트 */
+export interface itfOsScheduleStatus {
+    available: boolean;
+    /** available이 false인 이유(화면 표시) */
+    reason: string | null;
+    tasks: itfOsTaskStatus[];
+}

@@ -1,6 +1,8 @@
 /**
  * 작업 설정 편집기. 이름·모드·원본·대상·제외 규칙·rclone.conf·고급/위험 옵션·자동 실행·메모를 고치고 저장한다.
  * 저장 전에 화면에서 검증하고(필드별 오류), main이 다시 검증해 거부하면 폼 위에 이유를 보여 준다.
+ * 자동 실행은 앱 안 스케줄러 또는 Windows 작업 스케줄러(INT-003 T-01) 중에서 고른다. Windows 쪽은 설치한 앱에서만
+ * 고를 수 있고(아니면 비활성 + 이유), 고르면 암호화된 rclone.conf 미지원 안내와 등록 상태(미등록·실패)를 보인다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -31,9 +33,10 @@ import {
 import { formatLocalDateTime } from "@/shared/format";
 import { nextOccurrence } from "@/shared/schedule";
 import type { typRunMode } from "@/shared/schemas/common";
-import type { typScheduleKind, typSyncScope } from "@/shared/schemas/job";
+import type { typScheduleBackend, typScheduleKind, typSyncScope } from "@/shared/schemas/job";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
+import { osTaskOf, useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore } from "@/stores/ui-store";
@@ -92,6 +95,12 @@ const WEEKDAY_OPTIONS: ReadonlyArray<{ bit: number; label: string }> = [
     { bit: 0, label: "일" },
 ];
 
+const BACKEND_APP_LABEL = "앱이 켜져 있을 때";
+const BACKEND_OS_LABEL = "Windows 작업 스케줄러(앱이 꺼져 있어도)";
+
+const ENCRYPTED_CONF_HINT =
+    "암호화된 rclone.conf는 Windows 작업 스케줄러 예약 실행에서 쓸 수 없습니다(암호를 물을 수 없어 실패합니다).";
+
 const LOGIN_HINT =
     "로그인할 때 rcloneGUI가 켜지지 않으면 PC를 다시 켠 뒤 자동 실행이 돌지 않습니다. 설정에서 ‘로그인 시 시작’을 켜세요.";
 
@@ -146,6 +155,7 @@ export default function JobEditor() {
     );
     const settings = useSettingsStore((s) => s.settings);
     const pushToast = useToastStore((s) => s.push);
+    const osStatus = useSchedulerStore((s) => s.osStatus);
     const loginHintShown = useUiStore((s) => s.loginHintShown);
     const markLoginHintShown = useUiStore((s) => s.markLoginHintShown);
 
@@ -172,7 +182,21 @@ export default function JobEditor() {
     const override = draft.configPathOverride;
     const otherConfig = override !== null || wantOverride;
     const auto = draft.autoSync;
+    const isOs = auto.backend === "os";
     const launchAtLogin = settings?.ui.launchAtLogin ?? false;
+    const osAvailable = osStatus?.available ?? false;
+    const backendOptions = [
+        { value: "app", label: BACKEND_APP_LABEL },
+        { value: "os", label: BACKEND_OS_LABEL, disabled: !osAvailable },
+    ];
+    // 저장된 값 기준: Windows 예약이 켜져 있는데 등록되지 않았거나 실패 문구가 있으면 경고
+    const savedOs = job !== null && job.autoSync.enabled && job.autoSync.backend === "os";
+    const osTask = osTaskOf(osStatus, jobId);
+    const osTaskWarning =
+        savedOs && osAvailable && osTask !== null
+            ? (osTask.error ??
+              (osTask.registered ? null : "Windows 작업 스케줄러에 아직 등록되지 않았습니다."))
+            : null;
     const autoScheduleOk =
         !check.fieldErrors["autoSync.intervalMinutes"] &&
         !check.fieldErrors["autoSync.timeOfDay"] &&
@@ -215,6 +239,8 @@ export default function JobEditor() {
             weekdays: checked ? auto.weekdays | (1 << bit) : auto.weekdays & ~(1 << bit),
         });
     const h_AutoDeletes = (v: boolean) => setAutoSync({ allowDeletes: v });
+    const h_AutoBackend = (v: string) =>
+        f_SetSchedule({ backend: (v === "os" ? "os" : "app") satisfies typScheduleBackend });
 
     const f_PickConfig = async () => {
         try {
@@ -237,8 +263,12 @@ export default function JobEditor() {
     const h_PickConfig = () => void f_PickConfig();
 
     const h_Save = async () => {
-        const wasAuto = jobId !== null && (baseline?.autoSync.enabled ?? false);
-        const nowAuto = auto.enabled;
+        // 로그인 시 시작 안내는 앱 안 스케줄러 예약에만 해당한다
+        const wasAuto =
+            jobId !== null &&
+            (baseline?.autoSync.enabled ?? false) &&
+            baseline?.autoSync.backend !== "os";
+        const nowAuto = auto.enabled && !isOs;
         const ok = await save(caseInsensitive);
         if (!ok) return;
         pushToast("success", "작업을 저장했습니다.");
@@ -450,9 +480,46 @@ export default function JobEditor() {
                         checked={auto.enabled}
                         onChange={h_AutoEnabled}
                         label="예약에 따라 자동 실행"
-                        description="앱이 켜져 있는 동안(트레이 포함) 예약 시각마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
+                        description="예약 시각마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
                     />
-                    {auto.enabled && !launchAtLogin && (
+                    <ZBCField
+                        label="예약 실행 방식"
+                        htmlFor="job-auto-backend"
+                        hint={
+                            isOs
+                                ? "앱이 꺼져 있어도 Windows 작업 스케줄러가 예약 시각에 앱을 창 없이 실행합니다."
+                                : "앱이 켜져 있는 동안(트레이 포함)만 예약 시각에 실행합니다."
+                        }
+                    >
+                        <ZBCSelect
+                            id="job-auto-backend"
+                            name="autoBackend"
+                            value={auto.backend}
+                            options={backendOptions}
+                            onChange={h_AutoBackend}
+                            describedBy={
+                                !osAvailable && osStatus?.reason
+                                    ? "job-auto-backend-reason"
+                                    : undefined
+                            }
+                        />
+                    </ZBCField>
+                    {!osAvailable && osStatus?.reason && (
+                        <p className={styles.muted} id="job-auto-backend-reason">
+                            Windows 작업 스케줄러 예약: {osStatus.reason}
+                        </p>
+                    )}
+                    {isOs && (
+                        <p className={styles.muted} id="job-auto-encrypted-hint">
+                            {ENCRYPTED_CONF_HINT}
+                        </p>
+                    )}
+                    {osTaskWarning !== null && (
+                        <output className={styles.notice} id="job-auto-os-warning">
+                            {osTaskWarning}
+                        </output>
+                    )}
+                    {auto.enabled && !isOs && !launchAtLogin && (
                         <p className={styles.muted}>
                             ‘로그인 시 시작’이 꺼져 있습니다. PC를 다시 켠 뒤 앱을 직접 열기 전에는
                             자동 실행이 돌지 않습니다.
@@ -562,8 +629,12 @@ export default function JobEditor() {
                         </p>
                     )}
                     <p className={styles.muted}>
-                        다음 실행: {formatLocalDateTime(job?.autoSync.nextRunAt ?? null)} · 마지막
-                        자동 실행: {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
+                        다음 실행:{" "}
+                        {job?.autoSync.backend === "os"
+                            ? "Windows 작업 스케줄러가 실행합니다"
+                            : formatLocalDateTime(job?.autoSync.nextRunAt ?? null)}{" "}
+                        · 마지막 자동 실행:{" "}
+                        {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
                     </p>
                 </section>
 

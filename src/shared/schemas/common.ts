@@ -29,8 +29,11 @@ export const zRunStatus = z.enum([
 ]);
 export type typRunStatus = z.infer<typeof zRunStatus>;
 
-export const zRunTrigger = z.enum(["manual", "scheduler"]);
+/** manual: 사용자, scheduler: 앱 안 스케줄러, os-scheduler: Windows 작업 스케줄러(`--run-job`) */
+export const zRunTrigger = z.enum(["manual", "scheduler", "os-scheduler"]);
 export type typRunTrigger = z.infer<typeof zRunTrigger>;
+/** 자동 실행 trigger(수동 제외) */
+export type typAutoTrigger = Exclude<typRunTrigger, "manual">;
 
 export const zRunPhase = z.enum([
     "validating",

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    isAppScheduled,
     isSameSchedule,
     nextAfterFinish,
     nextAutoRun,
@@ -22,6 +23,7 @@ import {
     type typScheduleSpec,
     weekdaysText,
 } from "@/shared/schedule";
+import type { typScheduleBackend } from "@/shared/schemas/job";
 
 const NOW = new Date("2026-10-29T10:00:00.000Z");
 const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
@@ -32,8 +34,13 @@ function f_Spec(over: Partial<typScheduleSpec> = {}): typScheduleSpec {
     return { ...INTERVAL, intervalMinutes: 60, ...over };
 }
 
-function f_Auto(enabled: boolean, intervalMinutes: number, over: Partial<typScheduleSpec> = {}) {
-    return { enabled, ...f_Spec({ intervalMinutes, ...over }) };
+function f_Auto(
+    enabled: boolean,
+    intervalMinutes: number,
+    over: Partial<typScheduleSpec> = {},
+    backend: typScheduleBackend = "app",
+) {
+    return { enabled, backend, ...f_Spec({ intervalMinutes, ...over }) };
 }
 
 function f_Job(id: string, enabled: boolean, nextRunAt: string | null, intervalMinutes = 60) {
@@ -347,5 +354,45 @@ describe("quitScheduleWarning", () => {
         const w = quitScheduleWarning(false, next, () => "10-29 19:01");
         expect(w?.message).toBe("다음 예약: ‘백업’ 10-29 19:01 — 종료하면 실행되지 않습니다.");
         expect(w?.detail).toContain("한 번만");
+    });
+});
+
+describe("isAppScheduled (INT-003 T-01: OS 예약은 앱 스케줄러가 돌리지 않음)", () => {
+    it("켜짐 + app만 true", () => {
+        expect(isAppScheduled({ enabled: true, backend: "app" })).toBe(true);
+        expect(isAppScheduled({ enabled: true, backend: "os" })).toBe(false);
+        expect(isAppScheduled({ enabled: false, backend: "app" })).toBe(false);
+        expect(isAppScheduled({ enabled: false, backend: "os" })).toBe(false);
+    });
+
+    it("OS 백엔드는 nextRunAt을 두지 않는다(편집·시작·해제)", () => {
+        const os = f_Auto(true, 30, {}, "os");
+        expect(nextRunAfterEdit(null, os, NOW)).toBeNull();
+        expect(nextRunAfterEdit({ ...f_Auto(true, 30), nextRunAt: iso(1000) }, os, NOW)).toBeNull();
+        expect(
+            reconcileNextRun({ ...os, nextRunAt: iso(-1000) }, NOW, STARTUP_DELAY_MS),
+        ).toBeNull();
+        expect(reconcileNextRun({ ...os, nextRunAt: null }, NOW, STARTUP_DELAY_MS)).toBeNull();
+        expect(rescheduleOnUnpause({ ...os, nextRunAt: iso(-1000) }, NOW)).toBeNull();
+    });
+
+    it("os → app 전환은 지금 기준 다음 예약, app → os는 null", () => {
+        const wasOs = { ...f_Auto(true, 30, {}, "os"), nextRunAt: null };
+        expect(nextRunAfterEdit(wasOs, f_Auto(true, 30), NOW)).toBe(iso(30 * 60_000));
+        const wasApp = { ...f_Auto(true, 30), nextRunAt: iso(1000) };
+        expect(nextRunAfterEdit(wasApp, f_Auto(true, 30, {}, "os"), NOW)).toBeNull();
+    });
+
+    it("pickDue·nextAutoRun은 OS 작업을 고르지 않는다(nextRunAt이 남아 있어도)", () => {
+        const os = {
+            id: "o",
+            name: "작업 o",
+            autoSync: { ...f_Auto(true, 60, {}, "os"), nextRunAt: iso(-5000) },
+        };
+        const app = f_Job("a", true, iso(-1000));
+        expect(pickDue([os], NOW)).toBeNull();
+        expect(pickDue([os, app], NOW)?.id).toBe("a");
+        expect(nextAutoRun([os])).toBeNull();
+        expect(nextAutoRun([os, app])?.jobId).toBe("a");
     });
 });

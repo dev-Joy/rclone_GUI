@@ -66,6 +66,7 @@ async function f_Setup() {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
         },
     });
     const copyJob = await jobs.create({

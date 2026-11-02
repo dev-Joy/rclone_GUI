@@ -1,6 +1,6 @@
 /**
  * 작업 목록(JobSidebar) 한 줄에 보일 문구를 만드는 순수 함수 (INT-002 T-04).
- * 원본 → 대상(가운데 줄임), 자동 실행 요약, 최근 실행 시각, 상태 문구(설정으로 숨김).
+ * 원본 → 대상(가운데 줄임), 자동 실행 요약, 최근 실행 시각, 상태 문구(설정으로 숨김), Windows 예약 미등록 여부.
  * DOM·window 의존 없음 (단위 테스트는 node 환경).
  *
  * @author dev-Joy 2026-11-02
@@ -12,6 +12,7 @@ import { formatLocalDateTime } from "@/shared/format";
 import { scheduleText } from "@/shared/schedule";
 import type { typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
+import type { itfOsScheduleStatus } from "@/shared/types/scheduler";
 
 /** 최근 실행 상태 문구 */
 export const STATUS_LABEL: Record<typRunStatus, string> = {
@@ -41,11 +42,13 @@ export interface itfJobListItem {
 /**
  * 자동 실행 요약. 꺼져 있으면 null, 켜져 있으면 "30분마다 · 다음 11-02 10:30",
  * "매일 09:00 · 다음 …", "매주 월·수 09:00 · 다음 …".
+ * Windows 작업 스케줄러 예약은 앱이 다음 시각을 모르므로 "Windows 예약 · 매일 09:00".
  */
 export function scheduleSummary(job: Pick<typJob, "autoSync">): string | null {
     const a = job.autoSync;
     if (!a.enabled) return null;
     const every = scheduleText(a);
+    if (a.backend === "os") return `Windows 예약 · ${every}`;
     const next = formatLocalDateTime(a.nextRunAt);
     return next === "-" ? every : `${every} · 다음 ${next.slice(5, 16)}`;
 }
@@ -60,4 +63,19 @@ export function jobListItem(job: typJob, opts: { showStatus: boolean }): itfJobL
         lastRunText: last ? `최근 실행 ${formatLocalDateTime(last.at)}` : "실행 기록 없음",
         statusText: opts.showStatus && last ? STATUS_LABEL[last.status] : null,
     };
+}
+
+/**
+ * Windows 예약이 켜진 작업인데 등록되지 않았거나 등록·삭제 실패 문구가 있는지(배지 "OS 예약 미등록").
+ * OS 예약을 쓸 수 없는 환경이거나 아직 상태를 모르면(목록에 없음) false.
+ */
+export function isOsTaskMissing(
+    job: Pick<typJob, "id" | "autoSync">,
+    status: itfOsScheduleStatus | null,
+): boolean {
+    if (!job.autoSync.enabled || job.autoSync.backend !== "os") return false;
+    if (!status?.available) return false;
+    const id = job.id.toLowerCase();
+    const task = status.tasks.find((t) => t.jobId === id);
+    return task !== undefined && (!task.registered || task.error !== null);
 }

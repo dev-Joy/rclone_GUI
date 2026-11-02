@@ -13,10 +13,12 @@
  *   failed로 끝내고 실제 실행은 하지 않는다. 옵션을 끄면 --max-delete만 백스톱이다.
  * - 실제 sync에는 항상 --max-delete <계획 파일 삭제 수>(0 포함)를 준다. rclone은 폴더 삭제를 세지 않으므로
  *   (rclone-notes #25) 폴더 삭제는 계획 토큰·확인한 폴더 삭제 수·사전 확인이 막는다(INT-002 T-05).
- * - 자동 실행(startAuto, 스케줄러): 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
+ * - 자동 실행(startAuto, 스케줄러·OS 예약 `--run-job`): trigger는 "scheduler" 또는 "os-scheduler". 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
  *   수동 비교 결과는 건드리지 않음) → 작업 rev 재확인 → 자동 게이트(f_CheckAutoGate: checkPlanSafety → 삭제가
  *   있으면 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 켜짐 모두 필요 → 바꿀 것 없으면 noop) → 수동과 같은
  *   execute/finalize. 게이트에 걸리면 아무것도 실행하지 않고 blocked 이력, noop은 이력 없이 lastRun만 남긴다.
+ * - recordAutoBlocked: OS 예약 진입 검사에 걸린 실행은 락 없이 blocked 이력 1건 + lastRun만 남긴다(INT-003 FR-12).
+ * - 취소 사유(cancel(runId, reason)): 시간 제한(timeLimit)으로 멈추면 이력 문구를 TIME_LIMIT_CANCELED_TEXT로 바꾼다(코드는 CANCELED).
  * - typRealGate는 f_CheckRealGate(수동)와 f_CheckAutoGate(자동)만 만든다.
  * - buildTransferArgs는 이 파일의 spawnTransfer에서만 부른다(실제 전송의 단일 시작점, AGENTS.md 안전 규칙 2).
  * - 실제 실행은 결과와 관계없이(취소·실패·차단 포함) 비교 결과를 무효화하고 job.lastRun을 갱신한다.
@@ -70,6 +72,7 @@ import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gat
 import { checkPreflight, planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
 import type {
     typAppErrorPayload,
+    typAutoTrigger,
     typRunPhase,
     typRunStatus,
     typRunTrigger,
@@ -130,6 +133,21 @@ const STAGE_TEXT = {
     real: "실제 실행",
 } as const;
 
+/** 취소 사유: 사용자(화면·종료) 또는 실행 시간 제한(OS 예약 대기열) */
+export type typCancelReason = "user" | "timeLimit";
+
+export const TIME_LIMIT_CANCELED_TEXT =
+    "실행 시간 제한(12시간)을 넘어 중지했습니다. 이미 복사·삭제된 파일은 되돌리지 않습니다.";
+
+/** 시간 제한으로 취소됐으면 이력 문구를 바꾼다(코드는 CANCELED 그대로). 그 밖에는 그대로 */
+function f_ApplyCancelReason<T extends { status: typRunStatus; error: typAppErrorPayload | null }>(
+    o: T,
+    reason: typCancelReason | null,
+): T {
+    if (o.status !== "canceled" || reason !== "timeLimit") return o;
+    return { ...o, error: { code: "CANCELED", message: TIME_LIMIT_CANCELED_TEXT } };
+}
+
 /** 오류 detail로 남길 마지막 오류 줄 수 */
 const ERROR_LINES_KEPT = 5;
 
@@ -148,6 +166,8 @@ interface itfActiveRun {
     final: typRunRecord | null;
     /** 이 실행의 --exclude-from 파일 경로(파일 방식이 아니면 null) */
     excludeFile: string | null;
+    /** 첫 취소 요청의 사유. 취소하지 않았으면 null */
+    cancelReason: typCancelReason | null;
 }
 
 /** 자동 실행 결과(스케줄러가 예약·알림에 쓴다). recorded가 false면 이력에 없다(noop 등) */
@@ -377,11 +397,14 @@ export class clsRunService {
     }
 
     /**
-     * 자동 실행(스케줄러, trigger "scheduler"). 전역 락은 첫 await 전에 동기로 잡는다
+     * 자동 실행(앱 스케줄러 "scheduler", OS 예약 "os-scheduler"). 전역 락은 첫 await 전에 동기로 잡는다
      * (차 있으면 BUSY를 던지고 이력·예약은 바꾸지 않는다). 같은 runId 안에서 비교 → 자동 게이트 → 실행.
      * done은 예외 없이 결과를 돌려준다(blocked·failed·canceled·success는 이력, noop은 lastRun만).
      */
-    async startAuto(jobId: string): Promise<{ runId: string; done: Promise<itfAutoOutcome> }> {
+    async startAuto(
+        jobId: string,
+        trigger: typAutoTrigger = "scheduler",
+    ): Promise<{ runId: string; done: Promise<itfAutoOutcome> }> {
         const job = this.deps.jobs.get(jobId);
         const runId = this.deps.newId();
         const startedAtDate = this.deps.now();
@@ -393,12 +416,14 @@ export class clsRunService {
         );
         const active = this.createActive(job, runId, startedAtDate, {
             dryRun: false,
-            trigger: "scheduler",
+            trigger,
             phase: "comparing",
             plan: null,
         });
         this.active = active;
-        this.deps.logger.info(`자동 실행 시작: run=${runId} job=${job.id} mode=${job.mode}`);
+        this.deps.logger.info(
+            `자동 실행 시작: run=${runId} job=${job.id} mode=${job.mode} trigger=${trigger}`,
+        );
         this.safeEmit({ type: "started", snapshot: this.snapshotOf(active) });
         const done = this.runAuto(job, active, release).catch((e: unknown) =>
             this.finishEarly(active, f_AutoFailure(e, false), release, false),
@@ -407,14 +432,43 @@ export class clsRunService {
         return { runId, done };
     }
 
-    /** 진행 중인 실행을 취소한다. 없거나 다른 실행이거나 이미 요청했으면 아무것도 하지 않는다 */
-    cancel(runId: string): void {
+    /**
+     * 진행 중인 실행을 취소한다. 없거나 다른 실행이거나 이미 요청했으면 아무것도 하지 않는다(첫 요청의 사유만 남김).
+     * reason이 timeLimit이면 이력 문구가 TIME_LIMIT_CANCELED_TEXT가 된다.
+     */
+    cancel(runId: string, reason: typCancelReason = "user"): void {
         const a = this.active;
         if (!a || a.snapshot.runId !== runId || a.snapshot.cancelRequested) return;
         a.snapshot.cancelRequested = true;
-        a.logFile.write(`# 취소 요청: ${this.deps.now().toISOString()}`);
-        this.deps.logger.info(`실행 취소 요청: run=${runId}`);
+        a.cancelReason = reason;
+        const label = reason === "timeLimit" ? "취소 요청(시간 제한)" : "취소 요청";
+        a.logFile.write(`# ${label}: ${this.deps.now().toISOString()}`);
+        this.deps.logger.info(`실행 취소 요청: run=${runId} reason=${reason}`);
         a.controller.abort();
+    }
+
+    /**
+     * 실행하지 않고 blocked 이력 1건 + lastRun만 남긴다(OS 예약 진입 검사·대기 초과, INT-003 FR-12·FR-16).
+     * 전역 락을 잡지 않고 진행 중 실행(this.active)도 바꾸지 않는다. 작업이 없으면 NOT_FOUND를 던진다.
+     */
+    async recordAutoBlocked(
+        jobId: string,
+        trigger: typAutoTrigger,
+        error: typAppErrorPayload,
+    ): Promise<itfAutoOutcome> {
+        const job = this.deps.jobs.get(jobId);
+        const active = this.createActive(job, this.deps.newId(), this.deps.now(), {
+            dryRun: false,
+            trigger,
+            phase: "validating",
+            plan: null,
+        });
+        return this.finishEarly(
+            active,
+            { status: "blocked", error, plan: null },
+            () => undefined,
+            true,
+        );
     }
 
     getActive(): itfRunSnapshot | null {
@@ -500,6 +554,7 @@ export class clsRunService {
             done: Promise.resolve(),
             final: null,
             excludeFile: null,
+            cancelReason: null,
         };
     }
 
@@ -625,10 +680,11 @@ export class clsRunService {
      */
     private async finishEarly(
         active: itfActiveRun,
-        stop: itfAutoStop,
+        stopIn: itfAutoStop,
         release: () => void,
         recorded: boolean,
     ): Promise<itfAutoOutcome> {
+        const stop = f_ApplyCancelReason(stopIn, active.cancelReason);
         const { runId, jobId, jobName } = active.snapshot;
         const finished = this.deps.now();
         const finishedAt = finished.toISOString();
@@ -932,11 +988,12 @@ export class clsRunService {
     /** 이벤트 정리 → 로그 닫기 → 이력 → (실제 실행) lastRun·비교 무효화 → active-run → 락 해제 → finished */
     private async finalize(
         active: itfActiveRun,
-        outcome: itfRunOutcome,
+        outcomeIn: itfRunOutcome,
         result: itfProcessResult | null,
         batcher: clsRunEventBatcher,
         release: () => void,
     ): Promise<void> {
+        const outcome = f_ApplyCancelReason(outcomeIn, active.cancelReason);
         const { runId, jobId, dryRun } = active.snapshot;
         let record: typRunRecord = active.record;
         try {

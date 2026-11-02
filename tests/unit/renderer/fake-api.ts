@@ -27,7 +27,11 @@ import type { typSettings } from "@/shared/schemas/settings";
 import type { itfRunLogView } from "@/shared/types/history";
 import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
-import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
+import type {
+    itfAppNotify,
+    itfOsScheduleStatus,
+    itfSchedulerState,
+} from "@/shared/types/scheduler";
 
 export interface itfFakeApi {
     api: itfRcloneGuiApi;
@@ -71,6 +75,9 @@ export interface itfFakeApi {
     setHistoryClearError: (e: typAppErrorPayload | null) => void;
     setSchedulerState: (s: itfSchedulerState) => void;
     emitSchedulerState: (s: itfSchedulerState) => void;
+    /** scheduler.osStatus 응답 */
+    setOsStatus: (s: itfOsScheduleStatus) => void;
+    emitOsStatus: (s: itfOsScheduleStatus) => void;
     emitAppNotify: (n: itfAppNotify) => void;
     /** excludes.list가 돌려줄 공용 패턴 */
     setExcludes: (items: itfExcludePatternUsage[]) => void;
@@ -114,6 +121,7 @@ export function makeJob(over: Partial<typJob> = {}): typJob {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -165,6 +173,12 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     let historyClearError: typAppErrorPayload | null = null;
     let schedulerState: itfSchedulerState = { paused: false, running: null, next: null };
     const schedulerListeners = new Set<(e: itfSchedulerState) => void>();
+    let osStatus: itfOsScheduleStatus = {
+        available: false,
+        reason: "설치한 앱에서만 쓸 수 있습니다(개발 실행에서는 쓸 수 없음).",
+        tasks: [],
+    };
+    const osStatusListeners = new Set<(e: itfOsScheduleStatus) => void>();
     const notifyListeners = new Set<(e: itfAppNotify) => void>();
     let excludes: itfExcludePatternUsage[] = [];
     let excludeWriteError: typAppErrorPayload | null = null;
@@ -438,6 +452,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 schedulerState = { ...schedulerState, paused };
                 return f_Ok(structuredClone(schedulerState));
             },
+            osStatus: () => {
+                calls.push("scheduler.osStatus");
+                return f_Ok(structuredClone(osStatus));
+            },
         },
         rclone: {
             detect: () => notImplemented("rclone.detect"),
@@ -482,6 +500,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
             onSchedulerState: (cb) => {
                 schedulerListeners.add(cb);
                 return () => schedulerListeners.delete(cb);
+            },
+            onSchedulerOsStatus: (cb) => {
+                osStatusListeners.add(cb);
+                return () => osStatusListeners.delete(cb);
             },
             onAppNotify: (cb) => {
                 notifyListeners.add(cb);
@@ -533,6 +555,13 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         emitSchedulerState: (st) => {
             schedulerState = st;
             for (const l of schedulerListeners) l(st);
+        },
+        setOsStatus: (st) => {
+            osStatus = st;
+        },
+        emitOsStatus: (st) => {
+            osStatus = st;
+            for (const l of osStatusListeners) l(st);
         },
         emitAppNotify: (n) => {
             for (const l of notifyListeners) l(n);

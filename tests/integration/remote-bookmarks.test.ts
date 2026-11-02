@@ -72,6 +72,7 @@ function f_Job(source: string, destination: string): typJob {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             nextRunAt: null,
             lastAutoRunAt: null,
         },

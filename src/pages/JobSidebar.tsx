@@ -15,7 +15,7 @@ import ZBCBadge from "@/components/ZBCBadge";
 import ZBCButton from "@/components/ZBCButton";
 import { canStartCompare } from "@/lib/compare-view";
 import { sortJobs } from "@/lib/job-form";
-import { jobListItem } from "@/lib/job-list-view";
+import { isOsTaskMissing, jobListItem } from "@/lib/job-list-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
 import { formatLocalDateTime } from "@/shared/format";
@@ -24,6 +24,7 @@ import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRunStore } from "@/stores/run-store";
+import { useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUiStore } from "@/stores/ui-store";
 import RunConfirmModals from "./RunConfirmModals";
@@ -52,6 +53,7 @@ export default function JobSidebar() {
     const compareRunningJobId = useCompareStore((s) => s.runningJobId);
     const runActive = useRunStore((s) => s.active);
     const runStartingJobId = useRunStore((s) => s.startingJobId);
+    const osStatus = useSchedulerStore((s) => s.osStatus);
     const flow = useRunFlow();
 
     // ========== 내부 변수 (_V) ==========
@@ -140,13 +142,24 @@ export default function JobSidebar() {
                                     <ZBCBadge tone={job.mode === "sync" ? "warning" : "neutral"}>
                                         {job.mode === "sync" ? "동기화" : "복사"}
                                     </ZBCBadge>
-                                    {job.autoSync.enabled && (
+                                    {job.autoSync.enabled && job.autoSync.backend !== "os" && (
                                         <ZBCBadge
                                             tone="accent"
                                             title={`다음 실행: ${formatLocalDateTime(job.autoSync.nextRunAt)}`}
                                         >
                                             자동
                                         </ZBCBadge>
+                                    )}
+                                    {job.autoSync.enabled && job.autoSync.backend === "os" && (
+                                        <ZBCBadge
+                                            tone="accent"
+                                            title="Windows 작업 스케줄러가 앱이 꺼져 있어도 실행합니다"
+                                        >
+                                            Windows 예약
+                                        </ZBCBadge>
+                                    )}
+                                    {isOsTaskMissing(job, osStatus) && (
+                                        <ZBCBadge tone="warning">OS 예약 미등록</ZBCBadge>
                                     )}
                                 </span>
                                 <span className={styles.paths}>{item.pathsText}</span>

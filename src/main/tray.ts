@@ -34,7 +34,7 @@ function f_Pad2(n: number): string {
 /** 툴팁 문구. 예: "rcloneGUI — 다음 자동 실행 14:30 ‘백업’" */
 export function trayTooltip(state: itfSchedulerState): string {
     if (state.running) {
-        const what = state.running.trigger === "scheduler" ? "자동 실행 중" : "실행 중";
+        const what = state.running.trigger !== "manual" ? "자동 실행 중" : "실행 중";
         return `${APP_TITLE} — ${what} ‘${state.running.jobName}’`;
     }
     if (state.paused) return `${APP_TITLE} — 자동 실행 일시정지됨`;

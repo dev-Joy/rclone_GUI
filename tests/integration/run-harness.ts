@@ -139,6 +139,7 @@ export async function makeEnv(o: itfEnvOptions) {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             ...o.autoSync,
         },
     });
@@ -207,6 +208,8 @@ export async function makeEnv(o: itfEnvOptions) {
         history,
         compare,
         runs,
+        /** 경로 확인(OS 예약 대기열의 사전 확인) */
+        pathService,
         events,
         excludeStore,
         excludeFileDir,

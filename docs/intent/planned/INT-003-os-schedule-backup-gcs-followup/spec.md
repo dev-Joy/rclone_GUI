@@ -167,7 +167,7 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 ## 7. 예외 · 엣지 케이스
 - **E-1** OS 예약이 실행됐는데 작업이 지워졌다 → 진입 검사에서 차단하고 이력은 남기지 않는다(작업 없음). FR-10이 다음 시작 때 예약을 지운다. app.log와 종료 코드 2.
 - **E-2** OS 예약 실행 중 사용자가 같은 작업을 수동 실행 → 전역 락으로 BUSY(기존 동작).
-- **E-3** 노트북 배터리 → XML에서 전원 조건을 끄므로 그대로 실행된다. 시간 제한은 앱 내부 제한(FR-34)이 먼저 걸려 rclone 트리를 정리한다. 앱이 응답하지 않아 OS가 강제 종료(`ExecutionTimeLimit`)하면 정상 종료 신호가 없어 `.partial`·rclone 자식이 남을 수 있고, 이력은 다음 시작의 `recoverActiveRun`·`markInterrupted`가 정리한다(자식이 남는지는 probe로 기록, §10 Q-8).
+- **E-3** 노트북 배터리 → XML에서 전원 조건을 끄므로 그대로 실행된다. 시간 제한은 앱 내부 제한(FR-34)이 먼저 걸려 rclone 트리를 정리한다. 앱이 응답하지 않아 OS가 강제 종료(`ExecutionTimeLimit`)하면 정상 종료 신호가 없어 `.partial`·rclone 자식이 남을 수 있고, 이력은 다음 시작의 `recoverActiveRun`·`markInterrupted`가 정리한다. probe로 OS 강제 종료 시 rclone 자식도 함께 끝남을 확인했다(§10 Q-8, notes #5). `.partial`은 남을 수 있다.
 - **E-4** 사용자가 작업 스케줄러에서 예약을 직접 지우거나 바꿈 → FR-10이 다음 앱 시작 때 다시 등록한다(DB가 원본).
 - **E-5** 업데이트 설치로 exe 경로가 바뀜 → FR-10이 다시 등록한다. 재시작 전까지는 예전 경로를 가리킬 수 있다.
 - **E-6** 헤드리스 실행 중 사용자가 트레이 종료와 같은 종료 흐름을 탄다 → 기존 `f_QuitFlow` 확인 창을 그대로 쓴다(GUI 모드로 바뀐 뒤).
@@ -216,10 +216,13 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 > 2026-11-02 모두 결정했다. "probe로 기록"은 설계를 바꾸지 않고 동작만 `rclone-notes.md`·fixture에 남긴다는 뜻이다. Q-5만 probe 결과가 다르면 FR-35를 고친다.
 
 - **Q-1** (결정) XML은 UTF-16 LE BOM으로 쓰고, 이스케이프는 exe 경로에만 필요하다(인자는 uuid). 조회는 언어에 따라 바뀌는 CSV·LIST 형식을 쓰지 않고 작업마다 `/Query /TN … /XML`에서 `<Command>`만 읽는다. stdout 인코딩은 `decodeSchtasksOutput`가 판별한다 → FR-8·FR-10. probe로 기록: `/Query /XML` stdout 인코딩.
+  - probe 결과(2026-11-02, Windows 11 한국어, `docs/knowhow/windows-task-scheduler-notes.md` #1·#2): **UTF-16 LE BOM은 등록 XML 쓰기에만 쓴다. 파이프로 받은 조회 출력(`/Query /XML`·`/FO CSV`)은 BOM 없는 CP949**다(XML 선언은 `encoding="UTF-16"`이지만 실제 바이트는 CP949). 그래서 `decodeSchtasksOutput`은 UTF-16(BOM 유무)·UTF-8 BOM일 때만 확실(reliable)로 보고, 그 밖에 비ASCII가 있으면 exe 경로를 비교하지 않는다(`exeMatches: null`, 그것만으로 재등록 안 함). 재등록 판단은 ASCII인 `<Description>rcloneGUI;spec=<hash></Description>`로 한다. 작업 이름 목록은 `/Query /FO CSV /NH` 전체 출력에서 줄 첫 필드 `"\rcloneGUI\<uuid>"`만 정규식으로 뽑는다(머리글·다른 열을 쓰지 않으므로 언어 독립).
 - **Q-2** (결정) 앱 안에서 재시도한다: 전송 시작 전 경로 확인 실패만 2분 간격 최대 3회. XML에 `RestartOnFailure`를 넣지 않는다. 근거: 작업 스케줄러는 0이 아닌 종료 코드를 재시작 조건으로 보지 않는 것으로 알려져 있고, 앱 안 재시도는 횟수·조건을 정확히 정하고 단위 테스트할 수 있다 → FR-22. probe로 기록: `RestartOnFailure`와 종료 코드.
+  - probe 결과(2026-11-02, notes #4): `RestartOnFailure`(PT1M, 2회) + exit 1 더미는 200초 동안 1회만 실행됐다. 0이 아닌 종료 코드로는 재시작하지 않음을 확인했으므로 결정대로 앱 안에서만 재시도한다.
 - **Q-3** (결정) BUSY면 바로 blocked로 끝내지 않고 프로세스 안 대기열에서 최대 60분 기다린다. 근거: 두 작업을 같은 시각(예: 매일 03:00)에 걸면 두 번째가 매번 blocked가 되어 매일 예약은 하루 치 실행을 잃는다. 앱 스케줄러도 BUSY면 다음 tick에 다시 본다 → FR-16·FR-17·E-16·AC-15.
 - **Q-4** (결정) 로컬 백업 폴더는 대상과 같은 드라이브(또는 같은 UNC 공유)만 허용한다. rclone이 다른 드라이브를 복사+삭제로 처리하더라도 I/O 두 배·중간 실패 시 반쯤 옮겨진 상태 때문에 1차에서는 막는다 → FR-24·E-9·AC-17. probe로 기록: 다른 드라이브 `--backup-dir` 동작.
 - **Q-5** (결정, probe 필수) T-03 첫 단계에서 probe·fixture로 확정한다. 위험: dry-run 문구가 백업 이동 문구로 바뀌면 `f_Skip`이 `other`로 분류해 사전 확인 삭제 수가 0이 되고, 덮어쓰기 이동이 같은 문구로 찍히면 삭제 수가 늘어난다. 지우는 파일의 백업 이동만 삭제로 센다 → FR-35·E-15·AC-16.
 - **Q-6** (결정) 하위 폴더 이름은 `YYYY-MM-DD_HHmmss_<jobId 앞 8자>`. 충돌이 없어 `_2` 붙이기와 remote 충돌 예외를 뺀다 → FR-25·E-11·R-5.
 - **Q-7** (결정) electron-builder 26.18.0이 `electronFuses`를 지원한다. 새 의존성 없음 → A-1·FR-21. 설치본 실행은 `smoke:installer`로 확인한다(R-2).
 - **Q-8** (결정) 시간 제한은 앱 내부(12시간)에서 걸어 `killProcessTree`로 rclone 트리를 정리한다. `ExecutionTimeLimit=PT13H`는 백스톱이다. 근거: OS가 강제 종료하면 앱에 정상 종료 신호가 없어 정리 코드가 돌지 못하고, rclone이 남은 채 락이 풀려 다음 실행과 겹칠 수 있다 → FR-7·FR-34·E-3. probe로 기록: OS 강제 종료 뒤 rclone 자식이 남는지.
+  - probe 결과(2026-11-02, notes #5): **OS 강제 종료 시 자식도 종료됨을 확인**했다. `ExecutionTimeLimit PT1M`에서 부모는 약 63초 뒤 끝났고 그때 자식 프로세스도 이미 없었다. rclone이 남아 다음 실행과 겹칠 위험은 낮지만, 정상 종료 신호 없이 끝나므로 이력은 `running`으로 남아 다음 시작의 `markInterrupted`가 정리한다. 그래서 앱 내부 12시간 제한을 먼저 건다(결정 유지).

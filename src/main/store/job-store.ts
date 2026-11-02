@@ -108,6 +108,7 @@ function f_DraftOf(job: typJob): typJobDraft {
             kind: job.autoSync.kind,
             timeOfDay: job.autoSync.timeOfDay,
             weekdays: job.autoSync.weekdays,
+            backend: job.autoSync.backend,
         },
     };
 }

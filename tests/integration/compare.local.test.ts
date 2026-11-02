@@ -75,6 +75,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             kind: "interval",
             timeOfDay: "09:00",
             weekdays: 62,
+            backend: "app",
             nextRunAt: null,
             lastAutoRunAt: null,
         },

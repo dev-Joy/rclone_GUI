@@ -148,7 +148,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
                     last: { record: e.record, dryRunSummary: e.dryRunSummary, tail },
                     ...(e.record.error?.code === "PLAN_DRIFT" ? { driftNotice: e.record } : {}),
                 });
-                if (e.record.trigger !== "scheduler") f_FinishToast(e.record);
+                if (e.record.trigger === "manual") f_FinishToast(e.record);
                 // 실제 실행은 main이 비교 결과를 버린다 → 비교 화면을 다시 불러온다
                 const compare = useCompareStore.getState();
                 if (!e.record.dryRun && compare.jobId === e.record.jobId) {

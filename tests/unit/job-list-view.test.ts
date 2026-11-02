@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
-import { jobListItem, scheduleSummary, STATUS_LABEL } from "@/lib/job-list-view";
+import { isOsTaskMissing, jobListItem, scheduleSummary, STATUS_LABEL } from "@/lib/job-list-view";
 import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
 import { formatLocalDateTime } from "@/shared/format";
 import type { typJob } from "@/shared/schemas/job";
@@ -40,6 +40,7 @@ describe("scheduleSummary (INT-002 T-04)", () => {
                 kind: "interval",
                 timeOfDay: "09:00",
                 weekdays: 62,
+                backend: "app",
                 nextRunAt: AT,
                 lastAutoRunAt: null,
             },
@@ -74,6 +75,17 @@ describe("scheduleSummary (INT-002 T-04)", () => {
             }),
         ).toBe("매주 월·수 09:00");
     });
+
+    it("Windows 작업 스케줄러 예약은 다음 시각 없이 표시 (INT-003 T-01)", () => {
+        const on = { ...f_Job().autoSync, enabled: true, backend: "os" as const };
+        expect(scheduleSummary({ autoSync: { ...on, kind: "daily", timeOfDay: "09:00" } })).toBe(
+            "Windows 예약 · 매일 09:00",
+        );
+        expect(
+            scheduleSummary({ autoSync: { ...on, nextRunAt: "2026-11-02T00:00:00.000Z" } }),
+        ).toBe("Windows 예약 · 1시간마다");
+        expect(scheduleSummary({ autoSync: { ...on, enabled: false } })).toBeNull();
+    });
 });
 
 describe("jobListItem (INT-002 T-04)", () => {
@@ -101,5 +113,45 @@ describe("jobListItem (INT-002 T-04)", () => {
         expect(on.lastRunText).toBe(`최근 실행 ${formatLocalDateTime(AT)}`);
         expect(on.statusText).toBe(STATUS_LABEL.success);
         expect(jobListItem(job, { showStatus: false }).statusText).toBeNull();
+    });
+});
+
+function f_OsJob(enabled = true): typJob {
+    const j = f_Job();
+    return { ...j, autoSync: { ...j.autoSync, enabled, backend: "os" } };
+}
+
+function f_OsStatus(task: { registered: boolean; error: string | null } | null, available = true) {
+    return {
+        available,
+        reason: available ? null : "설치한 앱에서만",
+        tasks: task
+            ? [{ jobId: "00000000-0000-4000-8000-000000000001", exeMatches: null, ...task }]
+            : [],
+    };
+}
+
+describe("isOsTaskMissing (INT-003 T-01)", () => {
+    const os = f_OsJob;
+    const st = f_OsStatus;
+
+    it("등록 안 됨·실패 문구 → true", () => {
+        expect(isOsTaskMissing(os(), st({ registered: false, error: null }))).toBe(true);
+        expect(isOsTaskMissing(os(), st({ registered: true, error: "실패" }))).toBe(true);
+    });
+
+    it("등록됨·상태 모름·쓸 수 없음·꺼짐·앱 예약 → false", () => {
+        expect(isOsTaskMissing(os(), st({ registered: true, error: null }))).toBe(false);
+        expect(isOsTaskMissing(os(), st(null))).toBe(false);
+        expect(isOsTaskMissing(os(), null)).toBe(false);
+        expect(isOsTaskMissing(os(), st({ registered: false, error: null }, false))).toBe(false);
+        expect(isOsTaskMissing(os(false), st({ registered: false, error: null }))).toBe(false);
+        const app = f_Job();
+        expect(
+            isOsTaskMissing(
+                { ...app, autoSync: { ...app.autoSync, enabled: true } },
+                st({ registered: false, error: null }),
+            ),
+        ).toBe(false);
     });
 });

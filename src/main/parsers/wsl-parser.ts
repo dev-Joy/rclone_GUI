@@ -6,27 +6,16 @@
  * @author dev-Joy 2026-10-28
  */
 
+// ========== Internal imports ==========
+import { utf16Offset } from "./console-output";
+
 /**
- * 바이트를 문자열로 바꾼다.
- * - BOM(FF FE) → utf-16le
- * - BOM 없음: 짝수 길이이고 (끝이 0A 00 이거나 홀수 위치 0바이트 비율 ≥ 0.3) → utf-16le
- *   (한글 오류 문구는 홀수 위치가 0이 아니므로 끝의 줄바꿈 0A 00 으로 판정한다)
- * - 그 외 utf-8
+ * 바이트를 문자열로 바꾼다. UTF-16LE 판정은 console-output의 utf16Offset과 같고,
+ * 그 외에는 utf-8(잘못된 바이트는 대체 문자)로 읽는다.
  */
 export function decodeWslOutput(bytes: Uint8Array): string {
-    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-        return new TextDecoder("utf-16le").decode(bytes.subarray(2));
-    }
-    if (bytes.length >= 2 && bytes.length % 2 === 0) {
-        const endsWithLf = bytes.at(-2) === 0x0a && bytes.at(-1) === 0x00;
-        let zeros = 0;
-        for (let i = 1; i < bytes.length; i += 2) {
-            if (bytes[i] === 0) zeros += 1;
-        }
-        if (endsWithLf || zeros / (bytes.length / 2) >= 0.3) {
-            return new TextDecoder("utf-16le").decode(bytes);
-        }
-    }
+    const off = utf16Offset(bytes);
+    if (off !== null) return new TextDecoder("utf-16le").decode(bytes.subarray(off));
     return new TextDecoder("utf-8").decode(bytes);
 }
 

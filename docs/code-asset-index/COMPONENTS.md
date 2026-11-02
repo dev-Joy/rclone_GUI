@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-02 10:56:12
+- 생성일시: 2026-11-02 16:11:11
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 292 건
+- 총 인덱싱 자산: 320 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -49,7 +49,7 @@
 | `stableStringify` | [`src/lib/form-utils.ts`](src/lib/form-utils.ts) | stableStringify(value: unknown) - 키 순서와 무관한 JSON 직렬화 (NaN은 null로 같아진다) |
 | `toNumber` | [`src/lib/form-utils.ts`](src/lib/form-utils.ts) | toNumber(text: string) - 숫자 입력란 문자열 → number. 빈칸·숫자가 아니면 NaN (저장 전 검증에서 막힌다) |
 | `historyCounts` | [`src/lib/history-view.ts`](src/lib/history-view.ts) | historyCounts(r: Pick<typRunRecord, "stats" \| "plan" \| "dryRun">) - 표의 결과 요약. 예: "복사 3 · 삭제 1 · 1.5 KB · 오류 0". 통계가 없으면 계획, 둘 다 없으면 "-" |
-| `historyKind` | [`src/lib/history-view.ts`](src/lib/history-view.ts) | historyKind(r: Pick<typRunRecord, "dryRun" \| "trigger">) - 미리보기 > 자동 > 수동 |
+| `historyKind` | [`src/lib/history-view.ts`](src/lib/history-view.ts) | historyKind(r: Pick<typRunRecord, "dryRun" \| "trigger">) - 미리보기 > 자동(앱·Windows 예약) > 수동 |
 | `statusTone` | [`src/lib/history-view.ts`](src/lib/history-view.ts) | statusTone(status: typRunStatus) - 공통 함수/유틸리티 |
 | `excludesToText` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | excludesToText(excludes: readonly string[]) - 공통 함수/유틸리티 |
 | `isDraftEqual` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | isDraftEqual(a: typJobDraft, b: typJobDraft) - 편집 가능한 값이 같은지 (dirty 판정). excludes 순서까지 비교 |
@@ -79,13 +79,13 @@
 | `redactSecrets` | [`src/main/lib/logger.ts`](src/main/lib/logger.ts) | redactSecrets(text: string) - 공통 함수/유틸리티 |
 | `fileStamp` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | fileStamp(d = new Date() - 파일 이름용 시각. 예: 20261028-173500 (로컬 시각) |
 | `nowIso` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | nowIso() - 공통 함수/유틸리티 |
+| `checkDestProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
+| `checkSourceProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
 | `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
 | `isExcludeFileName` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | isExcludeFileName(name: string) - 앱이 만든 제외 파일 이름인지(테스트·로그 확인용) |
 | `remoteNameOf` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | remoteNameOf(p: itfParsedPath) - remote 경로면 remote 이름("gdrive"), 아니면 null (오류 안내 문구용) |
 | `remoteNamesOfJob` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | remoteNamesOfJob(job: Pick<typJob, "source" \| "destination">) - 작업의 원본·대상이 쓰는 remote 이름(중복 제거). 로컬·UNC만 쓰면 빈 배열 |
-| `runLogPath` | [`src/main/services/log-retention.ts`](src/main/services/log-retention.ts) | runLogPath(logsDir: string, fileName: string) - logs 폴더 안의 실행 로그 경로. 이름이 실행 로그 모양이 아니거나 폴더 밖이면 null |
-| `computePlanToken` | [`src/main/services/plan-token.ts`](src/main/services/plan-token.ts) | computePlanToken(input: itfPlanTokenInput) - sha256(고정 순서 배열의 JSON) hex 앞 32자 |
-| _(외 45 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 52 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
 ## 4. Shared Services & Clients
 
@@ -163,5 +163,5 @@
 | `itfExcludeFileHandle` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | interface itfExcludeFileHandle - 인터페이스 정의 |
 | `itfExcludeServiceDeps` | [`src/main/services/exclude-service.ts`](src/main/services/exclude-service.ts) | interface itfExcludeServiceDeps - 인터페이스 정의 |
 | `itfJobContext` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | interface itfJobContext - 인터페이스 정의 |
-| _(외 119 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 140 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 

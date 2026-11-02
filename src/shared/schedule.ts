@@ -9,6 +9,7 @@
  * - 일시정지 해제: 지난 예약만 now + 30초.
  * - 실행이 끝난 뒤: daily·weekly가 성공(바꿀 것 없음 포함)으로 끝났으면 1시간 안의 정시는 건너뛴다(놓친 예약 직후 중복 실행 방지).
  * - 실행할 작업: 켜져 있고 예약 시각이 지난 작업 중 가장 이른 1건.
+ * - 예약 방식이 os(Windows 작업 스케줄러)인 작업은 앱 안 스케줄러가 돌리지 않는다: nextRunAt은 늘 null(isAppScheduled).
  * - DST: 없는 시각(봄)은 Date 규칙대로 뒤로 밀린 시각에 한 번, 두 번 있는 시각(가을)은 첫 번째에 한 번 실행한다.
  *
  * @author dev-Joy 2026-10-29
@@ -33,14 +34,14 @@ export type typScheduleSpec = Pick<
     typAutoSyncOptions,
     "kind" | "intervalMinutes" | "timeOfDay" | "weekdays"
 >;
-type typAutoSyncInput = Pick<typAutoSyncOptions, "enabled"> & typScheduleSpec;
+type typAutoSyncInput = Pick<typAutoSyncOptions, "enabled" | "backend"> & typScheduleSpec;
 type typAutoSyncState = typAutoSyncInput & Pick<typAutoSyncOptions, "nextRunAt">;
 
 /** 예약 고르기·표시에 필요한 작업 정보 */
 export interface itfScheduleJob {
     id: string;
     name: string;
-    autoSync: Pick<typAutoSyncOptions, "enabled" | "nextRunAt">;
+    autoSync: Pick<typAutoSyncOptions, "enabled" | "backend" | "nextRunAt">;
 }
 
 /** 요일 이름(Date.getDay() 순서) */
@@ -64,6 +65,11 @@ export function addMs(at: Date, ms: number): string {
 
 export function addMinutes(at: Date, minutes: number): string {
     return addMs(at, minutes * 60_000);
+}
+
+/** 앱 안 스케줄러가 돌릴 작업인지(켜짐 + 예약 방식 app). OS 예약 작업은 nextRunAt을 두지 않는다 */
+export function isAppScheduled(a: Pick<typAutoSyncOptions, "enabled" | "backend">): boolean {
+    return a.enabled && a.backend === "app";
 }
 
 /** 예약 시각이 지났는지(같으면 지난 것). 잘못된 값은 지난 것으로 본다 */
@@ -149,15 +155,20 @@ export function nextRunAfterEdit(
     next: typAutoSyncInput,
     now: Date,
 ): string | null {
-    if (!next.enabled) return null;
-    if (prev === null || !prev.enabled || !isSameSchedule(prev, next) || prev.nextRunAt === null) {
+    if (!isAppScheduled(next)) return null;
+    if (
+        prev === null ||
+        !isAppScheduled(prev) ||
+        !isSameSchedule(prev, next) ||
+        prev.nextRunAt === null
+    ) {
         return nextOccurrence(next, now);
     }
     return prev.nextRunAt;
 }
 
 /**
- * 앱 시작·절전 재개 때 맞출 nextRunAt. 켜졌는데 없거나 지났으면 now + delayMs, 꺼졌으면 null.
+ * 앱 시작·절전 재개 때 맞출 nextRunAt. 켜졌는데 없거나 지났으면 now + delayMs, 꺼졌거나 OS 예약이면 null.
  * 미래 예약: interval은 그대로, daily·weekly는 delayMs 이내면 그대로, 더 멀면 지금 기준 다음 정시.
  */
 export function reconcileNextRun(
@@ -165,7 +176,7 @@ export function reconcileNextRun(
     now: Date,
     delayMs: number,
 ): string | null {
-    if (!auto.enabled) return null;
+    if (!isAppScheduled(auto)) return null;
     if (auto.nextRunAt === null || f_IsPast(auto.nextRunAt, now)) return addMs(now, delayMs);
     if (auto.kind === "interval") return auto.nextRunAt;
     if (Date.parse(auto.nextRunAt) - now.getTime() <= delayMs) return auto.nextRunAt;
@@ -174,7 +185,7 @@ export function reconcileNextRun(
 
 /** 일시정지 해제: 지난 예약만 now + 30초. 없거나 미래면 그대로 */
 export function rescheduleOnUnpause(auto: typAutoSyncState, now: Date): string | null {
-    if (!auto.enabled) return null;
+    if (!isAppScheduled(auto)) return null;
     if (auto.nextRunAt !== null && f_IsPast(auto.nextRunAt, now)) {
         return addMs(now, UNPAUSE_DELAY_MS);
     }
@@ -201,7 +212,7 @@ export function pickDue<T extends itfScheduleJob>(jobs: readonly T[], now: Date)
     let bestAt = Number.POSITIVE_INFINITY;
     for (const job of jobs) {
         const at = job.autoSync.nextRunAt;
-        if (!job.autoSync.enabled || at === null) continue;
+        if (!isAppScheduled(job.autoSync) || at === null) continue;
         const t = Date.parse(at);
         if (Number.isNaN(t) || t > now.getTime()) continue;
         if (t < bestAt) {
@@ -218,7 +229,7 @@ export function nextAutoRun(jobs: readonly itfScheduleJob[]): itfNextAutoRun | n
     let bestAt = Number.POSITIVE_INFINITY;
     for (const job of jobs) {
         const at = job.autoSync.nextRunAt;
-        if (!job.autoSync.enabled || at === null) continue;
+        if (!isAppScheduled(job.autoSync) || at === null) continue;
         const t = Date.parse(at);
         if (Number.isNaN(t) || t >= bestAt) continue;
         best = { jobId: job.id, jobName: job.name, at };

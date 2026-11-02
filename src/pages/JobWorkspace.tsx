@@ -20,6 +20,7 @@ import ZBCModal from "@/components/ZBCModal";
 import ZBCTabs, { type itfZBCTab } from "@/components/ZBCTabs";
 import { canStartCompare } from "@/lib/compare-view";
 import { sortJobs } from "@/lib/job-form";
+import { isOsTaskMissing } from "@/lib/job-list-view";
 import { canStartRun, RUN_LABEL } from "@/lib/run-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -28,6 +29,7 @@ import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useRunStore } from "@/stores/run-store";
+import { useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
 import { useUiStore, type typJobTab } from "@/stores/ui-store";
@@ -81,6 +83,7 @@ export default function JobWorkspace() {
     const runActive = useRunStore((s) => s.active);
     const runStartingJobId = useRunStore((s) => s.startingJobId);
     const startRun = useRunStore((s) => s.start);
+    const osStatus = useSchedulerStore((s) => s.osStatus);
     const flow = useRunFlow();
     const caseInsensitive = useSettingsStore(
         (s) => s.settings?.compare.caseInsensitivePaths ?? true,
@@ -188,7 +191,13 @@ export default function JobWorkspace() {
                         </ZBCBadge>
                     )}
                     {job?.autoSync.enabled && (
-                        <ZBCBadge tone="accent">자동 · {scheduleText(job.autoSync)}</ZBCBadge>
+                        <ZBCBadge tone="accent">
+                            {job.autoSync.backend === "os" ? "Windows 예약" : "자동"} ·{" "}
+                            {scheduleText(job.autoSync)}
+                        </ZBCBadge>
+                    )}
+                    {job && isOsTaskMissing(job, osStatus) && (
+                        <ZBCBadge tone="warning">OS 예약 미등록</ZBCBadge>
                     )}
                 </div>
                 {job && (

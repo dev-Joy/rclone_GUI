@@ -13,7 +13,8 @@ import {
 import { zJob, zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
 import { zStartRunInput } from "@/shared/schemas/run";
-import { zSchedulerSetPausedInput } from "@/shared/schemas/scheduler";
+import { zRunTrigger } from "@/shared/schemas/common";
+import { zRunJobAdditionalData, zSchedulerSetPausedInput } from "@/shared/schemas/scheduler";
 import { zSettings, zSettingsPatch } from "@/shared/schemas/settings";
 import { zOpenExternalInput, zPickDirectoryInput, zPickFileInput } from "@/shared/schemas/system";
 
@@ -163,6 +164,39 @@ describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
         const p = zJobPatch.parse({ autoSync: { ...d.autoSync, kind: "daily" } });
         expect(p.autoSync?.kind).toBe("daily");
         expect("autoSync" in zJobPatch.parse({})).toBe(false);
+    });
+
+    it("예약 방식이 없는 예전 autoSync는 app으로 읽는다 (INT-003 T-01)", () => {
+        const old = f_Stored({
+            autoSync: {
+                enabled: true,
+                intervalMinutes: 30,
+                allowDeletes: false,
+                kind: "daily",
+                timeOfDay: "09:00",
+                weekdays: 62,
+                nextRunAt: null,
+                lastAutoRunAt: null,
+            },
+        });
+        expect(zJob.parse(old).autoSync.backend).toBe("app");
+        expect(zJob.parse(f_Stored({})).autoSync.backend).toBe("app");
+    });
+
+    it("저장 입력의 예약 방식은 필수이고 app·os만 받는다, patch도 필수", () => {
+        const d = f_Draft();
+        const { backend: _b, ...noBackend } = d.autoSync;
+        expect(zJobDraft.safeParse({ ...d, autoSync: noBackend }).success).toBe(false);
+        expect(
+            zJobDraft.safeParse({ ...d, autoSync: { ...d.autoSync, backend: "cron" } }).success,
+        ).toBe(false);
+        expect(
+            zJobDraft.safeParse({ ...d, autoSync: { ...d.autoSync, backend: "os" } }).success,
+        ).toBe(true);
+        expect(zJobPatch.safeParse({ autoSync: noBackend }).success).toBe(false);
+        expect(
+            zJobPatch.parse({ autoSync: { ...d.autoSync, backend: "os" } }).autoSync?.backend,
+        ).toBe("os");
     });
 
     it("시각은 HH:MM, weekly는 요일을 하나 이상", () => {
@@ -340,5 +374,22 @@ describe("이력·스케줄러 IPC 입력", () => {
         expect(zSchedulerSetPausedInput.safeParse({ paused: true }).success).toBe(true);
         expect(zSchedulerSetPausedInput.safeParse({ paused: 1 }).success).toBe(false);
         expect(zSchedulerSetPausedInput.safeParse({ paused: true, x: 1 }).success).toBe(false);
+    });
+});
+
+describe("OS 예약 실행 (INT-003 T-01)", () => {
+    it("trigger에 os-scheduler가 있다", () => {
+        expect(zRunTrigger.safeParse("os-scheduler").success).toBe(true);
+        expect(zRunTrigger.safeParse("os").success).toBe(false);
+    });
+
+    it("second-instance additionalData는 { runJob: uuid }만 받는다", () => {
+        const id = "3f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+        expect(zRunJobAdditionalData.parse({ runJob: id }).runJob).toBe(id);
+        expect(zRunJobAdditionalData.safeParse({ runJob: "not-a-uuid" }).success).toBe(false);
+        expect(zRunJobAdditionalData.safeParse({ runJob: id, extra: 1 }).success).toBe(false);
+        expect(zRunJobAdditionalData.safeParse(null).success).toBe(false);
+        expect(zRunJobAdditionalData.safeParse(id).success).toBe(false);
+        expect(zRunJobAdditionalData.safeParse({}).success).toBe(false);
     });
 });

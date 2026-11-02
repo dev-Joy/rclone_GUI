@@ -65,6 +65,13 @@ export const WEEKDAYS_ALL = 0b1111111;
 /** 월~금 */
 export const WEEKDAYS_WEEKDAYS = 0b0111110;
 
+/**
+ * 예약을 누가 돌리는지(INT-003 T-01). app: 앱이 켜져 있을 때 앱 안 스케줄러,
+ * os: Windows 작업 스케줄러가 `--run-job <id>`로 앱을 띄운다(앱이 꺼져 있어도).
+ */
+export const zScheduleBackend = z.enum(["app", "os"]);
+export type typScheduleBackend = z.infer<typeof zScheduleBackend>;
+
 export const zTimeOfDay = z.string().regex(TIME_OF_DAY_RE, "시각은 00:00~23:59로 입력하세요.");
 export const zWeekdays = z.number().int().min(0).max(WEEKDAYS_ALL);
 
@@ -79,13 +86,15 @@ export const zAutoSyncInput = z.object({
     kind: zScheduleKind,
     timeOfDay: zTimeOfDay,
     weekdays: zWeekdays,
+    backend: zScheduleBackend,
 });
 
-/** 저장된 값 읽기. 예전 데이터(종류·시각·요일 없음)는 interval·09:00·평일로 읽는다 */
+/** 저장된 값 읽기. 예전 데이터(종류·시각·요일·예약 방식 없음)는 interval·09:00·평일·app으로 읽는다 */
 export const zAutoSync = zAutoSyncInput.extend({
     kind: zScheduleKind.default("interval"),
     timeOfDay: zTimeOfDay.default(DEFAULT_TIME_OF_DAY),
     weekdays: zWeekdays.default(WEEKDAYS_WEEKDAYS),
+    backend: zScheduleBackend.default("app"),
     nextRunAt: zIsoDate.nullable(),
     lastAutoRunAt: zIsoDate.nullable(),
 });
