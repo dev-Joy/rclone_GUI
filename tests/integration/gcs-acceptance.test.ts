@@ -208,6 +208,8 @@ async function f_RunPlan(
         planToken: cmp.planToken,
         confirmedDeletes: expectDeletes,
         confirmedDeleteDirs: expectDeleteDirs,
+        // 수용 시나리오는 대상 파일이 적어 삭제 1개도 대량 삭제가 되므로, 삭제를 확인한 실행은 대량 삭제 경고도 확인한다
+        confirmLargeDeletes: expectDeletes + expectDeleteDirs > 0,
     });
     return { cmp, ...(await env.waitFinished(runId, WAIT_MS)) };
 }
