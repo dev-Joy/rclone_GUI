@@ -1,6 +1,8 @@
 # Plan: rcloneGUI 스케줄·SQLite·리모트/제외 패턴 UX 개선
 
-- Intent: [INT-002](intent.md) | Tier: 3 | 작성일: 2026-10-29
+- Intent: [INT-002](intent.md) | Tier: 3 | 작성일: 2026-10-29 | 상태: **완료 (2026-11-02)**
+
+> Phase 1~6 모두 완료(3ffff71 ~ 80958ac). T-07·T-13(P3 보류)과 T-10의 GCS 실측·spec E-6 대응은 INT-003으로 옮겼다.
 
 > 이 plan은 [`spec.md`](spec.md)를 Phase 단위 실행 계획으로 나눈 것이다. Phase 순서는 intent의 "진행 순서"를 따른다.
 > Phase마다 code-planner → code-implementer → code-tester 파이프라인을 다시 돌린다. 이 문서의 Step은 그 입력이다.
@@ -23,7 +25,7 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 
 모든 Step의 공통 검증은 `pnpm run check`와 `pnpm run format:check`(Windows PowerShell)다. 아래 "검증"에는 그 밖의 추가 검증만 적었다. 공통 롤백은 그 Step의 커밋을 `git revert`하는 것이다.
 
-### Phase 1 — T-01 SQLite (단독) — **구현 완료, 검증 중**
+### Phase 1 — T-01 SQLite (단독) — **완료 (3ffff71, 2026-10-29)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1.1 | 어댑터와 probe(vitest, external, VACUUM INTO) | `src/main/store/sqlite-db.ts`, `tests/unit/sqlite-db.test.ts`, `shared-boundary.test.ts` | — | unit, `out/main/index.js`의 `require("node:sqlite")` | 파일 삭제 |
@@ -33,7 +35,7 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | 1.5 | 시작 순서 연결 | `src/main/index.ts`, `run-harness.ts`, `drive-app.mjs` | 1.4 | test:int, E2E `migration.spec.ts`, build:win, smoke:installer | revert. 사용자 데이터는 `.migrated`를 원래 이름으로 |
 | 1.6 | 문서 | README §4, MVP_SPEC §5.6, CHANGELOG, works | 1.5 | 문서 확인 | revert |
 
-### Phase 2 — T-03 제외 패턴 + T-09 길이·`--exclude-from`
+### Phase 2 — T-03 제외 패턴 + T-09 길이·`--exclude-from` — **완료 (52b2521·cdda193, 2026-10-30)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 2.1 | **probe 먼저:** `#`·`;` 주석, 인자 방식과 `--exclude-from` 결과가 같은지, BOM·CRLF 처리 | `scripts/probes/rclone-probes.mjs`, `tests/fixtures/rclone/`, `docs/knowhow/rclone-notes.md` | P1 | probe 결과 기록 | fixture 삭제 |
@@ -44,14 +46,14 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | 2.6 | 계획 토큰에 패턴 스냅샷 해시 | `plan-token.ts` + 테스트 | 2.5 | unit `plan-token.test.ts`, test:int `run.gates` | revert |
 | 2.7 | 화면: 라이브러리 체크박스, 새 패턴, 한 줄 입력 유지, 수정·삭제 확인 모달(자동 작업 강조), 필드별 길이 오류, "rclone.conf 값 사용" 표시 | `ExcludesEditor.tsx`, `JobEditor.tsx`, `JobOptionsFields.tsx`, `SettingsPage.tsx`, 새 store `src/stores/excludes-store.ts` | 2.4 | unit `job-form.test.ts`, test:e2e | revert |
 
-### Phase 3 — T-02 리모트 북마크·폴더 탐색
+### Phase 3 — T-02 리모트 북마크·폴더 탐색 — **완료 (9e7803f, 2026-11-02)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 3.1 | `listremotes --long` 파서, 폴더 목록 인자(`lsjson --max-depth 1 --dirs-only --ask-password=false`) | `command-builder.ts`, `src/main/parsers/`, `rclone/config.ts` | P2 | unit(실제 출력 fixture), `ALLOWED_COMMANDS` 그대로 | revert |
 | 3.2 | 북마크 store(`remotes` 테이블)와 IPC `remotes:*`, `rclone:listDir`, 직렬 큐(탐색·테스트 1개, 실행 중 같은 remote는 BUSY) | 새 파일 `src/main/store/remote-store.ts`, `src/main/ipc/remotes.ts`, `activity-lock.ts` 연동 | 3.1 | unit, test:int(local remote alias) | revert |
 | 3.3 | 화면: 설정의 리모트 관리, 경로 필드의 북마크 선택과 폴더 탐색 모달 | `RemotePicker.tsx`, `PathField.tsx`, `SettingsPage.tsx`, 새 컴포넌트 `src/pages/RemoteBrowser.tsx`, `src/stores/remotes-store.ts` | 3.2 | test:e2e(임시 conf의 local remote) | revert |
 
-### Phase 4 — T-05 동기화 범위 → T-04 작업 목록
+### Phase 4 — T-05 동기화 범위 → T-04 작업 목록 — **완료 (577210a, 2026-11-02)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 4.1 | **probe:** `--create-empty-src-dirs` copy/sync, 대상 빈 폴더 삭제가 dry-run 출력과 `--max-delete`에 잡히는지, GCS 동작은 T-10에서 | `rclone-probes.mjs`, fixtures, rclone-notes | P1 | 기록 | — |
@@ -61,7 +63,7 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | 4.5 | 작업 목록 확장(원본·대상·자동·스케줄 요약·최근 동기화·상태 텍스트), 설정 `ui.showJobStatusText` | `JobSidebar.tsx`·`.module.css`, `schemas/settings.ts`, `SettingsPage.tsx`, `src/lib/path-display.ts` | 4.4 | unit, test:e2e | revert |
 | 4.6 | 목록에서 실행: 기존 `JobWorkspace`의 비교 → 확인 → `run.start` 흐름을 공용 훅으로 뽑아 재사용(spec Q7) | 새 파일 `src/lib/use-run-flow.ts`, `JobSidebar.tsx`, `JobWorkspace.tsx` | 4.5 | test:e2e(삭제 있는 sync가 모달을 거침) | revert |
 
-### Phase 5 — T-06 앱 스케줄러 → T-08 화면 재구성
+### Phase 5 — T-06 앱 스케줄러 → T-08 화면 재구성 — **완료 (ed68bdb·1f5abee, 2026-11-02)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 5.1 | 스케줄 모델(interval/daily/weekly), 로컬 시간 계산, DST | `src/shared/schedule.ts`, `schemas/job.ts`, (spec Q8) 스키마 v3 `schedules` 이전 | P4 | unit `schedule.test.ts`(TZ 고정), `db-schema` | `db-backups\pre-v3-*` |
@@ -72,7 +74,7 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | 5.6 | 화면 재구성(비교·미리보기 → 실행 → 결과·이력), 공통 중지 컨트롤 | `JobWorkspace.tsx`, `RunView.tsx`, `CompareView.tsx`, `CompareToolbar.tsx` | 5.5 | test:e2e 셀렉터 갱신, 콘솔 오류 0 | revert |
 | 5.7 | 용어 전수 검토(문구 목록 → 수정), sync 오류 무시 시 백업 폴더 안내 | `src/pages/**`, `src/lib/*-view.ts` | 5.6 | unit `*-view.test.ts`, test:e2e | revert |
 
-### Phase 6 — T-10 GCS 수용 → T-11 배포 → T-12 문서
+### Phase 6 — T-10 GCS 수용 → T-11 배포 → T-12 문서 — **완료 (80958ac, 2026-11-02, GCS 실측은 INT-003)**
 | Step | 목표 | 변경 대상 | 선행 | 검증 | 롤백 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 6.1 | GCS 수용 테스트(환경 변수 conf, `rclonegui-test-` 접두사 검사, 고유 하위 경로·정리, copy/sync/삭제/취소, `전체` 범위 빈 폴더) | 새 파일 `tests/integration/gcs-acceptance.test.ts`, rclone-notes, CHANGELOG | P5 | `test:int`(키가 없으면 skip하고 이유 출력) | 파일 삭제 |
@@ -89,24 +91,24 @@ Phase별 Tier: P1 3, P2 3, P3 2, P4 3, P5 3, P6 2.
 | T-04 작업 목록 | 4.5, 4.6 | Phase 4 |
 | T-05 동기화 범위 | 4.1~4.4 | Phase 4. 폴더만은 P3 |
 | T-06 앱 스케줄러 | 5.1~5.5 | Phase 5 |
-| T-07 (P3 보류) | — | 범위 밖. 5.7에서 백업 폴더 안내만 |
+| T-07 (P3 보류) | — | 범위 밖. 5.7에서 백업 폴더 안내만. INT-003으로 분리 |
 | T-08 화면 재구성 | 5.6, 5.7 | Phase 5 |
 | T-09 옵션 검증 | 2.1, 2.2, 2.5, 2.7 | Phase 2 |
-| T-10 GCS 수용 | 6.1 | Phase 6 |
+| T-10 GCS 수용 | 6.1 | Phase 6. 테스트 코드 완료, 실측·E-6 대응은 INT-003 |
 | T-11 배포 형태 | 6.2 | Phase 6 |
 | T-12 문서 | 1.6, 6.3, 각 Phase의 CHANGELOG | |
-| T-13 (P3 보류) | — | 범위 밖 |
+| T-13 (P3 보류) | — | 범위 밖. INT-003으로 분리 |
 
 ## 4. 검증 계획 (DoD)
 
-**Phase 공통 (Tier 3):**
-- [ ] `pnpm run check` (typecheck + oxlint + eslint + unit)
-- [ ] `pnpm run format:check`
-- [ ] 빌더·파서·안전 로직을 바꿨다면: 테스트를 추가하고 `pnpm run test:int`
-- [ ] 화면·패키징을 바꿨다면: `pnpm run test:e2e`(콘솔 오류 0), `pnpm run build:win`
-- [ ] 저장·시작 순서를 바꿨다면: `pnpm run smoke:installer`, `node scripts/dev/drive-app.mjs`(임시 userData)
-- [ ] CHANGELOG 한 줄, rclone-notes(새 rclone 동작), `docs/works/` 기록
-- [ ] intent 태스크 체크(intent-manager), Phase 커밋(`z_skill_git_commit`)
+**Phase 공통 (Tier 3):** 모든 Phase에서 통과(최종: unit 977·`test:int` 51(+7 skip)·E2E 10·`build:win`·`smoke:installer`, `docs/works/WORKS_HISTORY.md` TASK_018)
+- [x] `pnpm run check` (typecheck + oxlint + eslint + unit)
+- [x] `pnpm run format:check`
+- [x] 빌더·파서·안전 로직을 바꿨다면: 테스트를 추가하고 `pnpm run test:int`
+- [x] 화면·패키징을 바꿨다면: `pnpm run test:e2e`(콘솔 오류 0), `pnpm run build:win`
+- [x] 저장·시작 순서를 바꿨다면: `pnpm run smoke:installer`, `node scripts/dev/drive-app.mjs`(임시 userData)
+- [x] CHANGELOG 한 줄, rclone-notes(새 rclone 동작), `docs/works/` 기록
+- [x] intent 태스크 체크(intent-manager), Phase 커밋(`z_skill_git_commit`)
 
 **Phase별 추가:**
 - **P1:** AC-1~4. 어댑터 경계 테스트

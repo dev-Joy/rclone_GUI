@@ -1,7 +1,7 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`, `docs/intent/active/INT-002-scheduler-sqlite-ux/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-11-02 (INT-002 구현 반영 표 추가)
 - 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), 아래 "구현 반영" 참고**
@@ -91,7 +91,7 @@ Phase 7 preflight도 이 함수를 쓴다.
 
 ### 구현 반영 (INT-002, 2026-11-02)
 
-INT-002(`docs/intent/active/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다. 본문은 고쳐 쓰지 않고 이 표가 우선한다.
+INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다. 본문은 고쳐 쓰지 않고 이 표가 우선한다.
 
 | 항목 | 이 문서 | 실제 구현 |
 | :--- | :--- | :--- |

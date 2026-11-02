@@ -1,10 +1,10 @@
 ---
 id: INT-002
 title: rcloneGUI 스케줄·SQLite·리모트/제외 패턴 UX 개선
-status: active
+status: done
 priority: P2
 created: 2026-10-29
-updated: 2026-10-29
+updated: 2026-11-02
 ---
 
 # Intent: rcloneGUI 스케줄·SQLite·리모트/제외 패턴 UX 개선
@@ -75,21 +75,7 @@ updated: 2026-10-29
 - **진행 순서**: 아래 "진행 순서" 절을 따른다. T-01을 먼저 단독 Phase로 끝낸다(나머지가 의존).
 
 ### P3 OS 예약·`--ignore-errors` 착수 시 적용 (2026-10-29 보류)
-- 1차 범위에서 뺀 T-07·T-13을 다시 꺼낼 때 그대로 적용할 검토 결과다.
-- **sync + `--ignore-errors` + 백업 없음**은 원본 읽기 오류가 나도 대상 파일을 삭제한다. 미리보기 삭제 수 확인은 실제 실행 중 IO 오류를 막지 못하므로, 수동 실행에서만 허용하고 `--max-delete`를 사전 확인 삭제 수로 고정한다. 자동·OS 예약 실행에서는 차단을 유지한다. 안전 규칙 3 변경이므로 T-12 승인 후 T-07을 시작한다.
-- **schtasks 등록**: 작업 이름은 `\rcloneGUI\<jobId>`(사용자가 입력한 작업 이름 사용 금지)로 하고, jobId는 엄격한 형식으로 검증한다. `/TR` 문자열은 작업 스케줄러가 다시 파싱하므로 따옴표 문제를 피하려면 `/XML` 등록을 우선 검토한다. `/RU`·`/RP`(비밀번호 저장)는 쓰지 않고 `/RL LIMITED`로 한다.
-- **`--run-job <id>`**는 처음 실행할 때의 argv와 `second-instance` argv 모두 zod로 id 형식을 검증하고, 다른 앱 플래그(삭제 허용 등)는 받지 않는다. 예약 작업이 exe를 직접 실행하므로 패키징 빌드에서 Electron fuses(`RunAsNode`, `EnableNodeCliInspectArguments` 끄기) 적용을 검토한다.
-- **이중 실행 방지**: 작업마다 앱 안 스케줄러와 OS 예약 중 하나만 켠다. 실행 중(BUSY)일 때 이력 기록과 재시도 여부를 정한다.
-- **헤드리스 중 GUI 실행**: 헤드리스 프로세스가 single-instance 락을 잡고 있으면 사용자가 연 GUI 요청은 `second-instance`로 넘어오므로 창을 만들어 보여 준다. 락 때문에 두 프로세스가 같은 DB를 동시에 열지 않는다(WAL·`busy_timeout`은 방어용으로 유지).
-- **남는 예약 작업 정리**: 앱 시작 시 `\rcloneGUI\` 폴더에서 DB에 없는 예약 작업을 지운다. 앱을 제거하면 예약 작업이 없는 exe를 가리킨 채 남으므로 제거 시 처리를 정한다.
-- **`--run-job` 실행 조건**: `startAuto`는 작업의 자동 실행 켜짐·전역 일시정지를 확인하지 않는다(일시정지는 앱 스케줄러 tick에서만 확인). 헤드리스 진입 시 "작업 존재 + 스케줄 백엔드 = OS + 켜짐 + 전역 일시정지 아님"을 확인하고, 아니면 실행하지 않고 이력에 사유를 남긴다. 이력 trigger는 앱 스케줄러(`scheduler`)와 구분되는 값(예: `os-scheduler`)으로 둔다.
-- **작업 스케줄러 XML 기본값**: `DisallowStartIfOnBatteries`·`StopIfGoingOnBatteries`가 기본으로 켜져 있어 노트북에서 예약이 조용히 건너뛰거나 실행 중 강제 종료된다(`.partial` 잔존·rclone 자식 고아 가능). 전원 조건·`ExecutionTimeLimit`·`MultipleInstancesPolicy`(`IgnoreNew`)를 명시하고, 강제 종료 후 `run-recovery`가 정리하는지 확인한다.
-- **XML 재시도 한계 (probe 필요)**: `RestartOnFailure`는 작업 시작 실패에만 동작하고 프로그램의 0이 아닌 종료 코드로는 재시도하지 않는 것으로 보인다. 그렇다면 로그온 직후 네트워크·WSL 미준비 재시도는 앱 안(경로 준비 확인 후 지연 재시도)에서 구현한다.
-- **XML 파일 형식 (probe 필요)**: `schtasks /XML`은 UTF-16(BOM) 파일을 기대한다. exe 경로·인자는 XML 이스케이프(`&`·`<`)하고, 임시 XML은 userData 앱 폴더에 `wx`로 만든 뒤 등록 후 지운다. `schtasks`·`powershell`도 `execFile` + `shell:false` + 고정 인자 배열로만 실행한다.
-- **개발 모드 등록 차단**: 개발 실행의 `process.execPath`는 `electron.exe`라 잘못된 exe가 등록된다. OS 백엔드는 `app.isPackaged`일 때만 허용하고, 시작 시 복원 때 등록된 exe 경로가 현재 `execPath`와 다르면 다시 등록한다.
-- **second-instance 인자**: Windows에서 `second-instance` argv에 Chromium 스위치가 끼어 순서가 바뀔 수 있다. `requestSingleInstanceLock(additionalData)`로 `{ runJob: id }`를 넘겨 zod로 검증한다(argv 파싱은 첫 실행에만).
-- **Electron fuses 범위**: `RunAsNode`·`EnableNodeCliInspectArguments` 끄기에 더해 `EnableNodeOptionsEnvironmentVariable` 끄기, `EnableEmbeddedAsarIntegrityValidation`·`OnlyLoadAppFromAsar` 켜기를 함께 검토한다.
-- **암호화된 rclone.conf**: 실행 래퍼가 `RCLONE_*` 환경 변수를 지우므로 `RCLONE_CONFIG_PASS`로도 풀 수 없다. 헤드리스·OS 예약은 암호화된 conf를 지원하지 않는다고 명시하고 등록 시 경고한다.
+- INT-003으로 옮겼다(2026-11-02). T-07·T-13을 착수할 때 적용할 검토 결과 원문은 INT-003 intent의 "이관: P3 OS 예약·`--ignore-errors` 착수 시 적용" 절을 본다.
 
 ## 미해결 질문 (Open questions)
 - [x] exe 형태 → NSIS 설치본 하나만 유지. 헤드리스는 같은 exe의 `rcloneGUI.exe --run-job <id>`. portable exe는 만들지 않는다(exe 위치가 바뀌면 OS 예약 경로가 깨짐). (2026-10-29 결정)
@@ -108,19 +94,19 @@ updated: 2026-10-29
 - [x] 1차 범위 → OS 예약·헤드리스(T-13), 백업 없는 sync `--ignore-errors`(T-07)는 P3 보류. 근거: 로그인 시 트레이 시작(`--hidden`)으로 앱이 꺼지는 경우가 사용자가 직접 종료할 때뿐이고, 안전 규칙 3을 바꾸지 않는다. SQLite(T-01)는 첫 Phase로 단독 진행. (2026-10-29 결정)
 
 ## 작업 (Tasks)
-- [x] T-01 [P1] SQLite 저장 계층 도입 — jobs/settings/history/remotes/exclude_patterns/schedules 스키마·마이그레이션, JSON→SQLite 이전(단일 트랜잭션·`user_version`·커밋 후 `.migrated`)·백업·롤백·`integrity_check`, 자격 증명 저장 금지, 기존 store API 유지, WAL 백업은 `VACUUM INTO`/`backup()`, 이력 페이지 조회(동기 API로 main 스레드 정지 방지), `active-run.json`·로그 파일은 파일 유지, 단위·통합 테스트
-- [x] T-02 [P1] 리모트 등록·폴더 탐색 — 리모트 북마크(rclone.conf의 remote 이름 + 기준 경로 + 별칭) CRUD·읽기 전용 연결 테스트, rclone.conf 쓰기 없음, 등록된 리모트 선택 후 폴더 목록 탐색·선택, SQLite 저장, rclone.conf 경로만 전달, 연결 테스트·폴더 탐색에 `--ask-password=false`
-- [x] T-03 [P1] 제외 패턴 라이브러리 — 전역 DB에 유일 저장, 작업별 체크박스 다중 선택, 새 패턴 추가, 한 줄 입력 유지, 중복 제거·앞뒤 공백만 정규화(줄바꿈 차단), 수정·삭제 시 사용 중인 작업 표시·확인, 패턴 스냅샷을 계획 토큰에 포함, `#`·`;`로 시작하는 패턴 차단(또는 이스케이프), 변경 시 관련 작업 비교 캐시 무효화·자동 실행 작업 별도 표시, 테스트
-- [x] T-04 [P1] 작업 목록·편집기 확장 — 원본·대상·자동화 여부·주기·최근 동기화 시각·상태 텍스트 표시, 목록에서 실행(비교·삭제 확인 또는 자동 실행 게이트를 그대로 거침), GoodSync 참고 레이아웃
-- [x] T-05 [P1] 작업별 동기화 범위 — 전체/파일만을 스키마·diff·명령 빌더·미리보기·실행·삭제 확인에 일관 적용(`전체`의 대상 빈 폴더 삭제를 삭제 수에 포함하는지 probe), 범위를 계획 토큰에 포함, GCS 빈 폴더 동작 probe, 범위별 테스트 (폴더만은 probe 후 P3)
-- [x] T-06 [P1] 앱 스케줄러 보완 — 주기·매일 HH:MM·요일 스케줄 모델, 자동 실행 작업이 있을 때 트레이 종료 경고(다음 예약 시각 표시), 로그인 시 시작 꺼짐 안내, WSL `/mnt` 경로 변환 확인, 안전 게이트 재사용
-- [ ] T-07 [P3] (보류) `--ignore-errors` 단독 허용 — (T-12 안전 규칙 3 승인 선행) sync 수동 실행에서만 경고·확인 후 허용, `--max-delete`를 사전 확인 삭제 수로 고정, 자동·OS 예약 실행은 차단 유지, 이력·로그에 위험 옵션 기록, 명령 빌더 차단 목록·run gate·문서 갱신
-- [x] T-08 [P2] 실행 화면 재구성 — 비교/미리보기 → 실행 → 결과/이력 흐름으로 그룹화, 중지는 공통 실행 제어로 분리, 화면 용어 전수 검토·수정, 동기화에서 오류 무시 선택 시 백업 폴더 지정 안내
-- [x] T-09 [P2] rclone 옵션 검증·config 기본값 — 옵션별 글자 수 제한(저장 차단)·명령 전체 길이 검사·`--exclude-from` 전환(임시 파일 `wx` 생성·UTF-8(BOM 없음)·LF·실행 후 삭제·해시를 계획 토큰에 포함, 인자 방식과 결과 동일한지 probe), 빈 값 = "rclone.conf 값 사용" 표시, schema·UI·테스트
-- [ ] T-10 [P2] GCP 테스트 수용 — 전용 테스트 버킷/remote로 임시 파일 copy/sync/삭제/취소 확인, 테스트 접두사가 아니면 실행 거부, 실행마다 고유 하위 경로 후 정리, 키·conf는 저장소 밖, 실제 데이터 미사용, 결과를 rclone-notes·CHANGELOG에 기록
-- [x] T-11 [P2] 배포 형태 확정 — NSIS 설치본 하나 유지(portable 없음) 확인, 기존 설치 스모크 통과, 문서 갱신
-- [x] T-12 [P2] 문서 갱신 — README/AGENTS/MVP_SPEC/CHANGELOG에 SQLite·앱 스케줄·범위·리모트/패턴 UX 반영 (기존 안전 규칙 변경 없음)
-- [ ] T-13 [P3] (보류) Windows 작업 스케줄러·`--run-job` 헤드리스 — Windows 작업 스케줄러(schtasks `\rcloneGUI\<jobId>`·`/XML` 우선·`/RL LIMITED`·비밀번호 저장 없음), `--run-job <id>` 헤드리스 실행 모드(id zod 검증·다른 플래그 거부, 실행 중이면 기존 인스턴스로 전달, 헤드리스 중 GUI 요청 시 창 생성), 작업별 스케줄러 하나만 활성화(이중 실행 방지), 앱 시작 시 복원·고아 예약 정리, 작업 삭제·비활성화 시 정리, 권한·실패 안내, 안전 게이트 재사용, XML에 `StartWhenAvailable`·실패 시 재시도, 이력에 "로그온 직후 실행" 표시, 헤드리스 rclone에 `--ask-password=false`, 헤드리스 진입 시 OS 백엔드·켜짐·전역 일시정지 확인·이력 trigger 구분, XML 전원 조건·실행 시간 제한·`IgnoreNew` 명시·UTF-16·이스케이프, `RestartOnFailure` 동작 probe(종료 코드로 재시도 안 되면 앱 내 재시도), `app.isPackaged`에서만 OS 등록·exe 경로 변경 시 재등록, `additionalData`로 second-instance 전달, 암호화 conf 미지원 경고 (WSL cron은 P3 보류); 설치 스모크에 `--run-job` 추가, 제거 시 `\rcloneGUI\` 예약 작업 삭제(`installer.nsh`, `${isUpdated}`이면 건너뜀), Electron fuses 적용. 착수 시 "P3 OS 예약·`--ignore-errors` 착수 시 적용" 절을 따른다
+- [x] T-01 [P1] SQLite 저장 계층 도입 — jobs/settings/history/remotes/exclude_patterns/schedules 스키마·마이그레이션, JSON→SQLite 이전(단일 트랜잭션·`user_version`·커밋 후 `.migrated`)·백업·롤백·`integrity_check`, 자격 증명 저장 금지, 기존 store API 유지, WAL 백업은 `VACUUM INTO`/`backup()`, 이력 페이지 조회(동기 API로 main 스레드 정지 방지), `active-run.json`·로그 파일은 파일 유지, 단위·통합 테스트 (2026-10-29)
+- [x] T-02 [P1] 리모트 등록·폴더 탐색 — 리모트 북마크(rclone.conf의 remote 이름 + 기준 경로 + 별칭) CRUD·읽기 전용 연결 테스트, rclone.conf 쓰기 없음, 등록된 리모트 선택 후 폴더 목록 탐색·선택, SQLite 저장, rclone.conf 경로만 전달, 연결 테스트·폴더 탐색에 `--ask-password=false` (2026-11-02)
+- [x] T-03 [P1] 제외 패턴 라이브러리 — 전역 DB에 유일 저장, 작업별 체크박스 다중 선택, 새 패턴 추가, 한 줄 입력 유지, 중복 제거·앞뒤 공백만 정규화(줄바꿈 차단), 수정·삭제 시 사용 중인 작업 표시·확인, 패턴 스냅샷을 계획 토큰에 포함, `#`·`;`로 시작하는 패턴 차단(또는 이스케이프), 변경 시 관련 작업 비교 캐시 무효화·자동 실행 작업 별도 표시, 테스트 (2026-10-29)
+- [x] T-04 [P1] 작업 목록·편집기 확장 — 원본·대상·자동화 여부·주기·최근 동기화 시각·상태 텍스트 표시, 목록에서 실행(비교·삭제 확인 또는 자동 실행 게이트를 그대로 거침), GoodSync 참고 레이아웃 (2026-11-02)
+- [x] T-05 [P1] 작업별 동기화 범위 — 전체/파일만을 스키마·diff·명령 빌더·미리보기·실행·삭제 확인에 일관 적용(`전체`의 대상 빈 폴더 삭제를 삭제 수에 포함하는지 probe), 범위를 계획 토큰에 포함, GCS 빈 폴더 동작 probe, 범위별 테스트 (폴더만은 probe 후 P3) (2026-11-02)
+- [x] T-06 [P1] 앱 스케줄러 보완 — 주기·매일 HH:MM·요일 스케줄 모델, 자동 실행 작업이 있을 때 트레이 종료 경고(다음 예약 시각 표시), 로그인 시 시작 꺼짐 안내, WSL `/mnt` 경로 변환 확인, 안전 게이트 재사용 (2026-11-02)
+- [-] T-07 [P3] (보류) `--ignore-errors` 단독 허용 — (T-12 안전 규칙 3 승인 선행) sync 수동 실행에서만 경고·확인 후 허용, `--max-delete`를 사전 확인 삭제 수로 고정, 자동·OS 예약 실행은 차단 유지, 이력·로그에 위험 옵션 기록, 명령 빌더 차단 목록·run gate·문서 갱신 (INT-003으로 분리, 2026-11-02)
+- [x] T-08 [P2] 실행 화면 재구성 — 비교/미리보기 → 실행 → 결과/이력 흐름으로 그룹화, 중지는 공통 실행 제어로 분리, 화면 용어 전수 검토·수정, 동기화에서 오류 무시 선택 시 백업 폴더 지정 안내 (2026-11-02)
+- [x] T-09 [P2] rclone 옵션 검증·config 기본값 — 옵션별 글자 수 제한(저장 차단)·명령 전체 길이 검사·`--exclude-from` 전환(임시 파일 `wx` 생성·UTF-8(BOM 없음)·LF·실행 후 삭제·해시를 계획 토큰에 포함, 인자 방식과 결과 동일한지 probe), 빈 값 = "rclone.conf 값 사용" 표시, schema·UI·테스트 (2026-10-30)
+- [x] T-10 [P2] GCP 테스트 수용 — 전용 테스트 버킷/remote로 임시 파일 copy/sync/삭제/취소 확인, 테스트 접두사가 아니면 실행 거부, 실행마다 고유 하위 경로 후 정리, 키·conf는 저장소 밖, 실제 데이터 미사용, 결과를 rclone-notes·CHANGELOG에 기록 — 수용 테스트 코드 완료(80958ac, 키 없어 GCS 시나리오 skip), GCS 실측·E-6 대응은 INT-003으로 이관 (2026-11-02)
+- [x] T-11 [P2] 배포 형태 확정 — NSIS 설치본 하나 유지(portable 없음) 확인, 기존 설치 스모크 통과, 문서 갱신 (2026-11-02)
+- [x] T-12 [P2] 문서 갱신 — README/AGENTS/MVP_SPEC/CHANGELOG에 SQLite·앱 스케줄·범위·리모트/패턴 UX 반영 (기존 안전 규칙 변경 없음) (2026-11-02)
+- [-] T-13 [P3] (보류) Windows 작업 스케줄러·`--run-job` 헤드리스 — Windows 작업 스케줄러(schtasks `\rcloneGUI\<jobId>`·`/XML` 우선·`/RL LIMITED`·비밀번호 저장 없음), `--run-job <id>` 헤드리스 실행 모드(id zod 검증·다른 플래그 거부, 실행 중이면 기존 인스턴스로 전달, 헤드리스 중 GUI 요청 시 창 생성), 작업별 스케줄러 하나만 활성화(이중 실행 방지), 앱 시작 시 복원·고아 예약 정리, 작업 삭제·비활성화 시 정리, 권한·실패 안내, 안전 게이트 재사용, XML에 `StartWhenAvailable`·실패 시 재시도, 이력에 "로그온 직후 실행" 표시, 헤드리스 rclone에 `--ask-password=false`, 헤드리스 진입 시 OS 백엔드·켜짐·전역 일시정지 확인·이력 trigger 구분, XML 전원 조건·실행 시간 제한·`IgnoreNew` 명시·UTF-16·이스케이프, `RestartOnFailure` 동작 probe(종료 코드로 재시도 안 되면 앱 내 재시도), `app.isPackaged`에서만 OS 등록·exe 경로 변경 시 재등록, `additionalData`로 second-instance 전달, 암호화 conf 미지원 경고 (WSL cron은 P3 보류); 설치 스모크에 `--run-job` 추가, 제거 시 `\rcloneGUI\` 예약 작업 삭제(`installer.nsh`, `${isUpdated}`이면 건너뜀), Electron fuses 적용. 착수 시 "P3 OS 예약·`--ignore-errors` 착수 시 적용" 절을 따른다 (INT-003으로 분리, 2026-11-02)
 
 ## 진행 순서 (Phases)
 1. T-01 SQLite — 단독 Phase. 착수 전 실제 userData를 따로 백업하고, 현재 버전 JSON으로 만든 fixture로 이전·롤백·`.migrated`를 테스트한다. 첫 실행은 임시 userData(`scripts/dev/drive-app.mjs`)로 확인한다.
@@ -131,3 +117,9 @@ updated: 2026-10-29
 6. T-10 GCP 수용(키가 없으면 skip) → T-11 배포 확인 → T-12 문서
 - Phase마다 `pnpm run check`·`format:check`, 빌더·파서 변경은 `test:int`, 화면 변경은 `test:e2e`를 통과한 뒤 커밋한다.
 - `node:sqlite`는 안정 단계 API가 아니므로 Electron을 올릴 때마다 어댑터 테스트를 다시 돌린다.
+
+## 결과 (Result)
+- SQLite 저장 계층(JSON 1회 이전·백업·손상 복구), 공용 제외 패턴·`--exclude-from`·옵션 길이 검증, 리모트 북마크·폴더 탐색, 작업별 동기화 범위(전체/파일만), 작업 목록 확장·목록에서 실행, 매일·요일 예약·종료 경고, 단계별 실행 화면·공통 중지를 구현했다(3ffff71~80958ac).
+- 최종 검증: unit 977·`test:int` 51(+7 skip)·E2E 10·`build:win`·`smoke:installer` 통과, 배포 형태는 NSIS 설치본 하나로 확정. GCS 수용 테스트는 코드만 완료(키 없어 skip).
+- 후속(INT-003): Windows 작업 스케줄러·`--run-job`(T-13), sync `--ignore-errors`/`--backup-dir`(T-07·FR-28), GCS 실측·E-6 대응, `폴더만` 범위, WSL cron.
+- 완료일: 2026-11-02

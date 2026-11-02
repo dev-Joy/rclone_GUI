@@ -1,6 +1,6 @@
 # Spec: rcloneGUI 스케줄·SQLite·리모트/제외 패턴 UX 개선
 
-- Intent: [INT-002](intent.md) | Status: active | 작성일: 2026-10-29
+- Intent: [INT-002](intent.md) | Status: done (2026-11-02) | 작성일: 2026-10-29
 
 > 이 spec은 intent를 구현할 수 있는 수준으로 풀어 쓴 문서다. 내용이 서로 다르면 intent가 우선한다.
 > 심볼과 경로는 커밋 `53e7388` 기준이다. Phase 1(T-01) 구현분은 아직 커밋하지 않았고 작업 트리에만 있다.
@@ -21,7 +21,7 @@ rcloneGUI(INT-001 완료본)의 데이터 저장 방식과 작업 흐름 UX를 1
 | 옵션 검증 | 길이 제한이 들쭉날쭉하다(경로 4096, 패턴 512×100) | 옵션마다 최대 길이를 두고 명령 전체 길이를 검사한다. 빈 값은 "rclone.conf 값 사용"으로 표시한다 |
 | 수용 | 로컬 임시 폴더만 쓴다 | 전용 GCS 테스트 remote로 수용 테스트를 한다(키가 없으면 skip) |
 
-P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), 백업 없는 sync `--ignore-errors`(T-07), `폴더만` 범위, WSL cron.
+P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), 백업 없는 sync `--ignore-errors`(T-07), `폴더만` 범위, WSL cron. → INT-003으로 분리(2026-11-02).
 
 ## 2. 범위 (In-scope / Out-of-scope)
 
@@ -39,7 +39,7 @@ P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), �
 - T-12 문서
 
 ### 2.2 Out-of-scope
-- T-07, T-13(P3 보류). 착수하면 intent의 "P3 OS 예약·`--ignore-errors` 착수 시 적용" 절을 따른다.
+- T-07, T-13(P3 보류). INT-003으로 분리했다(2026-11-02). 착수하면 INT-003 intent의 "이관: P3 OS 예약·`--ignore-errors` 착수 시 적용" 절을 따른다.
 - `rclone config create/update/delete`와 rclone.conf 쓰기. rclone.conf 읽기(`config dump` 포함)도 하지 않는다.
 - cron 5필드 스케줄, `폴더만` 범위, portable exe.
 - 안전 규칙 1~6 변경.
@@ -130,7 +130,7 @@ P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), �
 
 | 항목 | 상태 |
 | :--- | :--- |
-| DB 파일명, 스키마 v1 DDL, `clsSqliteDb`·`migrateSchema`·`importLegacyJson`·`openAppDb` 시그니처 | **확정(구현 완료, 미커밋)** |
+| DB 파일명, 스키마 v1 DDL, `clsSqliteDb`·`migrateSchema`·`importLegacyJson`·`openAppDb` 시그니처 | **확정(구현 완료, 3ffff71)** |
 | v2 이후 마이그레이션(작업-패턴 연결, 범위, 스케줄 이전) | 초안 |
 | IPC `remotes:*`, `excludes:*`, `rclone:listDir` | 초안 |
 | 작업 스키마 추가 필드 | 초안 |
@@ -183,7 +183,7 @@ zJobDraft.extend({
 | E-3 | `rclone.conf`가 암호화돼 있음 | 연결 테스트·탐색이 `--ask-password=false`로 실패한다. "암호화된 rclone.conf는 지원하지 않습니다"라고 표시한다 |
 | E-4 | `#tmp`처럼 `#`·`;`로 시작하는 기존 패턴 | 파일 방식에서는 주석으로 빠지므로 작업 전용 인자 방식(`--exclude`)으로 남긴다. 라이브러리 저장은 막는다 |
 | E-5 | 전역 패턴을 지움 → sync 삭제 범위가 늘어남 | 사용 작업과 자동 작업을 표시하고 확인을 받는다. 캐시를 무효화하고 계획 토큰이 바뀌어 이전 비교로는 실행되지 않는다 |
-| E-6 | `전체` 범위 + GCS 버킷(폴더 없음) | probe 결과에 따라 안내 문구를 띄우거나 `전체`를 막는다. **실측 대기(2026-11-02)**: GCS 수용 테스트(`gcs-acceptance.test.ts`)는 테스트 키가 없어 건너뜀. 기대 동작(`directory_markers` 꺼짐이면 빈 폴더가 생기지 않아 `createDirs` 차이가 남음)은 테스트에 명시했고, 제품 대응은 실측 뒤 후속 태스크로 정한다 |
+| E-6 | `전체` 범위 + GCS 버킷(폴더 없음) | probe 결과에 따라 안내 문구를 띄우거나 `전체`를 막는다. **실측 대기(2026-11-02)**: GCS 수용 테스트(`gcs-acceptance.test.ts`)는 테스트 키가 없어 건너뜀. 기대 동작(`directory_markers` 꺼짐이면 빈 폴더가 생기지 않아 `createDirs` 차이가 남음)은 테스트에 명시했고, 제품 대응은 실측 뒤 후속 태스크로 정한다. → 실측(INT-003 T-04)과 대응(INT-003 T-05)으로 이관(2026-11-02) |
 | E-7 | 실행 중에 같은 remote 탐색 | BUSY로 거부하고 문구를 보여 준다 |
 | E-8 | 매일 02:30 + DST 또는 시간대 변경 | 로컬 시간대로 다음 시각을 다시 계산한다. 절전 재개·시작 때는 `reconcileNextRun` 규칙(몰아서 따라잡지 않음)을 따른다 |
 | E-9 | 자동 작업이 없을 때 트레이 종료 | 지금처럼 바로 종료한다(실행 중 확인은 그대로) |
