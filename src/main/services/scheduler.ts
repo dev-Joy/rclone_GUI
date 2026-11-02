@@ -238,7 +238,11 @@ export class clsScheduler {
             if (job) {
                 await this.book(o.jobId, {
                     nextRunAt: job.autoSync.enabled
-                        ? nextAfterFinish(o.finishedAt, job.autoSync)
+                        ? nextAfterFinish(
+                              o.finishedAt,
+                              job.autoSync,
+                              o.status === "success" || o.status === "noop",
+                          )
                         : null,
                     lastAutoRunAt: o.finishedAt,
                 });

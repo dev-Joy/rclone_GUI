@@ -40,6 +40,11 @@ function f_Job(id: string, enabled: boolean, nextRunAt: string | null, intervalM
     return { id, name: `작업 ${id}`, autoSync: { ...f_Auto(enabled, intervalMinutes), nextRunAt } };
 }
 
+/** 2026-10-29(목) 서울 로컬 시각 → ISO */
+function f_At(h: number, mi: number, s = 0): string {
+    return new Date(2026, 9, 29, h, mi, s, 0).toISOString();
+}
+
 /** 서울 로컬 시각 → Date */
 function f_Local(y: number, mo: number, d: number, h = 0, mi = 0): Date {
     return new Date(y, mo - 1, d, h, mi, 0, 0);
@@ -121,13 +126,44 @@ describe("pickDue / nextAutoRun / nextAfterFinish", () => {
     });
 
     it("끝난 시각 + 주기(interval), 끝난 뒤 다음 정시(daily)", () => {
-        expect(nextAfterFinish(NOW.toISOString(), f_Spec({ intervalMinutes: 5 }))).toBe(
+        expect(nextAfterFinish(NOW.toISOString(), f_Spec({ intervalMinutes: 5 }), true)).toBe(
             iso(5 * 60_000),
         );
         // 2026-10-29 19:00 KST에 끝남 → 다음 날 09:00
-        expect(nextAfterFinish(NOW.toISOString(), f_Spec({ kind: "daily" }))).toBe(
+        expect(nextAfterFinish(NOW.toISOString(), f_Spec({ kind: "daily" }), true)).toBe(
             f_Local(2026, 10, 30, 9, 0).toISOString(),
         );
+    });
+
+    it("daily·weekly: 성공으로 끝나면 1시간 안의 정시는 건너뛰고, 실패면 바로 다음 정시", () => {
+        const daily = f_Spec({ kind: "daily", timeOfDay: "09:00" });
+        expect(nextAfterFinish(f_At(8, 59, 30), daily, true)).toBe(
+            f_Local(2026, 10, 30, 9, 0).toISOString(),
+        );
+        expect(nextAfterFinish(f_At(8, 59, 30), daily, false)).toBe(
+            f_Local(2026, 10, 29, 9, 0).toISOString(),
+        );
+        expect(nextAfterFinish(f_At(7, 30), daily, true)).toBe(
+            f_Local(2026, 10, 29, 9, 0).toISOString(),
+        );
+        // 목요일(10-29) 08:59 성공, 목·금 요일 → 금요일 09:00
+        const weekly = f_Spec({
+            kind: "weekly",
+            timeOfDay: "09:00",
+            weekdays: (1 << 4) | (1 << 5),
+        });
+        expect(nextAfterFinish(f_At(8, 59), weekly, true)).toBe(
+            f_Local(2026, 10, 30, 9, 0).toISOString(),
+        );
+        expect(nextAfterFinish(f_At(8, 59), weekly, false)).toBe(
+            f_Local(2026, 10, 29, 9, 0).toISOString(),
+        );
+    });
+
+    it("interval은 성공 여부와 상관없이 끝난 시각 + 주기", () => {
+        const spec = f_Spec({ intervalMinutes: 30 });
+        expect(nextAfterFinish(NOW.toISOString(), spec, false)).toBe(iso(30 * 60_000));
+        expect(nextAfterFinish(NOW.toISOString(), spec, true)).toBe(iso(30 * 60_000));
     });
 });
 

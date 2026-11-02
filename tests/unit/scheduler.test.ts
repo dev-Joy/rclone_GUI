@@ -352,6 +352,22 @@ describe("clsScheduler daily·weekly (INT-002 T-06)", () => {
         expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(10, 29, 21));
     });
 
+    it("놓친 예약을 정시 직전에 성공하면 그날 정시는 건너뛰고, 실패하면 그날 정시를 남긴다", async () => {
+        for (const [status, next] of [
+            ["success", f_Kst(10, 30, 19, 30)],
+            ["noop", f_Kst(10, 30, 19, 30)],
+            ["failed", f_Kst(10, 29, 19, 30)],
+        ] as const) {
+            const h = f_Harness([f_Job(1, iso(-MIN), { kind: "daily", timeOfDay: "19:30" })]);
+            await h.sched.tick();
+            expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(10, 29, 19, 30));
+            h.advance(MIN);
+            h.started[0]!.resolve({ status, stats: null });
+            await h.flush();
+            expect(h.job(1).autoSync.nextRunAt).toBe(next);
+        }
+    });
+
     it("재시작: 놓친 daily 예약은 60초 뒤 한 번, 먼 미래의 틀린 값은 다음 정시로 맞춘다", async () => {
         const h = f_Harness([
             f_Job(1, iso(-3 * 24 * 60 * MIN), { kind: "daily", timeOfDay: "09:00" }),

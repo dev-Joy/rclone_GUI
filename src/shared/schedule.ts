@@ -7,6 +7,7 @@
  * - 앱 시작·절전 재개: 켜진 작업의 예약이 없거나 지났으면 now + 지연(몰아서 따라잡지 않는다). 꺼진 작업은 null.
  *   daily·weekly의 미래 예약은 지연보다 멀면 지금 기준 다음 정시로 다시 맞춘다(시간대 변경 대비).
  * - 일시정지 해제: 지난 예약만 now + 30초.
+ * - 실행이 끝난 뒤: daily·weekly가 성공(바꿀 것 없음 포함)으로 끝났으면 1시간 안의 정시는 건너뛴다(놓친 예약 직후 중복 실행 방지).
  * - 실행할 작업: 켜져 있고 예약 시각이 지난 작업 중 가장 이른 1건.
  * - DST: 없는 시각(봄)은 Date 규칙대로 뒤로 밀린 시각에 한 번, 두 번 있는 시각(가을)은 첫 번째에 한 번 실행한다.
  *
@@ -24,6 +25,8 @@ export const STARTUP_DELAY_MS = 60_000;
 export const RESUME_DELAY_MS = 60_000;
 /** 일시정지를 풀었을 때 지난 예약을 미루는 시간 */
 export const UNPAUSE_DELAY_MS = 30_000;
+/** daily·weekly에서 성공(또는 바꿀 것 없음)으로 끝난 실행 직후 이 시간 안에 오는 정시는 건너뛴다 */
+export const NEAR_SLOT_SKIP_MS = 60 * 60_000;
 
 /** 다음 예약을 정하는 값 */
 export type typScheduleSpec = Pick<
@@ -178,9 +181,18 @@ export function rescheduleOnUnpause(auto: typAutoSyncState, now: Date): string |
     return auto.nextRunAt;
 }
 
-/** 자동 실행이 끝난 뒤의 다음 예약: interval은 끝난 시각 + 주기, daily·weekly는 끝난 뒤 다음 정시 */
-export function nextAfterFinish(finishedAt: string, spec: typScheduleSpec): string {
-    return nextOccurrence(spec, new Date(finishedAt));
+/**
+ * 자동 실행이 끝난 뒤의 다음 예약: interval은 끝난 시각 + 주기, daily·weekly는 끝난 뒤 다음 정시.
+ * daily·weekly가 성공했으면 끝난 뒤 NEAR_SLOT_SKIP_MS 안의 정시는 건너뛴다. 실패·차단·중지면 바로 다음 정시를 재시도 기회로 남긴다.
+ */
+export function nextAfterFinish(
+    finishedAt: string,
+    spec: typScheduleSpec,
+    succeeded: boolean,
+): string {
+    const at = Date.parse(finishedAt);
+    if (spec.kind === "interval" || !succeeded) return nextOccurrence(spec, new Date(at));
+    return nextOccurrence(spec, new Date(at + NEAR_SLOT_SKIP_MS));
 }
 
 /** 지금 실행할 작업: 켜져 있고 예약 시각이 지난 것 중 가장 이른 1건. 없으면 null */
