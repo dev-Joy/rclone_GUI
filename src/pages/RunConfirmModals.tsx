@@ -53,7 +53,12 @@ export default function RunConfirmModals(props: itfRunConfirmModalsProps) {
                 {p && (
                     <>
                         <p>
-                            ‘{p.job.name}’: {realRunConfirmText(p.compare.summary, p.job.mode)}
+                            ‘{p.job.name}’:{" "}
+                            {realRunConfirmText(
+                                p.compare.summary,
+                                p.job.mode,
+                                p.compare.destCanHaveEmptyDirs,
+                            )}
                         </p>
                         <p>
                             {p.job.mode === "sync"

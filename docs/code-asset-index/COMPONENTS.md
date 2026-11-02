@@ -3,7 +3,8 @@
 - 생성일시: 2026-11-02 18:55:29
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 322 건
+- 총 인덱싱 자산: 326 건
+- 수동 갱신: 2026-11-02 (INT-003 Phase 4 — `useEmptyDirSupport`·`emptyDirQueryRoot`·`emptyDirsUnsupportedText`·`hasPlannedChanges`, `clsRemoteService` 설명)
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -28,6 +29,7 @@
 
 | 훅 명칭 | 정의 파일 | 시그니처 / 반환 요약 |
 | :--- | :--- | :--- |
+| `useEmptyDirSupport` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | useEmptyDirSupport(destination: string, configPath: string \| null, enabled: boolean) - 대상 빈 폴더 가능 여부(remotes:features, 400ms 디바운스·마지막 요청만). 로컬·UNC true, 실패·조회 중 null |
 | `usePathProbe` | [`src/lib/use-path-probe.ts`](src/lib/use-path-probe.ts) | usePathProbe() - 커스텀 훅 |
 | `useRunFlow` | [`src/lib/use-run-flow.ts`](src/lib/use-run-flow.ts) | useRunFlow() - 커스텀 훅 |
 
@@ -37,6 +39,7 @@
 | :--- | :--- | :--- |
 | `errorText` | [`src/lib/api.ts`](src/lib/api.ts) | errorText(e: unknown) - 사용자에게 보일 오류 문구 |
 | `getApi` | [`src/lib/api.ts`](src/lib/api.ts) | getApi() - 공통 함수/유틸리티 |
+| `emptyDirsUnsupportedText` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | emptyDirsUnsupportedText(s: Pick<itfCompareSummary, "createDirs">, destCanHaveEmptyDirs: boolean \| null) - 빈 폴더를 만들 수 없는 대상의 폴더 생성 안내. false이고 createDirs > 0일 때만 |
 | `reasonText` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | reasonText(reasons: readonly typModifiedReason[]) - 변경 사유 문구. 예: ["size", "mtime"] → "크기, 수정시간" |
 | `statusLabel` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | statusLabel(status: typCompareStatus, mode: typRunMode) - 상태 라벨. onlyDest: copy "대상만(유지)", sync "대상만(삭제 예정)" |
 | `statusTone` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | statusTone(status: typCompareStatus, mode: typRunMode) - 공통 함수/유틸리티 |
@@ -65,6 +68,8 @@
 | `browserParent` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | browserParent(bookmark: itfRemoteBookmark, path: string) - 기준 경로 위로 올라간 부모. 기준 경로에 닿았거나 밖이면 null |
 | `isBrowserRoot` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | isBrowserRoot(path: string) - remote 루트("name:")인지. 루트는 작업 경로로 고를 수 없다 |
 | `visibleDirEntries` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | visibleDirEntries(entries: readonly itfDirEntry[], shown: number) - 더 보기: 앞에서 shown개만 |
+| `emptyDirQueryRoot` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | emptyDirQueryRoot(destination: string) - 해석되는 remote 경로면 remote 루트("name:"), 아니면 null |
+| `hasPlannedChanges` | [`src/shared/run-plan.ts`](src/shared/run-plan.ts) | hasPlannedChanges(plan, destCanHaveEmptyDirs: boolean \| null) - 실행하면 바뀌는 것이 있는지(자동 noop·실행 버튼). false면 폴더 생성은 세지 않음 |
 | `canStartRun` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | canStartRun(input: itfCanStartRunInput) - 미리보기·실제 실행 버튼 가능 여부와 이유. 공통: 저장 안 됨 → 미저장 변경 → 경로 오류 → 비교 중 → 실행 중. |
 | `deleteDirSamples` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | deleteDirSamples(result: itfCompareResult, limit = 20) - 삭제 예정(대상에만 있음) 폴더 샘플. 경로 오름차순으로 최대 limit개 (전체 범위만) |
 | `deleteSamples` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | deleteSamples(result: itfCompareResult, limit = 20) - 삭제 예정(대상에만 있음) 파일 샘플. 비교 결과 순서(경로 오름차순)로 최대 limit개 |
@@ -101,7 +106,7 @@
 | `clsFsGate` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
 | `clsPathService` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsPathService - 공유 서비스/클라이언트 클래스 |
 | `clsRemoteOps` | [`src/main/services/remote-ops.ts`](src/main/services/remote-ops.ts) | class clsRemoteOps - 공유 서비스/클라이언트 클래스 |
-| `clsRemoteService` | [`src/main/services/remote-service.ts`](src/main/services/remote-service.ts) | class clsRemoteService - 공유 서비스/클라이언트 클래스 |
+| `clsRemoteService` | [`src/main/services/remote-service.ts`](src/main/services/remote-service.ts) | class clsRemoteService - 북마크·폴더 탐색, `features(root, conf)`(backend features 캐시·10초), `canHaveEmptyDirs(dst, conf)`·`emptyDirSupport(input)`(실패는 null) |
 | `clsRunEventBatcher` | [`src/main/services/run-events.ts`](src/main/services/run-events.ts) | class clsRunEventBatcher - 공유 서비스/클라이언트 클래스 |
 | `clsRunLogFile` | [`src/main/services/run-log-file.ts`](src/main/services/run-log-file.ts) | class clsRunLogFile - 공유 서비스/클라이언트 클래스 |
 | `clsActiveRunStore` | [`src/main/services/run-recovery.ts`](src/main/services/run-recovery.ts) | class clsActiveRunStore - 공유 서비스/클라이언트 클래스 |

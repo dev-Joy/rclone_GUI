@@ -35,3 +35,9 @@ export interface itfDirListing {
     /** LIST_DIR_MAX를 넘었거나 rclone 출력이 잘렸다 */
     truncated: boolean;
 }
+
+/** remotes:features 결과(INT-003 FR-32, 편집기 경고용) */
+export interface itfRemoteFeatures {
+    /** 빈 폴더를 만들 수 있는지. 로컬·UNC는 true, 알 수 없으면 null */
+    canHaveEmptyDirs: boolean | null;
+}

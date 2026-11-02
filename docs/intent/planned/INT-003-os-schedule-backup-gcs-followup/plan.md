@@ -117,7 +117,7 @@
 - 롤백: 커밋 되돌림.
 
 **S4-3 문서**
-- 변경: MVP_SPEC E-6 반영, CHANGELOG, rclone-notes(필요 시).
+- 변경: MVP_SPEC "구현 반영 (INT-003 Phase 4)" 표(MVP_SPEC에는 E-6이 없다 — INT-002 spec E-6 해소를 이 표에 적는다, 결정 D-1), CHANGELOG, rclone-notes(필요 시).
 
 ## 3. Intent 태스크 매핑
 

@@ -258,11 +258,18 @@ export function compareStaleReason(
 
 /**
  * 전체 범위의 폴더 변화 한 줄. 예: "빈 폴더 3개 생성, 폴더 2개 삭제",
- * copy: "빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)". 둘 다 0이면 null
+ * copy: "빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)". 둘 다 0이면 null.
+ * 대상이 빈 폴더를 만들 수 없으면(false) 생성 문구는 빼고 emptyDirsUnsupportedText가 따로 보여 준다
  */
-export function dirSummaryText(s: itfCompareSummary, mode: typRunMode): string | null {
+export function dirSummaryText(
+    s: itfCompareSummary,
+    mode: typRunMode,
+    destCanHaveEmptyDirs: boolean | null = null,
+): string | null {
     const parts: string[] = [];
-    if (s.createDirs > 0) parts.push(`빈 폴더 ${s.createDirs}개 생성`);
+    if (s.createDirs > 0 && destCanHaveEmptyDirs !== false) {
+        parts.push(`빈 폴더 ${s.createDirs}개 생성`);
+    }
     if (s.deleteDirs > 0) {
         parts.push(
             mode === "sync"
@@ -271,6 +278,15 @@ export function dirSummaryText(s: itfCompareSummary, mode: typRunMode): string |
         );
     }
     return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** 빈 폴더를 만들 수 없는 대상의 폴더 생성 안내(INT-003 FR-31). false이고 createDirs > 0일 때만, 아니면 null */
+export function emptyDirsUnsupportedText(
+    s: Pick<itfCompareSummary, "createDirs">,
+    destCanHaveEmptyDirs: boolean | null,
+): string | null {
+    if (destCanHaveEmptyDirs !== false || s.createDirs === 0) return null;
+    return `이 저장소는 빈 폴더를 만들 수 없음(${s.createDirs}개) — 실행해도 원본의 빈 폴더는 대상에 생기지 않고, 비교할 때마다 다시 보입니다. 자동 실행은 이 차이만으로는 실행하지 않습니다.`;
 }
 
 export interface itfCanStartCompareInput {

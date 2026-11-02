@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
+import { clsAppError } from "@/main/lib/app-error";
 import type { itfProcessResult } from "@/main/rclone/process";
 import { clsRemoteService } from "@/main/services/remote-service";
 import { migrateSchema } from "@/main/store/db-schema";
@@ -12,6 +13,7 @@ import { clsRemoteStore } from "@/main/store/remote-store";
 import { clsSqliteDb } from "@/main/store/sqlite-db";
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import { LIST_DIR_MAX } from "@/shared/option-limits";
+import { parsePath, type itfParsedPath } from "@/shared/path-utils";
 import type { typTestPathInput } from "@/shared/schemas/rclone";
 import { readFixture } from "./fixtures";
 
@@ -71,6 +73,8 @@ interface itfOptions {
     remotes?: string[];
     result?: Partial<itfProcessResult>;
     probe?: itfPathProbe;
+    /** rcloneEnv.require가 던진다(rclone 없음) */
+    requireFails?: boolean;
 }
 
 function f_Make(o: itfOptions = {}) {
@@ -80,7 +84,10 @@ function f_Make(o: itfOptions = {}) {
     const service = new clsRemoteService({
         store: f_Store(),
         rcloneEnv: {
-            require: async () => ({ binaryPath: BIN, configPath: CONF }),
+            require: async () => {
+                if (o.requireFails) throw new clsAppError("RCLONE_NOT_FOUND");
+                return { binaryPath: BIN, configPath: CONF };
+            },
             resolveConfigFor: async (override) => {
                 if (override !== undefined && override !== null) return override;
                 return o.configPath !== undefined ? o.configPath : CONF;
@@ -338,5 +345,69 @@ describe("clsRemoteService.features (INT-003 FR-36)", () => {
         });
         await m.service.features("test-remote:", CONF);
         expect(m.runs).toHaveLength(2);
+    });
+});
+
+function f_Parsed(raw: string): itfParsedPath {
+    const r = parsePath(raw);
+    if (!r.ok) throw new Error(r.issue.message);
+    return r.path;
+}
+
+describe("clsRemoteService 빈 폴더 가능 여부 (INT-003 FR-30·FR-32)", () => {
+    it("로컬·UNC는 조회하지 않고 true", async () => {
+        const m = f_Make();
+        expect(await m.service.canHaveEmptyDirs(f_Parsed("D:\\tmp\\dst"), CONF)).toBe(true);
+        expect(await m.service.canHaveEmptyDirs(f_Parsed("\\\\server\\share\\x"), CONF)).toBe(true);
+        expect(m.runs).toEqual([]);
+    });
+
+    it("remote는 features의 CanHaveEmptyDirectories(memory → false)", async () => {
+        const m = f_Make({ result: { stdout: readFixture("features-memory", "stdout") } });
+        expect(await m.service.canHaveEmptyDirs(f_Parsed("test-remote:a/b"), CONF)).toBe(false);
+        expect(m.runs[0]?.args.at(-1)).toBe("test-remote:");
+    });
+
+    it("exit 1(없는 remote) → null", async () => {
+        const m = f_Make({
+            result: {
+                exitCode: 1,
+                stdout: readFixture("features-missing-remote", "stdout"),
+                stderrTail: readFixture("features-missing-remote", "stderr"),
+            },
+        });
+        expect(await m.service.canHaveEmptyDirs(f_Parsed("test-remote:a"), CONF)).toBeNull();
+    });
+
+    it("rclone이 없어도 던지지 않고 null", async () => {
+        const m = f_Make({ requireFails: true });
+        expect(await m.service.canHaveEmptyDirs(f_Parsed("test-remote:a"), CONF)).toBeNull();
+    });
+
+    it("emptyDirSupport: 해석 실패 → null, 로컬 → true, 설정 없음 → null", async () => {
+        const m = f_Make({ configPath: null });
+        expect(await m.service.emptyDirSupport({ path: "rel/path" })).toEqual({
+            canHaveEmptyDirs: null,
+        });
+        expect(await m.service.emptyDirSupport({ path: "D:\\tmp\\dst" })).toEqual({
+            canHaveEmptyDirs: true,
+        });
+        expect(await m.service.emptyDirSupport({ path: "test-remote:a" })).toEqual({
+            canHaveEmptyDirs: null,
+        });
+        expect(m.runs).toEqual([]);
+        expect(m.opsCalls).toEqual([]);
+    });
+
+    it("emptyDirSupport: remote는 작업 conf로 조회하고 두 번째는 캐시", async () => {
+        const m = f_Make({ result: { stdout: readFixture("features-local", "stdout") } });
+        const other = "C:\\fake\\job.conf";
+        expect(
+            await m.service.emptyDirSupport({ path: "test-remote:a", configPath: other }),
+        ).toEqual({ canHaveEmptyDirs: true });
+        await m.service.emptyDirSupport({ path: "test-remote:b/c", configPath: other });
+        expect(m.runs).toHaveLength(1);
+        expect(m.runs[0]?.args).toContain(other);
+        expect(m.opsCalls).toEqual([]);
     });
 });

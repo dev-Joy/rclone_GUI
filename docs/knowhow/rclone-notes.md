@@ -193,3 +193,10 @@
 - 명령: 백업이 대상 안 / 원본 안 + `--dry-run` (fixture `backup-overlap-dest`·`backup-overlap-src`)
 - 결과: `Failed to sync: destination and parameter to --backup-dir mustn't overlap` / `source and parameter to --backup-dir mustn't overlap`, exit 7, 전송 없음.
 - 영향: 앱은 저장 단계에서 같은 검사를 먼저 해 오류를 필드에 보여 준다(대상 안을 필터로 제외하면 rclone은 허용하지만 앱은 거부한다).
+
+## 2026-11-02 · rclone v1.75.1 · Windows 11 x64 (INT-003 T-05: 빈 폴더를 만들 수 없는 대상)
+
+### 33. 이름 있는 `type = memory` remote는 rclone 프로세스마다 비어 있다
+- 명령: 임시 conf에 `[<이름>]` `type = memory`를 두고 `copy --create-empty-src-dirs --config <임시 conf> <임시 원본(파일 1 + 빈 폴더 1)> <이름>:x` → 다음 프로세스에서 `lsjson --config <임시 conf> <이름>:x`, `backend features --config <임시 conf> <이름>:`
+- 결과: copy는 exit 0이지만 다음 `lsjson`은 `error listing: directory not found`, exit 3. `Features.CanHaveEmptyDirectories`는 `false`(#27의 `:memory:`와 같음).
+- 영향: 앱 경로 검사가 `:memory:`·연결 문자열을 거부하므로, AC-13 로컬 대용 테스트(통합 `run.scope.test.ts`, E2E `empty-dirs.spec.ts`)는 임시 conf의 이름 있는 memory remote를 쓴다. 실행 뒤에도 대상이 비어 다시 비교하면 같은 차이가 나오므로 원본에는 빈 폴더만 둔다(파일을 두면 매번 createFiles가 남는다). 앱 실행 동안 features는 캐시하므로 conf의 `directory_markers` 등을 바꾸면 앱을 다시 시작해야 반영된다.

@@ -51,6 +51,22 @@ export function plannedDeleteCount(plan: Pick<typRunPlan, "deleteFiles" | "delet
     return plan.deleteFiles + plan.deleteDirs;
 }
 
+/**
+ * 실행하면 바뀌는 것이 있는지(자동 noop·수동 "바꿀 것 없음" 판정, INT-003 FR-33).
+ * 대상이 빈 폴더를 만들 수 없으면(false) 폴더 생성은 세지 않는다(실행해도 생기지 않아 매번 남음).
+ * true·null은 지금과 같다. 삭제 수는 그대로 센다(삭제 판정에는 영향 없음)
+ */
+export function hasPlannedChanges(
+    plan: Pick<
+        typRunPlan,
+        "createFiles" | "updateFiles" | "createDirs" | "deleteFiles" | "deleteDirs"
+    >,
+    destCanHaveEmptyDirs: boolean | null,
+): boolean {
+    const createDirs = destCanHaveEmptyDirs === false ? 0 : plan.createDirs;
+    return plan.createFiles + plan.updateFiles + createDirs + plannedDeleteCount(plan) > 0;
+}
+
 export interface itfPlanMatch {
     ok: boolean;
     /** 다른 항목 설명. 예: "복사: 계획 4개, 미리보기 3개 + 시간만 맞춤 0개" */

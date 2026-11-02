@@ -3,6 +3,7 @@
  * 저장 전에 화면에서 검증하고(필드별 오류), main이 다시 검증해 거부하면 폼 위에 이유를 보여 준다.
  * 자동 실행은 앱 안 스케줄러 또는 Windows 작업 스케줄러(INT-003 T-01) 중에서 고른다. Windows 쪽은 설치한 앱에서만
  * 고를 수 있고(아니면 비활성 + 이유), 고르면 암호화된 rclone.conf 미지원 안내와 등록 상태(미등록·실패)를 보인다.
+ * '전체' 범위인데 대상 저장소가 빈 폴더를 만들 수 없으면 범위 아래에 경고만 보인다(저장은 막지 않음, INT-003 FR-32).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -30,6 +31,7 @@ import {
     type itfJobFormCheck,
     type typIntervalUnit,
 } from "@/lib/job-form";
+import { useEmptyDirSupport } from "@/lib/use-empty-dir-support";
 import { formatLocalDateTime } from "@/shared/format";
 import { nextOccurrence } from "@/shared/schedule";
 import type { typRunMode } from "@/shared/schemas/common";
@@ -98,6 +100,8 @@ const WEEKDAY_OPTIONS: ReadonlyArray<{ bit: number; label: string }> = [
 /** 백업 폴더 입력 안내(INT-003 T-03). 앱이 지우지 않는다는 안내는 경고 목록(BACKUP_DIR_NOTE_TEXT)에 있다 */
 const BACKUP_DIR_HINT =
     "비우면 쓰지 않습니다. 대상과 같은 드라이브(같은 네트워크 공유·리모트)에서 원본·대상 밖의 폴더를 고르세요. 지정하면 동기화에서 ‘오류가 나도 계속’을 쓸 수 있습니다.";
+const EMPTY_DIR_SCOPE_WARNING =
+    "대상 저장소는 빈 폴더를 만들 수 없습니다. ‘전체’ 범위여도 원본의 빈 폴더는 대상에 생기지 않고 비교할 때마다 따로 표시됩니다. 자동 실행은 이 차이만으로는 실행하지 않습니다.";
 const BACKEND_APP_LABEL = "앱이 켜져 있을 때";
 const BACKEND_OS_LABEL = "Windows 작업 스케줄러(앱이 꺼져 있어도)";
 
@@ -161,6 +165,11 @@ export default function JobEditor() {
     const osStatus = useSchedulerStore((s) => s.osStatus);
     const loginHintShown = useUiStore((s) => s.loginHintShown);
     const markLoginHintShown = useUiStore((s) => s.markLoginHintShown);
+    const destEmptyDirs = useEmptyDirSupport(
+        draft?.destination ?? "",
+        draft?.configPathOverride ?? null,
+        draft?.scope === "all",
+    );
 
     // ========== 내부 변수 (_V) ==========
     const caseInsensitive = settings?.compare.caseInsensitivePaths ?? true;
@@ -185,6 +194,7 @@ export default function JobEditor() {
     const override = draft.configPathOverride;
     const otherConfig = override !== null || wantOverride;
     const auto = draft.autoSync;
+    const emptyDirWarning = draft.scope === "all" && destEmptyDirs === false;
     const isOs = auto.backend === "os";
     const launchAtLogin = settings?.ui.launchAtLogin ?? false;
     const osAvailable = osStatus?.available ?? false;
@@ -364,6 +374,15 @@ export default function JobEditor() {
                             </label>
                         ))}
                     </fieldset>
+                    {emptyDirWarning && (
+                        <output
+                            className={styles.notice}
+                            data-level="warning"
+                            id="job-scope-empty-dir-warning"
+                        >
+                            {EMPTY_DIR_SCOPE_WARNING}
+                        </output>
+                    )}
                 </section>
 
                 <section className={styles.section} aria-labelledby="job-paths-title">

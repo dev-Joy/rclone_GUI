@@ -8,6 +8,8 @@
  * - 저장소 기능(features, INT-003 FR-36): `backend features <remote 루트>`를 (rclone 경로, conf 경로, 루트) 키로
  *   앱 실행 동안 캐시한다. 실패·시간 초과는 알 수 없음(null)으로 돌려주고 캐시하지 않는다. 실행 락 안에서도
  *   부르므로 탐색 락(remote-ops)을 쓰지 않는다.
+ * - 빈 폴더 가능 여부(INT-003 FR-30·FR-32): 로컬·UNC는 true, remote는 features의 canHaveEmptyDirs.
+ *   어떤 실패도 던지지 않고 null(알 수 없음)로 돌려준다(비교·편집기 경고용).
  *
  * @author dev-Joy 2026-10-30
  */
@@ -30,15 +32,16 @@ import type { clsRemoteOps } from "@/main/services/remote-ops";
 import type { clsRemoteStore } from "@/main/store/remote-store";
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import { LIST_DIR_MAX } from "@/shared/option-limits";
-import { parsePath } from "@/shared/path-utils";
+import { parsePath, type itfParsedPath } from "@/shared/path-utils";
 import { joinRemotePath } from "@/shared/remote-path";
 import type {
     typListDirInput,
     typRemoteCreateInput,
+    typRemoteFeaturesInput,
     typRemoteUpdateInput,
 } from "@/shared/schemas/remotes";
 import type { typTestPathInput } from "@/shared/schemas/rclone";
-import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
+import type { itfDirListing, itfRemoteBookmark, itfRemoteFeatures } from "@/shared/types/remotes";
 
 export interface itfRemoteServiceDeps {
     store: clsRemoteStore;
@@ -195,6 +198,37 @@ export class clsRemoteService {
         const f = parseBackendFeatures(r.stdout);
         if (f.canMove !== null || f.canHaveEmptyDirs !== null) this.featuresCache.set(key, f);
         return { ...f };
+    }
+
+    /**
+     * 대상이 빈 폴더를 만들 수 있는지(INT-003 FR-30). 로컬·UNC는 조회하지 않고 true.
+     * remote는 features(dst.root)의 canHaveEmptyDirs. 어떤 실패(rclone 없음 포함)도 던지지 않고 null(E-12)
+     */
+    async canHaveEmptyDirs(dst: itfParsedPath, configPath: string | null): Promise<boolean | null> {
+        if (dst.kind !== "remote") return true;
+        try {
+            return (await this.features(dst.root, configPath)).canHaveEmptyDirs;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * remotes:features. 경로를 해석하지 못하면(입력 중) null, 로컬·UNC는 true,
+     * remote는 이 작업의 conf를 찾지 못하거나 실패하면 null
+     */
+    async emptyDirSupport(input: typRemoteFeaturesInput): Promise<itfRemoteFeatures> {
+        const parsed = parsePath(input.path);
+        if (!parsed.ok) return { canHaveEmptyDirs: null };
+        if (parsed.path.kind !== "remote") return { canHaveEmptyDirs: true };
+        let configPath: string | null;
+        try {
+            configPath = await this.deps.rcloneEnv.resolveConfigFor(input.configPath);
+        } catch {
+            return { canHaveEmptyDirs: null };
+        }
+        if (configPath === null) return { canHaveEmptyDirs: null };
+        return { canHaveEmptyDirs: await this.canHaveEmptyDirs(parsed.path, configPath) };
     }
 
     /** rclone.conf에 없는 remote는 북마크로 저장하지 않는다 */

@@ -18,7 +18,8 @@
  *   (rclone-notes #25) 폴더 삭제는 계획 토큰·확인한 폴더 삭제 수·사전 확인이 막는다(INT-002 T-05).
  * - 자동 실행(startAuto, 스케줄러·OS 예약 `--run-job`): trigger는 "scheduler" 또는 "os-scheduler". 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
  *   수동 비교 결과는 건드리지 않음) → 작업 rev 재확인 → 자동 게이트(f_CheckAutoGate: checkPlanSafety → 삭제가
- *   있으면 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 켜짐 모두 필요 → 바꿀 것 없으면 noop) → 수동과 같은
+ *   있으면 allowDeletes·autoMaxDeletes·대량 아님·사전 확인 켜짐 모두 필요 → 바꿀 것 없으면 noop. 대상이 빈 폴더를
+ *   못 만들면 폴더 생성은 바꿀 것으로 세지 않음, INT-003 FR-33) → 수동과 같은
  *   execute/finalize. 게이트에 걸리면 아무것도 실행하지 않고 blocked 이력, noop은 이력 없이 lastRun만 남긴다.
  * - recordAutoBlocked: OS 예약 진입 검사에 걸린 실행은 락 없이 blocked 이력 1건 + lastRun만 남긴다(INT-003 FR-12).
  * - 취소 사유(cancel(runId, reason)): 시간 제한(timeLimit)으로 멈추면 이력 문구를 TIME_LIMIT_CANCELED_TEXT로 바꾼다(코드는 CANCELED).
@@ -76,7 +77,12 @@ import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { joinBackupPath } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
-import { checkPreflight, planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
+import {
+    checkPreflight,
+    hasPlannedChanges,
+    planFromCompare,
+    plannedDeleteCount,
+} from "@/shared/run-plan";
 import type {
     typAppErrorPayload,
     typAutoTrigger,
@@ -306,7 +312,7 @@ function f_CheckAutoGate(
             );
         }
     }
-    if (plan.createFiles + plan.updateFiles + plan.createDirs + d === 0) {
+    if (!hasPlannedChanges(plan, result.destCanHaveEmptyDirs)) {
         return { status: "noop", error: null, plan };
     }
     return {

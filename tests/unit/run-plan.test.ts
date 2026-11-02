@@ -6,6 +6,7 @@ import {
     checkPreflight,
     expectedDeleteDirs,
     expectedDeletes,
+    hasPlannedChanges,
     matchPlanWithDryRun,
     planFromCompare,
     plannedDeleteCount,
@@ -71,6 +72,30 @@ describe("planFromCompare / expectedDeletes", () => {
         expect(expectedDeleteDirs(dirs, "copy")).toBe(0);
         expect(plannedDeleteCount(planFromCompare(dirs, "sync"))).toBe(4);
     });
+});
+
+describe("hasPlannedChanges (INT-003 FR-33)", () => {
+    const NONE = { createFiles: 0, updateFiles: 0, createDirs: 0, deleteFiles: 0, deleteDirs: 0 };
+
+    it("모두 0이면 대상과 관계없이 false", () => {
+        expect(hasPlannedChanges(NONE, true)).toBe(false);
+        expect(hasPlannedChanges(NONE, false)).toBe(false);
+        expect(hasPlannedChanges(NONE, null)).toBe(false);
+    });
+
+    it("폴더 생성만: 빈 폴더를 못 만드는 대상(false)이면 false, true·null은 true", () => {
+        const dirsOnly = { ...NONE, createDirs: 3 };
+        expect(hasPlannedChanges(dirsOnly, false)).toBe(false);
+        expect(hasPlannedChanges(dirsOnly, true)).toBe(true);
+        expect(hasPlannedChanges(dirsOnly, null)).toBe(true);
+    });
+
+    it.each(["createFiles", "updateFiles", "deleteFiles", "deleteDirs"] as const)(
+        "false여도 %s가 있으면 true(폴더 생성 말고는 그대로 센다)",
+        (key) => {
+            expect(hasPlannedChanges({ ...NONE, createDirs: 2, [key]: 1 }, false)).toBe(true);
+        },
+    );
 });
 
 describe("matchPlanWithDryRun", () => {

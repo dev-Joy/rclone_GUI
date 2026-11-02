@@ -11,7 +11,7 @@ import { compareStaleReason } from "@/lib/compare-view";
 import { formatBytes } from "@/shared/format";
 import { checkRunPaths } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, type typDeleteThresholds } from "@/shared/run-gates";
-import { planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
+import { hasPlannedChanges, planFromCompare } from "@/shared/run-plan";
 import type { typRunMode, typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
 import type { typRunStats } from "@/shared/schemas/run";
@@ -43,7 +43,8 @@ export interface itfCanStartRunInput {
 /**
  * 미리보기·실제 실행 버튼 가능 여부와 이유.
  * 공통: 저장 안 됨 → 미저장 변경 → 경로 오류 → 비교 중 → 실행 중.
- * 실제 실행: 유효한 비교 결과 → 낡음 → 모드·범위 변경 → 계획 안전 검사(checkPlanSafety) → 바꿀 것 없음.
+ * 실제 실행: 유효한 비교 결과 → 낡음 → 모드·범위 변경 → 계획 안전 검사(checkPlanSafety) → 바꿀 것 없음
+ * (대상이 빈 폴더를 만들 수 없으면 폴더 생성은 세지 않음, INT-003 FR-33·D-5).
  */
 export function canStartRun(input: itfCanStartRunInput): typCheck {
     const { job } = input;
@@ -74,7 +75,13 @@ export function canStartRun(input: itfCanStartRunInput): typCheck {
     const plan = planFromCompare(r.summary, job.mode);
     const block = checkPlanSafety(plan, job);
     if (block) return { ok: false, reason: block.message };
-    if (plan.createFiles + plan.updateFiles + plan.createDirs + plannedDeleteCount(plan) === 0) {
+    if (!hasPlannedChanges(plan, r.destCanHaveEmptyDirs)) {
+        if (plan.createDirs > 0) {
+            return {
+                ok: false,
+                reason: `바꿀 파일이 없습니다(이 저장소는 빈 폴더를 만들 수 없어 빈 폴더 ${plan.createDirs}개는 생기지 않습니다).`,
+            };
+        }
         return {
             ok: false,
             reason:
@@ -202,13 +209,24 @@ export function dryRunHeadline(s: itfDryRunSummary): string {
 /**
  * 실제 실행 확인 문구(비교 결과 기준). 예: "대상에 3개 복사, 1개 덮어씀 (총 1.2 MB)".
  * 전체 범위면 "빈 폴더 N개 생성", sync면 "폴더 N개 삭제"도 붙인다.
+ * 대상이 빈 폴더를 만들 수 없으면(false) "빈 폴더 N개는 만들 수 없음"으로 쓴다(INT-003 FR-31).
  */
-export function realRunConfirmText(s: itfCompareSummary, mode: typRunMode): string {
+export function realRunConfirmText(
+    s: itfCompareSummary,
+    mode: typRunMode,
+    destCanHaveEmptyDirs: boolean | null = null,
+): string {
     const parts: string[] = [];
     if (s.createFiles > 0) parts.push(`대상에 ${s.createFiles}개 복사`);
     if (s.updateFiles > 0) parts.push(`${s.updateFiles}개 덮어씀`);
     if (mode === "sync" && s.deleteFiles > 0) parts.push(`${s.deleteFiles}개 삭제`);
-    if (s.createDirs > 0) parts.push(`빈 폴더 ${s.createDirs}개 생성`);
+    if (s.createDirs > 0) {
+        parts.push(
+            destCanHaveEmptyDirs === false
+                ? `빈 폴더 ${s.createDirs}개는 만들 수 없음`
+                : `빈 폴더 ${s.createDirs}개 생성`,
+        );
+    }
     if (mode === "sync" && s.deleteDirs > 0) parts.push(`폴더 ${s.deleteDirs}개 삭제`);
     if (parts.length === 0) return "바뀌는 파일이 없습니다.";
     return `${parts.join(", ")} (총 ${formatBytes(s.transferBytes)})`;

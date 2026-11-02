@@ -1,7 +1,7 @@
 /**
  * 비교 → 복사 → 이력 E2E. 임시 원본·대상 폴더와 임시 userData만 쓰고, 실제 rclone이 없으면 건너뛴다.
  * 화면에서 비교 요약(복사 2·동일 1·대상에만 있음 1)을 확인한 뒤 복사 실행 확인 창을 거쳐
- * 대상 파일이 생기고 이력에 '복사 완료'가 남는지 본다.
+ * 대상 파일이 생기고 이력에 '복사 완료'가 남는지 본다. 로컬 대상은 '전체' 범위여도 빈 폴더 경고·안내가 없다(INT-003 T-05).
  *
  * @author dev-Joy 2026-10-29
  */
@@ -58,7 +58,8 @@ test("비교 요약을 확인하고 복사한 뒤 이력이 남는다", async ()
     try {
         const { page } = harness;
         await waitForApp(page);
-        await createJob(page, { name: JOB_NAME, source, destination });
+        await createJob(page, { name: JOB_NAME, source, destination, scope: "all" });
+        await expect(page.locator("#job-scope-empty-dir-warning")).toHaveCount(0);
 
         const workspace = page.locator("section[aria-labelledby='job-title']");
         await workspace.getByRole("button", { name: "비교", exact: true }).click();
@@ -68,6 +69,7 @@ test("비교 요약을 확인하고 복사한 뒤 이력이 남는다", async ()
         await expect(page.getByRole("button", { name: "동일 1개" })).toBeVisible();
         await expect(page.getByRole("button", { name: "1개 대상에만 있음(유지)" })).toBeVisible();
         await expect(page.getByRole("region", { name: "비교 결과 목록" })).toBeVisible();
+        await expect(page.locator("#compare-empty-dirs-unsupported")).toHaveCount(0);
 
         // 비교 결과가 있어야 실행 버튼이 켜진다
         await workspace.getByRole("button", { name: "복사 실행", exact: true }).click();

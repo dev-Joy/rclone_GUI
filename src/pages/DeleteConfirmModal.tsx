@@ -112,7 +112,9 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                 {f_Path("원본", job.source)}
                 {f_Path("대상", job.destination)}
                 {backupDir !== null && f_Path("백업 폴더", backupDir)}
-                <p className={styles.headline}>{realRunConfirmText(compare.summary, job.mode)}</p>
+                <p className={styles.headline}>
+                    {realRunConfirmText(compare.summary, job.mode, compare.destCanHaveEmptyDirs)}
+                </p>
                 {info.deleteFiles > 0 && (
                     <p className={styles.deletes}>
                         대상 파일 {info.destFiles.toLocaleString("ko-KR")}개 중 {count}개 삭제 (

@@ -22,6 +22,7 @@ function f_Result(jobId: string, sourceFiles = 1): itfCompareResult {
         scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
+        destCanHaveEmptyDirs: true,
         summary: { ...emptySummary(), sourceFiles },
         entries: [],
         dirChanges: [],

@@ -67,3 +67,12 @@ export const zListDirInput = z
     })
     .strict();
 export type typListDirInput = z.infer<typeof zListDirInput>;
+
+/** 저장소 기능 조회 입력(remotes:features). configPath는 이 작업의 rclone.conf(null = 감지된 설정) */
+export const zRemoteFeaturesInput = z
+    .object({
+        path: z.string().trim().min(1).max(PATH_MAX_INPUT),
+        configPath: zConfigPathInput.optional(),
+    })
+    .strict();
+export type typRemoteFeaturesInput = z.infer<typeof zRemoteFeaturesInput>;

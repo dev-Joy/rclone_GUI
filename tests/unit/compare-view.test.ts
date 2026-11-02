@@ -7,6 +7,7 @@ import {
     compareStaleReason,
     DEFAULT_COMPARE_VIEW,
     dirSummaryText,
+    emptyDirsUnsupportedText,
     reasonText,
     selectRowIndexes,
     statusLabel,
@@ -184,6 +185,24 @@ describe("dirSummaryText (INT-002 T-05)", () => {
         expect(dirSummaryText(s, "sync")).toBe("빈 폴더 3개 생성, 폴더 2개 삭제");
         expect(dirSummaryText(s, "copy")).toBe("빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)");
         expect(dirSummaryText(emptySummary(), "sync")).toBeNull();
+    });
+
+    it("빈 폴더를 못 만드는 대상(false)이면 생성 문구를 빼고, 남는 것이 없으면 null (INT-003 FR-31)", () => {
+        const s = { ...emptySummary(), createDirs: 3, deleteDirs: 2 };
+        expect(dirSummaryText(s, "sync", false)).toBe("폴더 2개 삭제");
+        expect(dirSummaryText(s, "sync", null)).toBe("빈 폴더 3개 생성, 폴더 2개 삭제");
+        expect(dirSummaryText({ ...emptySummary(), createDirs: 3 }, "copy", false)).toBeNull();
+    });
+});
+
+describe("emptyDirsUnsupportedText (INT-003 FR-31)", () => {
+    it("false이고 폴더 생성이 있을 때만 안내", () => {
+        expect(emptyDirsUnsupportedText({ createDirs: 0 }, false)).toBeNull();
+        expect(emptyDirsUnsupportedText({ createDirs: 3 }, true)).toBeNull();
+        expect(emptyDirsUnsupportedText({ createDirs: 3 }, null)).toBeNull();
+        const t = emptyDirsUnsupportedText({ createDirs: 3 }, false);
+        expect(t).toContain("이 저장소는 빈 폴더를 만들 수 없음(3개)");
+        expect(t).toContain("자동 실행은 이 차이만으로는 실행하지 않습니다");
     });
 });
 

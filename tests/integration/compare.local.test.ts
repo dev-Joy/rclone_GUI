@@ -119,6 +119,11 @@ function f_Service(opts: itfHarnessOptions = {}) {
         settings: { get: () => settings },
         rcloneEnv,
         pathService,
+        features: {
+            canHaveEmptyDirs: async () => {
+                throw new Error("로컬 대상은 빈 폴더 가능 여부를 조회하지 않는다");
+            },
+        },
         activity: new clsActivityLock(),
         excludes: { patternsFor: () => [] },
         excludeFileDir: join(root, "exclude-files"),
@@ -186,6 +191,7 @@ describe.skipIf(!HAS_RCLONE)("비교 서비스 (실제 rclone, 임시 폴더)", 
             "gone/old.txt": "onlyDest",
         });
         expect(r.destMissing).toBe(false);
+        expect(r.destCanHaveEmptyDirs).toBe(true);
         expect(r.planToken).toMatch(/\S/);
         expect(svc.get(JOB_ID)).toBe(r);
         expect(svc.getActive()).toBeNull();

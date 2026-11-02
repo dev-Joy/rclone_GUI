@@ -136,6 +136,8 @@ interface itfHarnessOptions {
     probes?: Record<string, Partial<itfPathProbe>>;
     configPath?: string | null;
     spawnError?: string;
+    /** remote 대상의 빈 폴더 가능 여부(가짜 features). 기본 true */
+    emptyDirs?: boolean | null;
 }
 
 function f_Harness(o: itfHarnessOptions = {}) {
@@ -145,6 +147,8 @@ function f_Harness(o: itfHarnessOptions = {}) {
     const events: itfCompareProgress[] = [];
     const logs: string[] = [];
     const probed: string[] = [];
+    /** features 조회 기록: [remote 루트, conf] */
+    const featureCalls: Array<[string, string | null]> = [];
     let nowMs = T0;
     const defaultScript: typScript = (path) =>
         path === SRC
@@ -209,6 +213,12 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 return f_Probe(path, o.probes?.[path]);
             },
         },
+        features: {
+            canHaveEmptyDirs: async (dst, configPath) => {
+                featureCalls.push([dst.root, configPath]);
+                return o.emptyDirs === undefined ? true : o.emptyDirs;
+            },
+        },
         activity: new clsActivityLock(),
         excludes,
         excludeFileDir,
@@ -234,6 +244,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
         events,
         logs,
         probed,
+        featureCalls,
         setNow: (ms: number) => {
             nowMs = ms;
         },
@@ -278,6 +289,7 @@ describe("clsCompareService.run 정상", () => {
             jobRev: 0,
             mode: "sync",
             destMissing: false,
+            destCanHaveEmptyDirs: true,
             method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         });
         expect(h.svc.get(JOB_ID)).toBe(r);
@@ -350,6 +362,42 @@ describe("clsCompareService.run 정상", () => {
         for (const line of h.logs) {
             expect(line).not.toMatch(/fake|a\.txt|same\.txt|folder/);
         }
+    });
+});
+
+describe("clsCompareService 대상 빈 폴더 가능 여부 (INT-003 FR-30)", () => {
+    it("로컬 대상은 조회하지 않고 true", async () => {
+        const h = f_Harness({ jobs: [f_Job({ scope: "all" })] });
+        expect((await h.svc.run(JOB_ID)).destCanHaveEmptyDirs).toBe(true);
+        expect(h.featureCalls).toEqual([]);
+    });
+
+    it("‘전체’ 범위 remote 대상은 features 값을 그대로(false)", async () => {
+        const h = f_Harness({
+            jobs: [f_Job({ scope: "all", destination: "test-remote:dst" })],
+            emptyDirs: false,
+        });
+        const r = await h.svc.run(JOB_ID);
+        expect(r.destCanHaveEmptyDirs).toBe(false);
+        expect(h.featureCalls).toEqual([["test-remote:", CONF]]);
+        expect(r.warnings.join("\n")).not.toContain("빈 폴더");
+    });
+
+    it("‘파일만’ 범위 remote 대상은 조회하지 않고 null", async () => {
+        const h = f_Harness({
+            jobs: [f_Job({ scope: "files", destination: "test-remote:dst" })],
+            emptyDirs: false,
+        });
+        expect((await h.svc.run(JOB_ID)).destCanHaveEmptyDirs).toBeNull();
+        expect(h.featureCalls).toEqual([]);
+    });
+
+    it("조회 결과가 알 수 없음(null)이면 null", async () => {
+        const h = f_Harness({
+            jobs: [f_Job({ scope: "all", destination: "test-remote:dst" })],
+            emptyDirs: null,
+        });
+        expect((await h.svc.run(JOB_ID)).destCanHaveEmptyDirs).toBeNull();
     });
 });
 

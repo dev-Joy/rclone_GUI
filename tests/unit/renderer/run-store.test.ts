@@ -31,6 +31,7 @@ function f_Compare(jobId: string, mode: "copy" | "sync" = "copy"): itfCompareRes
         scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
+        destCanHaveEmptyDirs: true,
         summary: { ...emptySummary(), createFiles: 2, deleteFiles: 3 },
         entries: [],
         dirChanges: [],

@@ -88,6 +88,12 @@ export interface itfCompareResult {
     method: itfCompareMethod;
     /** 대상 폴더가 없어 빈 목록으로 비교했다(실행하면 새로 만든다) */
     destMissing: boolean;
+    /**
+     * 대상이 빈 폴더를 만들 수 있는지(INT-003 FR-30·FR-31). 로컬·UNC는 true,
+     * remote는 backend features의 CanHaveEmptyDirectories, 조회 실패·알 수 없음은 null(지금처럼 동작).
+     * 파일만 범위의 remote 대상은 조회하지 않고 null(결정 D-3)
+     */
+    destCanHaveEmptyDirs: boolean | null;
     summary: itfCompareSummary;
     /** 경로 키 오름차순 */
     entries: itfDiffEntry[];

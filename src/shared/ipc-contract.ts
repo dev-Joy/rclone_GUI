@@ -21,6 +21,7 @@ import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type {
     typListDirInput,
     typRemoteCreateInput,
+    typRemoteFeaturesInput,
     typRemoteIdInput,
     typRemoteUpdateInput,
 } from "@/shared/schemas/remotes";
@@ -32,7 +33,7 @@ import type {
     itfCompareResult,
 } from "@/shared/types/compare";
 import type { itfRunLogView } from "@/shared/types/history";
-import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
+import type { itfDirListing, itfRemoteBookmark, itfRemoteFeatures } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 import type {
     itfAppNotify,
@@ -60,6 +61,7 @@ export const IPC_CHANNELS = {
     remotesUpdate: "remotes:update",
     remotesDelete: "remotes:delete",
     remotesTest: "remotes:test",
+    remotesFeatures: "remotes:features",
     compareRun: "compare:run",
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
@@ -208,6 +210,8 @@ export interface itfRcloneGuiApi {
         remove(input: typRemoteIdInput): Promise<typApiResult<null>>;
         /** 기준 경로를 lsjson --max-depth 1로 확인한다(파일은 바꾸지 않음) */
         test(input: typRemoteIdInput): Promise<typApiResult<itfPathProbe>>;
+        /** 대상 경로의 저장소 기능(빈 폴더 가능 여부). 로컬·UNC는 조회하지 않고 true, 실패는 null(오류 아님) */
+        features(input: typRemoteFeaturesInput): Promise<typApiResult<itfRemoteFeatures>>;
     };
     compare: {
         /** 원본·대상 목록을 읽어 비교한다(파일은 바꾸지 않음). 다른 비교·실행 중이면 BUSY */

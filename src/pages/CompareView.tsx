@@ -1,7 +1,8 @@
 /**
  * 작업 화면의 "비교·미리보기" 탭 본문. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과.
  * 비교 중지는 작업 화면의 공통 중지 막대(JobActivityBar)에 있다.
- * 결과: 안내 배너(낡음·형식 충돌·경고) → 비교 방식 → 요약 카드 → 도구 막대 → 가상 목록 표.
+ * 결과: 안내 배너(낡음·형식 충돌·경고) → 비교 방식 → 폴더 변화 → (대상이 빈 폴더를 못 만들면) 빈 폴더 안내
+ * (INT-003 FR-31) → 요약 카드 → 도구 막대 → 가상 목록 표.
  * 비교는 원본·대상 목록을 읽기만 하고 파일은 바꾸지 않는다.
  *
  * @author dev-Joy 2026-10-28
@@ -14,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
     compareStaleReason,
     dirSummaryText,
+    emptyDirsUnsupportedText,
     selectRowIndexes,
     type itfCompareViewState,
     type typCompareFilterStatus,
@@ -95,7 +97,12 @@ export default function CompareView(props: itfCompareViewProps) {
         return selectRowIndexes(shown.entries, v);
     }, [shown, status, hideEqual, sortKey, sortDir, query]);
     const stale = shown ? compareStaleReason(shown, job, maxAgeMinutes, nowMs) : null;
-    const dirText = shown ? dirSummaryText(shown.summary, shown.mode) : null;
+    const dirText = shown
+        ? dirSummaryText(shown.summary, shown.mode, shown.destCanHaveEmptyDirs)
+        : null;
+    const emptyText = shown
+        ? emptyDirsUnsupportedText(shown.summary, shown.destCanHaveEmptyDirs)
+        : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Pick = (filter: typCompareFilterStatus) => setView({ status: filter });
@@ -172,6 +179,15 @@ export default function CompareView(props: itfCompareViewProps) {
             {dirText && (
                 <p className={styles.method} data-kind="dirs">
                     폴더: {dirText}
+                </p>
+            )}
+            {emptyText && (
+                <p
+                    className={styles.method}
+                    data-kind="emptyDirsUnsupported"
+                    id="compare-empty-dirs-unsupported"
+                >
+                    {emptyText}
                 </p>
             )}
             <CompareSummary

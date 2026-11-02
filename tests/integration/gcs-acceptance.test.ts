@@ -9,6 +9,8 @@
  * INT-003 T-04: `backend features`의 CanHaveEmptyDirectories를 directory_markers 꺼짐(기본)·켜짐(연결 문자열)으로 비교해 출력한다.
  * INT-003 T-03: `backend features`의 Move를 기록하고, 백업 폴더 sync가 Move 미지원이면 전송 없이 SAFETY_BLOCKED, 지원하면
  *   지운 파일이 백업 하위 폴더로 옮겨지는지 확인한다(FR-36).
+ * INT-003 T-05(AC-13): 앱 비교 결과의 destCanHaveEmptyDirs가 remote 루트의 CanHaveEmptyDirectories와 같고,
+ *   false면 빈 폴더 차이만으로는 자동 실행이 noop인지 확인한다(연결 문자열은 앱 경로로 쓸 수 없어 기본 remote만).
  *
  * @author dev-Joy 2026-11-02
  */
@@ -501,6 +503,33 @@ describe.skipIf(TARGET.kind === "skip" || !HAS_RCLONE)("GCS 수용 (<GCS>)", () 
                 { dirs: [], createDirs: 3 },
                 { dirs: ["empty", "nest", "nest/x"], createDirs: 0 },
             ]).toContainEqual({ dirs, createDirs: again.summary.createDirs });
+        },
+        CASE_MS,
+    );
+
+    it(
+        "AC-13: 비교 결과의 빈 폴더 가능 여부가 features와 같고, false면 빈 폴더 차이만으로는 자동 실행 noop",
+        async () => {
+            const c = f_Case("empty-dirs");
+            mkdirSync(join(c.src, "empty"), { recursive: true });
+            const env = await makeEnv({
+                root: c.root,
+                conf,
+                source: c.src,
+                destination: c.dst,
+                mode: "copy",
+                scope: "all",
+            });
+            const cmp = await env.compare.run(env.job.id);
+            // 앱은 remote 루트로 조회한다(compare-service f_DestEmptyDirs)
+            const canEmpty = f_CanHaveEmptyDirs(conf, `${ok!.remote}:`);
+            console.info(
+                `[test:int] GCS 앱 비교 destCanHaveEmptyDirs ${String(cmp.destCanHaveEmptyDirs)}, features ${canEmpty}`,
+            );
+            expect(cmp.destCanHaveEmptyDirs).toBe(canEmpty);
+            expect(cmp.summary.createDirs).toBe(1);
+            const o = await (await env.runs.startAuto(env.job.id)).done;
+            expect(o.status).toBe(canEmpty ? "success" : "noop");
         },
         CASE_MS,
     );

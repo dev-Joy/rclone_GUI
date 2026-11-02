@@ -38,6 +38,10 @@
             font-size: 12px;
         }
 
+        .method[data-kind="emptyDirsUnsupported"] {
+            color: var(--warning);
+        }
+
         .progress {
             display: flex;
             flex-direction: column;

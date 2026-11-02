@@ -48,6 +48,7 @@ const api: itfRcloneGuiApi = {
         update: (input) => ipcRenderer.invoke(C.remotesUpdate, input),
         remove: (input) => ipcRenderer.invoke(C.remotesDelete, input),
         test: (input) => ipcRenderer.invoke(C.remotesTest, input),
+        features: (input) => ipcRenderer.invoke(C.remotesFeatures, input),
     },
     compare: {
         run: (jobId) => ipcRenderer.invoke(C.compareRun, { jobId }),

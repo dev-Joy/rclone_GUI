@@ -91,6 +91,7 @@ function f_Result(over: Partial<itfCompareResult> = {}): itfCompareResult {
         scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
+        destCanHaveEmptyDirs: true,
         summary: f_Summary(),
         entries: [],
         dirChanges: [],
@@ -103,6 +104,15 @@ function f_Result(over: Partial<itfCompareResult> = {}): itfCompareResult {
 
 function f_SyncResult(over: Partial<itfCompareSummary> = {}): itfCompareResult {
     return f_Result({ mode: "sync", summary: f_Summary(over) });
+}
+
+/** 전체 범위 sync 결과: 빈 폴더 2개 생성만 있음 (INT-003 FR-33) */
+function f_DirsOnly(destCanHaveEmptyDirs: boolean | null): itfCompareResult {
+    return {
+        ...f_SyncResult({ createFiles: 0, updateFiles: 0, deleteFiles: 0, createDirs: 2 }),
+        scope: "all",
+        destCanHaveEmptyDirs,
+    };
 }
 
 function f_Side(path: string, size: number) {
@@ -246,6 +256,15 @@ describe("canStartRun", () => {
             "바꿀 파일이 없습니다",
         );
     });
+
+    it("빈 폴더를 못 만드는 대상 (INT-003 FR-33·D-5): 폴더 생성만 있으면 실행 불가, null은 실행 가능", () => {
+        const all = { ...f_Job({ mode: "sync" }), scope: "all" as const };
+        expect(f_Reason(f_Input({ job: all, compare: f_DirsOnly(false) }))).toBe(
+            "바꿀 파일이 없습니다(이 저장소는 빈 폴더를 만들 수 없어 빈 폴더 2개는 생기지 않습니다).",
+        );
+        expect(canStartRun(f_Input({ job: all, compare: f_DirsOnly(null) })).ok).toBe(true);
+        expect(canStartRun(f_Input({ job: all, compare: f_DirsOnly(true) })).ok).toBe(true);
+    });
 });
 
 describe("삭제 확인 정보", () => {
@@ -369,6 +388,13 @@ describe("문구", () => {
         expect(realRunConfirmText(s, "sync")).toContain("빈 폴더 2개 생성, 폴더 3개 삭제");
         expect(realRunConfirmText(s, "copy")).toContain("빈 폴더 2개 생성");
         expect(realRunConfirmText(s, "copy")).not.toContain("폴더 3개 삭제");
+    });
+
+    it("realRunConfirmText: 빈 폴더를 못 만드는 대상이면 생성 대신 ‘만들 수 없음’ (INT-003 FR-31)", () => {
+        const s = f_Summary({ createDirs: 2 });
+        expect(realRunConfirmText(s, "copy", false)).toContain("빈 폴더 2개는 만들 수 없음");
+        expect(realRunConfirmText(s, "copy", false)).not.toContain("빈 폴더 2개 생성");
+        expect(realRunConfirmText(s, "copy", null)).toContain("빈 폴더 2개 생성");
     });
 });
 

@@ -2,7 +2,8 @@
  * 비교 서비스 (MVP_SPEC §7.2~7.4, intent T-05). 원본·대상 목록을 읽어 차이를 계산한다. 읽기 전용.
  *
  * - 시작 전: 전역 활동 락 → 경로 형식·안전 검사(드라이브 상대 경로 포함) → rclone·설정 파일 → probe
- *   (lsjson은 파일 경로에 그 파일 1건을 돌려주므로 폴더인지 먼저 확인한다. 대상이 없으면 빈 목록)
+ *   (lsjson은 파일 경로에 그 파일 1건을 돌려주므로 폴더인지 먼저 확인한다. 대상이 없으면 빈 목록).
+ *   probe와 병렬로 대상의 빈 폴더 가능 여부를 본다(INT-003 FR-30, features 캐시·10초. '전체' 범위 remote만)
  * - 목록: 원본·대상 lsjson을 병렬로 줄 단위로 읽는다(stdout을 모으지 않음). 한쪽이 실패하면 다른 쪽도 끝낸다.
  * - 결과는 작업별로 메모리에만 둔다. 실패·취소하면 그 작업의 이전 결과도 지운다(§7.4).
  * - 자동 실행용 compareForAuto는 실행 서비스가 잡은 락 안에서 부른다: 락·캐시·진행 이벤트가 없고
@@ -44,12 +45,13 @@ import {
 } from "@/main/services/job-context";
 import { PROBE_MISSING_MESSAGE, type clsPathService } from "@/main/services/path-service";
 import { computePlanToken } from "@/main/services/plan-token";
+import type { clsRemoteService } from "@/main/services/remote-service";
 import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsJobStore } from "@/main/store/job-store";
 import { diffFileLists } from "@/shared/diff-engine";
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import type { itfParsedPath } from "@/shared/path-utils";
-import type { typJob } from "@/shared/schemas/job";
+import type { typJob, typSyncScope } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 import type {
     itfCompareActive,
@@ -64,6 +66,8 @@ export interface itfCompareServiceDeps {
     settings: { get(): typSettings };
     rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
     pathService: Pick<clsPathService, "probe">;
+    /** 대상 저장소의 빈 폴더 가능 여부(INT-003 FR-30). 보통 clsRemoteService */
+    features: Pick<clsRemoteService, "canHaveEmptyDirs">;
     activity: clsActivityLock;
     /** 공용 제외 패턴 조회 */
     excludes: Pick<clsExcludeStore, "patternsFor">;
@@ -147,6 +151,18 @@ export function checkDestProbe(p: itfParsedPath, probe: itfPathProbe): boolean {
         throw new clsAppError("PATH_NOT_FOUND", `대상: ${probe.message}`);
     }
     return false;
+}
+
+/** 대상의 빈 폴더 가능 여부. 로컬·UNC는 true, '전체' 범위의 remote만 조회, 파일만 범위의 remote는 null(D-3) */
+async function f_DestEmptyDirs(
+    scope: typSyncScope,
+    dst: itfParsedPath,
+    configPath: string | null,
+    features: Pick<clsRemoteService, "canHaveEmptyDirs">,
+): Promise<boolean | null> {
+    if (dst.kind !== "remote") return true;
+    if (scope !== "all") return null;
+    return features.canHaveEmptyDirs(dst, configPath);
 }
 
 export class clsCompareService {
@@ -358,9 +374,10 @@ export class clsCompareService {
         this.throwIfCanceled(active);
 
         // 3) 폴더 확인
-        const [sp, dp] = await Promise.all([
+        const [sp, dp, destCanHaveEmptyDirs] = await Promise.all([
             this.probeSide("원본", job.source, job.configPathOverride),
             this.probeSide("대상", job.destination, job.configPathOverride),
+            f_DestEmptyDirs(job.scope, dst, configPath, this.deps.features),
         ]);
         this.throwIfCanceled(active);
         checkSourceProbe(src, sp);
@@ -469,6 +486,7 @@ export class clsCompareService {
             scope: job.scope,
             method,
             destMissing,
+            destCanHaveEmptyDirs,
             summary: diff.summary,
             entries: diff.entries,
             dirChanges: diff.dirChanges,

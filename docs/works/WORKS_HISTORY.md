@@ -203,6 +203,14 @@
 - 검증: `pnpm run check`(단위 69파일 1169), `format:check`(326), `test:int` 63(+9 skip: GCS 8·rclone-env 1), `test:e2e` 13, `build:win` 통과. 독립 검증 Pass, 낮음 결함 2건(빈 `--backup-dir` 백스톱 빈틈, copy 모드 경고 id 중복)을 바로 고치고 단위·backup-dir E2E 재확인
 - 남은 것: GCS가 서버 쪽 Move를 지원하는지는 키가 없어 미확인(지원하지 않으면 GCS 대상 백업 폴더 sync는 FR-36으로 막힘). 대안(`--max-delete` 상향)은 안전 규칙 2 변경이라 채택하지 않음
 
+[TASK_022] : (2026-11-02) INT-003 Phase 4 — T-05 빈 폴더를 만들 수 없는 대상 (관련 Intent: INT-003, T-05)
+- 조회: IPC `remotes:features`(`.strict()` 입력, 기존 `handle()` 응답 형식), `clsRemoteService.canHaveEmptyDirs`·`emptyDirSupport`(Phase 3의 features 캐시 재사용, rclone 없음·conf 해석 실패는 null, 던지지 않음). 로컬·UNC는 true, remote는 `전체` 범위일 때만 조회(D-3), 비교 시작 때 probe와 병렬
+- 비교·판정: `destCanHaveEmptyDirs`를 비교 결과에 담고, `hasPlannedChanges(plan, destCanHaveEmptyDirs)`는 false일 때 만들 폴더만 0으로 센다(삭제는 항상 셈). 자동 게이트의 삭제 수·한도·대량·사전 확인 판정은 그대로이고 noop 판정에만 영향. 수동은 화면 `canStartRun`만 막고 main 게이트는 그대로(D-5). 계획 토큰·DB·rclone 인자 변경 없음
+- 화면: `use-empty-dir-support`(400ms 디바운스·최신 요청만)로 편집기 `전체` 범위 경고(저장은 막지 않음), 비교 요약·목록에서 빈 폴더 차이를 "이 저장소는 빈 폴더를 만들 수 없음"으로 따로 표시, E2E `empty-dirs.spec.ts`
+- 문서: MVP_SPEC "구현 반영 (INT-003 Phase 4)" 표(INT-002 E-6 해소), CHANGELOG 1줄, rclone-notes #33(memory remote는 프로세스마다 비어 있음), spec·plan 주석, COMPONENTS.md
+- 검증: `pnpm run check`(단위 70파일 1198), `format:check`, `test:int` 66(+10 skip), `test:e2e` 14, `build:win` 통과. 독립 검증 Pass(차단 결함 0). 세션이 끊겨 E2E 1건 실패 원인을 보던 중이었으나 재실행에서 재현되지 않음
+- 남은 것: `directory_markers`가 `CanHaveEmptyDirectories`에 반영되는지는 GCS 실측(T-04) 전까지 미확인(R-4)
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

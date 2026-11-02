@@ -115,6 +115,7 @@ function f_Compare(over: Partial<itfCompareResult> = {}): itfCompareResult {
         scope: "files",
         method: { checkHashes: false, modtimeToleranceMs: 2000, caseInsensitive: true },
         destMissing: false,
+        destCanHaveEmptyDirs: true,
         summary: f_Summary(),
         entries: [],
         dirChanges: [],
@@ -1400,6 +1401,72 @@ describe("clsRunService 동기화 범위 (INT-002 T-05)", () => {
         expect(o.status).toBe("success");
         expect(h.procs).toHaveLength(1);
         expect(h.procs[0]!.args).toContain("--create-empty-src-dirs");
+    });
+
+    const DIRS_ONLY = { createFiles: 0, updateFiles: 0, deleteFiles: 0, createDirs: 2 };
+
+    it("자동: 대상이 빈 폴더를 못 만들면 폴더 생성만으로는 noop (INT-003 FR-33)", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob(), scope: "all" },
+            compare: f_Compare({
+                scope: "all",
+                summary: f_Summary(DIRS_ONLY),
+                destCanHaveEmptyDirs: false,
+            }),
+        });
+        const o = await f_Auto(h);
+        expect(o).toMatchObject({ status: "noop", recorded: false, error: null });
+        expect(h.procs).toEqual([]);
+        expect(h.begun).toEqual([]);
+    });
+
+    it.each([true, null])(
+        "자동: 대상 빈 폴더 가능 %s면 폴더 생성만 있어도 실행",
+        async (destCanHaveEmptyDirs) => {
+            const h = f_Harness({
+                job: { ...f_AutoJob(), scope: "all" },
+                compare: f_Compare({
+                    scope: "all",
+                    summary: f_Summary(DIRS_ONLY),
+                    destCanHaveEmptyDirs,
+                }),
+                script: { lines: fixtureLines("copy-real") },
+            });
+            const o = await f_Auto(h);
+            expect(o.status).toBe("success");
+            expect(h.procs).toHaveLength(1);
+        },
+    );
+
+    it("자동: 빈 폴더를 못 만드는 대상이어도 파일 복사가 있으면 실행", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob(), scope: "all" },
+            compare: f_Compare({
+                scope: "all",
+                summary: f_Summary({ ...DIRS_ONLY, createFiles: 1 }),
+                destCanHaveEmptyDirs: false,
+            }),
+            script: { lines: fixtureLines("copy-real") },
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("success");
+        expect(h.procs[0]!.args).toContain("--create-empty-src-dirs");
+    });
+
+    it("자동: 빈 폴더를 못 만드는 대상이어도 폴더 삭제 판정은 그대로(allowDeletes 꺼짐 → 차단)", async () => {
+        const h = f_Harness({
+            job: { ...f_AutoJob({ mode: "sync" }), scope: "all" },
+            compare: f_Compare({
+                mode: "sync",
+                scope: "all",
+                summary: f_Summary({ ...DIRS_ONLY, destFiles: 100, deleteDirs: 1 }),
+                destCanHaveEmptyDirs: false,
+            }),
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("blocked");
+        expect(o.error?.code).toBe("SAFETY_BLOCKED");
+        expect(h.procs).toEqual([]);
     });
 });
 

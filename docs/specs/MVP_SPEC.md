@@ -3,8 +3,8 @@
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
 - 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/planned/INT-003-os-schedule-backup-gcs-followup/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-02 (INT-003 Phase 2 Windows 작업 스케줄러 구현 반영 표 추가)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2 반영 (2026-11-02), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-02 (INT-003 Phase 4 빈 폴더를 만들 수 없는 대상 구현 반영 표 추가)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -138,6 +138,19 @@ INT-003 T-03(spec §4.3 FR-23~FR-29·FR-35·FR-36, §7 E-8~E-11·E-15)로 바뀐
 | 이력·로그 | - | `run_records.data.backupDir`(실제 실행만, 하위 폴더 포함). 실행 로그 인자의 `--backup-dir` 값은 `<백업 폴더>`로 가리고 머리말 뒤 `# 백업 위치:` 한 줄에 전체 경로. app.log에는 경로 없음 |
 | 화면 (§13) | - | 편집기 경로 섹션에 `백업 폴더 (선택)`(sync만, copy는 숨기고 값이 있으면 안내), 위험 옵션의 오류 무시 안내가 백업 폴더 유무에 따라 바뀜, 삭제 확인 창에 백업 폴더와 "옮깁니다" 안내, 실행 결과·이력 상세에 백업 위치 |
 | 범위 밖 | - | Move 없는 저장소의 백업 폴더(한도를 늘려야 해 안전 규칙 2와 충돌), 백업 폴더 정리, 편집기에서 Move 미지원 미리 경고(Phase 4 `remotes:features`와 함께) |
+
+### 구현 반영 (INT-003 Phase 4 — 빈 폴더를 만들 수 없는 대상, 2026-11-02)
+
+INT-003 T-05(spec §4.4 FR-30~FR-33, NFR-6, §6.3, §7 E-12·E-13, AC-13)로 바뀐 항목이다. 본문·위 표보다 이 표가 우선한다. INT-002 spec E-6("버킷형 저장소의 빈 폴더 차이", INT-003 T-04·T-05로 이관)을 여기서 해소한다. rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #27·#33.
+
+| 항목 | 이 문서·이전 표 | 실제 구현 |
+| :--- | :--- | :--- |
+| 대상 빈 폴더 가능 여부 | - | 비교 결과 `destCanHaveEmptyDirs: boolean \| null`. 로컬·UNC는 조회 없이 `true`, ‘전체’ 범위의 remote 대상만 probe와 병렬로 `clsRemoteService.canHaveEmptyDirs`(Phase 3 `features` 재사용: `backend features -- <remote 루트>`, (rclone, conf, 루트) 키 캐시, 10초, 실패는 캐시 안 함) → `Features.CanHaveEmptyDirectories`. ‘파일만’ 범위 remote는 조회하지 않고 `null`(폴더 생성이 늘 0). 조회 실패·rclone 없음도 던지지 않고 `null`(지금처럼 동작, E-12). alias·union은 결과를 그대로 믿는다(E-13). 결과는 메모리에만 있고 계획 토큰·DB에 넣지 않는다 |
+| 바꿀 것 판정 (§9.3) | 파일 생성·갱신 + 폴더 생성 + 삭제(파일·폴더) = 0 → noop | `hasPlannedChanges(plan, destCanHaveEmptyDirs)`(`src/shared/run-plan.ts`): `false`면 폴더 생성만 세지 않는다. 자동 게이트(`f_CheckAutoGate`)의 noop과 화면 `canStartRun`(실행 버튼, 결정 D-5)이 같은 함수를 쓴다. 삭제 수·`--max-delete`·사전 확인·차단 판정·main 수동 게이트(`f_CheckRealGate`)는 그대로. 다른 변경이 있으면 지금처럼 `--create-empty-src-dirs`로 실행한다(사전 확인은 폴더 생성 수를 비교하지 않음, #22) |
+| 비교 화면 (§13) | `폴더: 빈 폴더 N개 생성, …` | `false`이고 폴더 생성이 있으면 `폴더:` 줄에서 생성 문구를 빼고 `이 저장소는 빈 폴더를 만들 수 없음(N개) — …` 안내 줄(`#compare-empty-dirs-unsupported`)을 따로 둔다. 표에 폴더 행은 새로 넣지 않는다(결정 D-2). 실행 확인 문구는 `빈 폴더 N개는 만들 수 없음` |
+| 편집기 경고 | - | IPC `remotes:features`(`{ path, configPath? }` → `{ canHaveEmptyDirs }`, 락 없음, 해석 실패·설정 없음·조회 실패는 `null`, 로컬·UNC는 `true`). 편집기는 범위 ‘전체’ + remote 대상일 때만 remote 루트가 400ms 그대로면 조회하고(`useEmptyDirSupport`), `false`면 범위 아래에 경고(`#job-scope-empty-dir-warning`)만 보인다. 저장은 막지 않는다(FR-32) |
+| 테스트 | - | AC-13 로컬 대용은 임시 conf의 이름 있는 `type = memory` remote(앱 경로 검사가 `:memory:`·연결 문자열을 거부, 결정 D-6). memory는 프로세스마다 비어 원본은 빈 폴더만 둔다(#33). 파일이 있는 noop은 통합 테스트에서 가짜 features로 확인. GCS는 수용 테스트(환경 변수 있을 때만)가 비교 값과 features 값이 같은지·false면 자동 noop인지 확인 |
+| 범위 밖 | - | 편집기의 Move 미지원 미리 경고(D-10, `itfRemoteFeatures`에 나중에 추가), 앱 실행 중 rclone.conf의 `directory_markers` 변경 반영(캐시가 재시작까지 남음, D-9), 연결 문자열 remote의 앱 수준 확인(D-12). **R-4 GCS 실측 대기**: GCS 키가 없어 `CanHaveEmptyDirectories`를 그대로 믿는다(키가 생기면 gcs-acceptance AC-13 케이스가 판정을 검증) |
 
 ---
 

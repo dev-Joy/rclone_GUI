@@ -656,6 +656,7 @@ async function f_InitCore(): Promise<itfServices> {
         settings,
         rcloneEnv,
         pathService,
+        features: remoteService,
         activity,
         excludes: excludeStore,
         excludeFileDir,

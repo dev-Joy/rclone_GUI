@@ -107,6 +107,8 @@ export interface itfEnvOptions {
     libraryPatterns?: string[];
     /** runRclone을 감싸 출력·취소 시점을 조작할 때 */
     wrapRun?: (run: typRunRclone, runs: () => clsRunService) => typRunRclone;
+    /** 비교가 쓰는 대상 빈 폴더 가능 여부를 갈아끼울 때(기본: 실제 rclone features, INT-003 T-05) */
+    emptyDirs?: Pick<clsRemoteService, "canHaveEmptyDirs">;
 }
 
 let envNo = 0;
@@ -158,11 +160,21 @@ export async function makeEnv(o: itfEnvOptions) {
     });
     const pathService = new clsPathService({ rcloneEnv });
     const activity = new clsActivityLock();
+    // 백업 폴더 대상 remote의 Move 확인·대상 빈 폴더 가능 여부(backend features)는 실제 rclone으로 한다
+    const remoteStore = new clsRemoteStore({ db });
+    remoteStore.load();
+    const remoteService = new clsRemoteService({
+        store: remoteStore,
+        rcloneEnv,
+        pathService,
+        remoteOps: new clsRemoteOps({ activity, jobs }),
+    });
     const compare = new clsCompareService({
         jobs,
         settings: settingsSource,
         rcloneEnv,
         pathService,
+        features: o.emptyDirs ?? remoteService,
         activity,
         excludes: excludeStore,
         excludeFileDir,
@@ -173,15 +185,6 @@ export async function makeEnv(o: itfEnvOptions) {
     const holder: { runs: clsRunService | null } = { runs: null };
     const runFn = o.wrapRun ? o.wrapRun(runRclone, () => holder.runs!) : runRclone;
     const logsDir = join(userData, "logs");
-    // 백업 폴더 대상 remote의 Move 확인(backend features)은 실제 rclone으로 한다
-    const remoteStore = new clsRemoteStore({ db });
-    remoteStore.load();
-    const remoteService = new clsRemoteService({
-        store: remoteStore,
-        rcloneEnv,
-        pathService,
-        remoteOps: new clsRemoteOps({ activity, jobs }),
-    });
     const runs = new clsRunService({
         jobs,
         settings: settingsSource,

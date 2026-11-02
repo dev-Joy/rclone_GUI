@@ -12,6 +12,7 @@ import {
 } from "@/shared/schemas/history";
 import { zJob, zJobDraft, zJobPatch } from "@/shared/schemas/job";
 import { zListRemotesInput, zRcloneDetectInput, zTestPathInput } from "@/shared/schemas/rclone";
+import { zRemoteFeaturesInput } from "@/shared/schemas/remotes";
 import { zStartRunInput } from "@/shared/schemas/run";
 import { zRunTrigger } from "@/shared/schemas/common";
 import { zRunJobAdditionalData, zSchedulerSetPausedInput } from "@/shared/schemas/scheduler";
@@ -287,6 +288,16 @@ describe("rclone·dialog·system IPC 입력 스키마", () => {
         expect(zTestPathInput.safeParse({ path: "" }).success).toBe(true);
         expect(zTestPathInput.safeParse({ path: "a".repeat(4097) }).success).toBe(false);
         expect(zTestPathInput.safeParse({ path: "C:\\a", extra: 1 }).success).toBe(false);
+    });
+
+    it("remotes:features: path 1..4096자(앞뒤 공백 제거), configPath 생략·null, 알 수 없는 키 거부", () => {
+        expect(zRemoteFeaturesInput.safeParse({ path: "r:a" }).success).toBe(true);
+        expect(zRemoteFeaturesInput.safeParse({ path: "r:a", configPath: null }).success).toBe(
+            true,
+        );
+        expect(zRemoteFeaturesInput.safeParse({ path: "  " }).success).toBe(false);
+        expect(zRemoteFeaturesInput.safeParse({ path: "a".repeat(4097) }).success).toBe(false);
+        expect(zRemoteFeaturesInput.safeParse({ path: "r:a", force: true }).success).toBe(false);
     });
 
     it("pickFile 필터 확장자는 영숫자 1..10자 또는 *", () => {

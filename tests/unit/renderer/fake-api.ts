@@ -377,6 +377,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                     ? Promise.resolve({ ok: true as const, data: structuredClone(r) })
                     : f_Fail("NOT_FOUND");
             },
+            features: () => {
+                calls.push("remotes.features");
+                return f_Ok({ canHaveEmptyDirs: true });
+            },
         },
         compare: {
             run: (jobId) => {

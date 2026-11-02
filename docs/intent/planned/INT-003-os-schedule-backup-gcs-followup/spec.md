@@ -96,10 +96,10 @@
 - **FR-29** 편집기·옵션 안내(`SYNC_IGNORE_ERRORS_TEXT`)를 "백업 폴더를 지정하면 쓸 수 있음"으로 바꾼다. 백업 폴더는 앱이 지우지 않으며 직접 정리해야 한다는 안내를 붙인다.
 
 ### 4.4 T-05 빈 폴더를 만들 수 없는 대상
-- **FR-30** 비교 시작 때 대상이 remote면 `rclone backend features <remote>: --ask-password=false [--config C]` 결과의 `Features.CanHaveEmptyDirectories`를 읽는다. 결과는 (remote 이름, conf 경로, rclone 경로) 키로 앱 실행 동안 캐시한다. 로컬 대상은 조회하지 않고 true로 본다. 조회에 실패하면 null(알 수 없음)로 두고 지금처럼 동작한다.
-- **FR-31** 비교 결과에 `destCanHaveEmptyDirs: boolean | null`을 싣는다. false이고 `createDirs > 0`이면 비교 화면 요약에서 빈 폴더 생성 수를 일반 변경과 분리해 "이 저장소는 빈 폴더를 만들 수 없음(N개)"으로 보이고, 변경 목록에서도 같은 표시를 단다.
+- **FR-30** 비교 시작 때 대상이 remote면 `rclone backend features <remote>: --ask-password=false [--config C]` 결과의 `Features.CanHaveEmptyDirectories`를 읽는다. 결과는 (remote 이름, conf 경로, rclone 경로) 키로 앱 실행 동안 캐시한다. 로컬 대상은 조회하지 않고 true로 본다. 조회에 실패하면 null(알 수 없음)로 두고 지금처럼 동작한다. (구현 2026-11-02, 결정 D-3: 폴더 생성이 늘 0인 `파일만` 범위의 remote는 조회하지 않고 null로 둔다. 캐시 키는 remote 루트 `이름:`로 같은 의미)
+- **FR-31** 비교 결과에 `destCanHaveEmptyDirs: boolean | null`을 싣는다. false이고 `createDirs > 0`이면 비교 화면 요약에서 빈 폴더 생성 수를 일반 변경과 분리해 "이 저장소는 빈 폴더를 만들 수 없음(N개)"으로 보이고, 변경 목록에서도 같은 표시를 단다. (구현 2026-11-02, 결정 D-2: 폴더 변화는 표에 행이 없으므로 `폴더:` 줄에서 생성 수를 빼고 안내 줄을 따로 두는 것으로 목록 표시를 대신한다)
 - **FR-32** 편집기에서 범위 `전체` + 대상 remote의 값이 false이면 경고한다(저장은 막지 않는다). 값은 편집기에서 대상 remote를 고를 때 조회한다.
-- **FR-33** 자동 실행(앱·OS 예약)의 "바꿀 것 없음(noop)" 판정에서, 대상이 false면 `createDirs`를 변경으로 세지 않는다. 그래야 빈 폴더 차이만으로 매번 rclone을 돌리지 않는다.
+- **FR-33** 자동 실행(앱·OS 예약)의 "바꿀 것 없음(noop)" 판정에서, 대상이 false면 `createDirs`를 변경으로 세지 않는다. 그래야 빈 폴더 차이만으로 매번 rclone을 돌리지 않는다. (구현 2026-11-02, 결정 D-5: 화면의 실행 버튼 판정도 같은 함수로 "바꿀 것 없음"을 보인다. main 수동 게이트·삭제 판정은 그대로)
 
 ## 5. 비기능 요구사항 (NFR-n)
 - **NFR-1** 안전 규칙: `schtasks`·`powershell`도 `execFile` + `shell:false` + 고정 인자 배열. 사용자 입력(작업 이름·경로)은 예약 이름·인자에 들어가지 않는다. 경로는 XML 본문(exe 경로)에만 들어가고 이스케이프한다.
@@ -214,7 +214,7 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **R-1** 헤드리스 모드가 `f_Start`의 순서(DB → 복구 → 서비스 → 창)를 갈라야 해서 `index.ts` 변경이 크다. 창·트레이·스케줄러 생성을 함수로 분리해 GUI 전환(FR-15)에서 재사용한다.
 - **R-2** fuses의 `OnlyLoadAppFromAsar`·asar 무결성 검사가 설치본 실행을 막을 수 있다 → `smoke:installer`로 확인하고, 문제가 있으면 해당 fuse만 끈다.
 - **R-3** 작업 스케줄러 그룹 정책·회사 PC에서 등록이 막힐 수 있다 → FR-6 오류 표시, 앱 안 예약으로 되돌릴 수 있다.
-- **R-4** `CanHaveEmptyDirectories`가 `directory_markers`를 반영하지 않으면 FR-30 판정이 틀린다 → T-04 결과에 따라 판정 방법을 다시 정한다(T-05는 T-04 뒤).
+- **R-4** `CanHaveEmptyDirectories`가 `directory_markers`를 반영하지 않으면 FR-30 판정이 틀린다 → T-04 결과에 따라 판정 방법을 다시 정한다(T-05는 T-04 뒤). **GCS 실측 대기**(2026-11-02, 키 없음 — `CanHaveEmptyDirectories`를 그대로 믿고 실패는 null. 키가 생기면 `gcs-acceptance.test.ts`의 AC-13 케이스가 판정을 검증한다)
 - **R-5** (해소) 여러 작업이 같은 백업 폴더를 써도 하위 폴더 이름에 jobId 앞 8자가 들어가 겹치지 않는다(FR-25).
 - **R-6** 백업 폴더가 계속 커진다(자동 정리 없음) → 안내 문구로 알린다.
 
