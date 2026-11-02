@@ -28,6 +28,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `pnpm run format` — oxfmt로 포맷 (`pnpm run format:check`는 검사만)
 - `pnpm run test:int` — 실제 rclone으로 통합 테스트 (rclone이 없으면 이유를 출력하고 건너뜀)
   - GCS 수용 테스트는 `RCLONEGUI_TEST_GCS_CONFIG`·`RCLONEGUI_TEST_GCS_REMOTE`·`RCLONEGUI_TEST_GCS_BUCKET`이 모두 있을 때만 돈다(없으면 이유 출력 후 skip, 이름이 `rclonegui-test-`로 시작하지 않으면 거부)
+  - Google Drive 수용 테스트는 `RCLONEGUI_TEST_DRIVE_REMOTE`(type = drive인 remote 이름)를 실행 명령에서 줄 때만 돈다(없으면 이유 출력 후 skip, 영구 등록하지 않음). `RCLONEGUI_TEST_DRIVE_CONFIG`는 선택(없으면 rclone 기본 conf). Drive 최상위 `rclonegui-test-it/` 아래 실행별 폴더만 쓰고 그 폴더만 지운다
   - `RCLONEGUI_TEST_RCLONE` — 테스트에 쓸 rclone 경로, `RCLONEGUI_TEST_WSL=1` — WSL 경로 테스트 실행
 - `pnpm run test:e2e` — `out/` 빌드 + Playwright Electron E2E. Windows GUI 세션이 필요하고, rclone이 없으면 비교·복사 테스트만 건너뜀
 - `pnpm run build` — `out/`에 빌드, `pnpm start`로 빌드본 실행
@@ -52,7 +53,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `src/pages` — 페이지·레이아웃 컴포넌트와 `*.module.css`
 - `src/stores`, `src/lib` — 화면 상태(zustand)와 화면용 도우미
 - `src/shared` — 타입·IPC 계약·zod 스키마 (Node·DOM 의존 금지)
-- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone·schtasks 출력. `tests/integration/gcs-acceptance.test.ts`는 외부 GCS 수용 테스트(4.8)
+- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone·schtasks 출력. `tests/integration/gcs-acceptance.test.ts`는 외부 GCS 수용 테스트(4.8), `drive-acceptance.test.ts`는 Google Drive 수용 테스트(4.8), `remote-acceptance.ts`는 외부 remote 수용 테스트 도우미
 - `playwright.config.ts` — Electron E2E 설정(`tests/e2e/**/*.spec.ts`, 임시 userData·`RCLONEGUI_E2E=1`)
 - `docs/guide` — 신규 파일 작성 가이드 (`File.tsx.guide`, `File.module.css.guide`)
 - `docs/knowhow/rclone-notes.md`, `docs/knowhow/windows-task-scheduler-notes.md`, `docs/CHANGELOG.md`, `docs/works/`
@@ -118,6 +119,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 - 실행 환경은 `run-harness.ts`(`makeEnv`·`waitFinished`)를 재사용한다.
 - 외부 remote 테스트는 환경 변수로 받은 저장소 밖 테스트 전용 rclone.conf와 `rclonegui-test-`로 시작하는 remote·버킷만 쓴다. 실행마다 고유 하위 경로를 쓰고 afterAll에서 정리하며, 버킷 루트는 지우지 않는다.
+- 예외: Google Drive 수용 테스트(`drive-acceptance.test.ts`)는 `RCLONEGUI_TEST_DRIVE_REMOTE`로 명시한 drive 형식 remote 하나와 기본 rclone.conf를 쓸 수 있다. 시작할 때 remote 종류가 drive인지 확인하고, 쓰기·삭제는 `rclonegui-test-it/rclonegui-it-<시각>-<난수>/` 아래만 하며 정확히 그 형식인 경로만 지운다(`rclonegui-test-it`과 Drive 루트는 지우지 않음).
 - 출력·테스트 이름·fixture에 remote·버킷 이름과 키·conf 경로를 남기지 않는다.
 
 ## 5. 작업 원칙
