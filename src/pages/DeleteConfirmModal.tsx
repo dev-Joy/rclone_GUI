@@ -75,6 +75,8 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
     const samples = deleteSamples(compare, sampleLimit);
     const dirSamples = deleteDirSamples(compare, sampleLimit);
     const preflightOn = job.options.preflightBeforeDestructive;
+    // 백업 폴더(INT-003 T-03): sync에서만 쓴다
+    const backupDir = job.mode === "sync" ? job.backupDir : null;
     const canConfirm = checked && (!info.large || checkedLarge);
     const count = info.deleteFiles.toLocaleString("ko-KR");
     const dirCount = info.deleteDirs.toLocaleString("ko-KR");
@@ -109,6 +111,7 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                 </p>
                 {f_Path("원본", job.source)}
                 {f_Path("대상", job.destination)}
+                {backupDir !== null && f_Path("백업 폴더", backupDir)}
                 <p className={styles.headline}>{realRunConfirmText(compare.summary, job.mode)}</p>
                 {info.deleteFiles > 0 && (
                     <p className={styles.deletes}>
@@ -129,6 +132,12 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                         삭제가 기준({safety.deleteConfirmFiles}개 또는 대상의{" "}
                         {safety.deleteConfirmPercent}%)을 넘습니다. 원본 경로가 맞는지 다시
                         확인하세요.
+                    </p>
+                )}
+                {backupDir !== null && (
+                    <p className={styles.note} id="delete-confirm-backup">
+                        지우거나 덮어쓸 파일은 지우지 않고 백업 폴더 아래 이번 실행 폴더(날짜_시각_
+                        {job.id.slice(0, 8)})로 옮깁니다. 빈 폴더는 옮기지 않고 지웁니다.
                     </p>
                 )}
                 {info.deleteFiles > 0 && (

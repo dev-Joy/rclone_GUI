@@ -18,7 +18,7 @@ import {
     validateJobDraft,
 } from "@/lib/job-form";
 import { createDefaultSettings, createJobDraft } from "@/shared/defaults";
-import { zJobDraft, type typJob, type typJobDraft } from "@/shared/schemas/job";
+import { zJob, zJobDraft, type typJob, type typJobDraft } from "@/shared/schemas/job";
 
 function f_Draft(over: Partial<typJobDraft> = {}): typJobDraft {
     return {
@@ -223,6 +223,66 @@ describe("validateJobDraft 경고", () => {
         );
         expect(r.fieldWarnings.source?.[0]).toContain("WSL /mnt 경로");
         expect(r.formWarnings).toEqual([]);
+    });
+});
+
+describe("validateJobDraft 백업 폴더 (INT-003 T-03)", () => {
+    it("sync + 대상 안 백업 폴더 → backupDir 필드 오류", () => {
+        const r = validateJobDraft(f_Draft({ mode: "sync", backupDir: "D:\\tmp\\dst\\bk" }), true);
+        expect(r.ok).toBe(false);
+        expect(r.fieldErrors.backupDir).toContain("대상 폴더와 겹칩니다");
+    });
+
+    it("sync + 다른 드라이브 → 오류(AC-17), 같은 드라이브 형제 → 통과 + 안내", () => {
+        expect(
+            validateJobDraft(f_Draft({ mode: "sync", backupDir: "E:\\bk" }), true).fieldErrors
+                .backupDir,
+        ).toContain("같은 드라이브");
+        const ok = validateJobDraft(f_Draft({ mode: "sync", backupDir: "D:\\tmp\\bk" }), true);
+        expect(ok.ok).toBe(true);
+        expect(ok.formWarnings.join()).toContain("앱은 백업 폴더를 지우지 않으니");
+    });
+
+    it("copy + 백업 폴더 → 검사하지 않고 쓰지 않는다는 경고만", () => {
+        const r = validateJobDraft(f_Draft({ backupDir: "D:\\tmp\\dst\\bk" }), true);
+        expect(r.ok).toBe(true);
+        expect(r.fieldWarnings.backupDir?.[0]).toContain("복사 모드는");
+    });
+
+    it("sync + 오류 무시 + 백업 폴더 → 차단 경고 없음, 백업 없음 → 차단 경고", () => {
+        const withBk = f_Draft({ mode: "sync", backupDir: "D:\\tmp\\bk" });
+        withBk.options = { ...withBk.options, ignoreErrors: true };
+        expect(validateJobDraft(withBk, true).formWarnings.join()).not.toContain(
+            "백업 폴더가 없으면 실행하지 않습니다",
+        );
+        const noBk = { ...withBk, backupDir: null };
+        expect(validateJobDraft(noBk, true).formWarnings.join()).toContain(
+            "백업 폴더가 없으면 실행하지 않습니다",
+        );
+    });
+
+    it("serverErrorToCheck: ‘백업 폴더: …’는 backupDir 필드로", () => {
+        const c = serverErrorToCheck({
+            code: "SAFETY_BLOCKED",
+            message: "백업 폴더: 원본 폴더와 겹칩니다. 원본 밖의 폴더를 고르세요.",
+        });
+        expect(c.fieldErrors.backupDir).toBe("원본 폴더와 겹칩니다. 원본 밖의 폴더를 고르세요.");
+    });
+
+    it("스키마: 저장 입력은 backupDir가 필수, 저장된 값에 없으면 null로 읽는다(NFR-7)", () => {
+        const { backupDir: _b, ...rest } = f_Draft();
+        expect(zJobDraft.safeParse(rest).success).toBe(false);
+        const stored = { ...f_Job("00000000-0000-4000-8000-000000000001", "a") } as Record<
+            string,
+            unknown
+        >;
+        delete stored.backupDir;
+        expect(zJob.parse(stored).backupDir).toBeNull();
+    });
+
+    it("jobToDraft는 backupDir를 옮긴다", () => {
+        const job = { ...f_Job("00000000-0000-4000-8000-000000000001", "a"), backupDir: "D:\\bk" };
+        expect(jobToDraft(job).backupDir).toBe("D:\\bk");
     });
 });
 

@@ -7,6 +7,8 @@
  * 실행마다 버킷 아래 고유 경로(rclonegui-it-<시각>-<난수>)만 쓰고 끝나면 지운다. 버킷 루트는 지우지 않는다.
  * 출력·테스트 이름에는 remote·버킷·conf 경로를 남기지 않는다(<GCS>로 쓴다).
  * INT-003 T-04: `backend features`의 CanHaveEmptyDirectories를 directory_markers 꺼짐(기본)·켜짐(연결 문자열)으로 비교해 출력한다.
+ * INT-003 T-03: `backend features`의 Move를 기록하고, 백업 폴더 sync가 Move 미지원이면 전송 없이 SAFETY_BLOCKED, 지원하면
+ *   지운 파일이 백업 하위 폴더로 옮겨지는지 확인한다(FR-36).
  *
  * @author dev-Joy 2026-11-02
  */
@@ -164,18 +166,24 @@ function f_RemoteDirs(conf: string, path: string): string[] {
     return (JSON.parse(r.stdout) as Array<{ Path: string }>).map((i) => i.Path).toSorted();
 }
 
-/** `backend features`의 CanHaveEmptyDirectories. 출력에 버킷 이름이 들어가므로 값만 돌려준다 */
-function f_CanHaveEmptyDirs(conf: string, target: string): boolean {
+/** `backend features`의 Features 값 하나. 출력에 버킷 이름이 들어가므로 값만 돌려준다 */
+function f_FeatureFlag(conf: string, target: string, name: string): boolean {
     const r = spawnSync(
         RCLONE,
         ["backend", "features", "--ask-password=false", "--config", conf, target],
         { shell: false, windowsHide: true, encoding: "utf8" },
     );
     if (r.status !== 0) throw new Error(`backend features 실패(exit ${r.status})`);
-    const v: unknown = (JSON.parse(r.stdout) as { Features?: Record<string, unknown> }).Features
-        ?.CanHaveEmptyDirectories;
-    if (typeof v !== "boolean") throw new Error("CanHaveEmptyDirectories 값이 없습니다");
+    const v: unknown = (JSON.parse(r.stdout) as { Features?: Record<string, unknown> }).Features?.[
+        name
+    ];
+    if (typeof v !== "boolean") throw new Error(`${name} 값이 없습니다`);
     return v;
+}
+
+/** `backend features`의 CanHaveEmptyDirectories */
+function f_CanHaveEmptyDirs(conf: string, target: string): boolean {
+    return f_FeatureFlag(conf, target, "CanHaveEmptyDirectories");
 }
 
 /** 로컬 폴더 아래 파일 목록(상대 경로·크기, 정렬) — 원격 목록과 비교용 */
@@ -364,6 +372,57 @@ describe.skipIf(TARGET.kind === "skip" || !HAS_RCLONE)("GCS 수용 (<GCS>)", () 
             expect(record.preflight?.deletes).toBe(1);
             expect(record.stats?.deletes).toBe(1);
             expect(f_RemoteFiles(conf, c.dst)).toEqual(["keep.txt:4"]);
+        },
+        CASE_MS,
+    );
+
+    it(
+        "백업 폴더: Move를 기록하고, 미지원이면 전송 없이 SAFETY_BLOCKED, 지원이면 지운 파일을 백업으로 옮긴다",
+        async () => {
+            const c = f_Case("backup");
+            writeFile(join(c.src, "keep.txt"), "keep");
+            writeFile(join(c.src, "gone.txt"), "gone");
+            const seed = await makeEnv({
+                root: c.root,
+                conf,
+                source: c.src,
+                destination: c.dst,
+                mode: "copy",
+            });
+            expect((await f_RunPlan(seed)).record.status).toBe("success");
+            rmSync(join(c.src, "gone.txt"));
+            // 앱은 remote 루트로 조회한다(job-context assertBackupMovable)
+            const canMove = f_FeatureFlag(conf, `${ok!.remote}:`, "Move");
+            console.info(`[test:int] GCS backend features Move: ${canMove}`);
+            const bk = `${base}/backup-bk`;
+            const env = await makeEnv({
+                root: c.root,
+                conf,
+                source: c.src,
+                destination: c.dst,
+                mode: "sync",
+                backupDir: bk,
+                options: { ignoreErrors: true },
+            });
+            const cmp = await env.compare.run(env.job.id);
+            const start = env.runs.start({
+                jobId: env.job.id,
+                dryRun: false,
+                planToken: cmp.planToken,
+                confirmedDeletes: 1,
+                confirmLargeDeletes: true,
+            });
+            // Move 미지원이면 실행 전에 막히고(전송 없음), 지원하면 지운 파일이 백업으로 옮겨진다
+            const outcome = await start.then(
+                async ({ runId }) => (await env.waitFinished(runId, WAIT_MS)).record.status,
+                (e: unknown) => (e as { code?: string }).code,
+            );
+            expect(outcome).toBe(canMove ? "success" : "SAFETY_BLOCKED");
+            expect(env.history.list()).toHaveLength(canMove ? 1 : 0);
+            expect(f_RemoteFiles(conf, c.dst)).toEqual(
+                canMove ? ["keep.txt:4"] : ["gone.txt:4", "keep.txt:4"],
+            );
+            expect(f_RemoteFiles(conf, bk).some((p) => p.endsWith("/gone.txt:4"))).toBe(canMove);
         },
         CASE_MS,
     );

@@ -164,3 +164,32 @@
 - 명령: `backend features --ask-password=false --config <빈 conf> <대상>` — 대상: 로컬 임시 폴더, `:memory:`, `:alias,remote='<로컬 임시 폴더>':`, conf에 없는 remote (fixture `features-local`·`features-memory`·`features-alias-local`·`features-missing-remote`)
 - 결과: 로컬 `true`(exit 0), `:memory:` `false`(`Name: ":memory"`, `Root: ""`), alias는 `Name: "local"`로 감싼 로컬의 기능을 그대로 보여 `true`. 없는 remote는 stdout 없이 stderr `NOTICE: Failed to backend: didn't find section in config file (...)`, exit 1. 출력 `Root`·`String`에 대상 경로가 들어간다.
 - 영향: T-05(FR-30)는 stdout JSON의 `Features.CanHaveEmptyDirectories`만 읽고, 실패(0이 아닌 exit·해석 실패)는 null로 둔다. alias·union은 결과를 그대로 믿는다(spec E-13). `:memory:`를 "빈 폴더를 만들 수 없는 대상"의 로컬 대용으로 테스트에 쓸 수 있다. 출력에 경로·버킷 이름이 있으므로 로그·이력에 원문을 남기지 않는다. GCS 값(`directory_markers` 꺼짐·켜짐)은 GCS 수용 테스트로 확인한다(키 제공 후).
+
+## 2026-11-02 · rclone v1.75.1 · Windows 11 x64 (INT-003 T-03: 백업 폴더 `--backup-dir`)
+
+공통 명령: `sync --ask-password=false --config <빈 conf> --checkers 8 --transfers 4 --fast-list --skip-links --modify-window 2000ms [--create-empty-src-dirs] --backup-dir <백업>\run1 [--dry-run | --max-delete N] -v --use-json-log --stats 1s -- <원본> <대상>`. 원본은 `same`·`touch`(시간만 다름)·`changed`·`changed2`(덮어쓰기)·`sub/new`(새 파일), 대상은 시나리오에 따라 지울 파일 2개(`extra.txt`·`gone/old.txt`)와 덮어쓸 파일 2개 (`node scripts/probes/rclone-probes.mjs --only=backup`, `--only=backup-s3`).
+
+### 28. `--backup-dir` dry-run: 지울 파일은 `move into backup dir`, 덮어쓸 파일은 `move` + `copy`
+- 명령: 위 공통 명령 + `--dry-run` (fixture `backup-delonly-dryrun`·`backup-overonly-dryrun`·`backup-both-dryrun`·`backup-dirs-dryrun`)
+- 결과: 지울 파일은 `skipped:"move into backup dir"`(msg `Skipped move into backup dir as --dry-run is set (size N)`), 덮어쓸 파일은 `skipped:"move"`와 `skipped:"copy"` 두 줄. 최종 stats `deletes`는 지울 파일 수(2), `renames`는 덮어쓰기 이동 수. 폴더 삭제는 그대로 `remove directory`. dry-run은 백업 폴더를 만들지 않는다.
+- 영향: 로그 파서가 `move into backup dir`를 `delete`로, `move`를 `backupMove`(세지 않음)로 분류한다. 그러지 않으면 사전 확인의 삭제 수가 0이 되어 매번 PLAN_DRIFT로 막힌다. 사전 확인 비교 규칙(삭제 수·stats.deletes = 계획)은 그대로 쓴다.
+
+### 29. 실제 실행(Move 지원·같은 드라이브): 덮어쓰기 이동은 `--max-delete`에 들어가지 않는다
+- 명령: `--max-delete 2`(삭제만·둘 다), `--max-delete 0`(덮어쓰기만), 한도 1·0 (fixture `backup-delonly-real`·`backup-overonly-real`·`backup-both-real`·`backup-both-maxdelete1`·`backup-both-maxdelete0`)
+- 결과: 지울 파일은 `Moved (server-side)` → `Moved into backup dir`, 덮어쓸 파일은 `Moved (server-side)` → `Copied (new)`. 덮어쓰기만이면 `--max-delete 0`으로 exit 0. 둘 다는 한도 2로 exit 0이고 백업에 4개가 생긴다. 한도 1이면 덮어쓰기 2개와 삭제 1개만 옮기고 exit 7, 한도 0이면 덮어쓰기만 옮기고 exit 7(#3·#15와 같음). 폴더는 백업하지 않고 지운다.
+- 영향: 백업 폴더가 있어도 `--max-delete <계획 파일 삭제 수>`를 그대로 준다(안전 규칙 2 유지). 단 대상이 서버 쪽 Move를 지원할 때만 맞다(#30).
+
+### 30. Move가 없는 저장소와 다른 드라이브: 백업 이동이 "복사 + 삭제"가 되어 덮어쓰기까지 `--max-delete`를 쓴다
+- 명령: 백업이 다른 드라이브(`RCLONEGUI_PROBE_OTHER_DRIVE`) / `rclone serve s3`(127.0.0.1, 임의 키) 위의 대상·백업, `backend features --ask-password=false --config <빈 conf> -- <s3 remote>` (fixture `backup-other-drive-dryrun`·`backup-other-drive-real`·`backup-s3-features`·`backup-s3-dryrun`·`backup-s3-real-maxdelete2`·`backup-s3-real-maxdelete4`)
+- 결과: dry-run 출력은 #28과 같아 구분할 수 없다. 실제 실행은 덮어쓰기마다 `Copied` → `Deleted` → `Copied (new)`라 한도 2를 덮어쓰기가 다 써서 삭제가 막힌다(exit 7). S3는 `Features.Move:false, Copy:true`이고 한도 4(덮어쓰기 2 + 삭제 2)로도 exit 7 — 지울 파일 하나가 한도를 2 쓴다. 이동에 실패한 대상 파일은 그대로 남는다. `backend features`는 `--` 뒤 위치 인자를 받는다(exit 0).
+- 영향: 백업 폴더는 대상과 같은 드라이브·공유·remote에만 둘 수 있고(저장 검사), remote 대상은 실행 전에 `backend features`의 `Features.Move === true`일 때만 실행한다(아니거나 조회 실패면 SAFETY_BLOCKED, INT-003 FR-36). 한도를 늘리는 방식은 쓰지 않는다.
+
+### 31. 백업 하위 폴더에 같은 이름 파일이 있으면 예전 백업을 지우고(한도에 듦) 덮어쓴다
+- 명령: 백업 `run1`에 `extra.txt`·`changed.txt`를 미리 두고 `--max-delete 2` (fixture `backup-collision-real`)
+- 결과: 덮어쓸 `changed.txt`의 예전 백업이 `Deleted` → `Moved (server-side)`로 바뀐다. 이 삭제가 한도를 써서 지울 파일 2개는 `Couldn't move into backup dir: --max-delete threshold reached`로 남고 exit 7. dry-run에는 나오지 않는다.
+- 영향: 실행마다 다른 하위 폴더(`YYYY-MM-DD_HHmmss_<작업 id 8자>`)를 쓰고, 같은 프로세스 안에서는 백업 시각이 1초 이상씩 늘어나게 한다(`nextBackupTime`). 그래도 겹치면 한도에 걸려 멈추지만 예전 백업 1개는 잃을 수 있다.
+
+### 32. 대상·원본과 백업이 겹치면 dry-run에서도 fatal(exit 7)
+- 명령: 백업이 대상 안 / 원본 안 + `--dry-run` (fixture `backup-overlap-dest`·`backup-overlap-src`)
+- 결과: `Failed to sync: destination and parameter to --backup-dir mustn't overlap` / `source and parameter to --backup-dir mustn't overlap`, exit 7, 전송 없음.
+- 영향: 앱은 저장 단계에서 같은 검사를 먼저 해 오류를 필드에 보여 준다(대상 안을 필터로 제외하면 rclone은 허용하지만 앱은 거부한다).

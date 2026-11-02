@@ -79,6 +79,11 @@ export const zRunRecord = z.object({
      * 이 필드가 생기기 전의 기록에는 없다.
      */
     transferStarted: z.boolean().optional(),
+    /**
+     * 실제 실행에서 지우거나 덮어쓴 파일을 옮긴 위치(--backup-dir, 실행별 하위 폴더 포함, INT-003 T-03).
+     * 백업 폴더가 없거나 dry-run이면 없다. 이 필드가 생기기 전의 기록에도 없다.
+     */
+    backupDir: z.string().nullable().optional(),
 });
 export type typRunRecord = z.infer<typeof zRunRecord>;
 

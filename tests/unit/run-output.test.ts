@@ -9,6 +9,8 @@ import {
     parseTasklistCsv,
     type itfRunOutcomeInput,
 } from "@/main/parsers/run-output";
+import { checkPreflight } from "@/shared/run-plan";
+import type { typRunPlan } from "@/shared/schemas/run";
 import { fixtureLines, readFixture } from "./fixtures";
 
 function f_Collect(name: string, limit?: number) {
@@ -81,6 +83,59 @@ describe("createDryRunCollector (fixture)", () => {
         const a = c.summary();
         a.copySamples.push("x");
         expect(c.summary().copySamples).toEqual([]);
+    });
+});
+
+describe("--backup-dir dry-run (fixture, INT-003 FR-35)", () => {
+    /** backup-both: 새 파일 1, 덮어쓰기 2 + 시간만 다름 1, 지울 파일 2(extra.txt, gone/old.txt) */
+    const PLAN: typRunPlan = {
+        sourceFiles: 5,
+        destFiles: 6,
+        createFiles: 1,
+        updateFiles: 3,
+        deleteFiles: 2,
+        transferBytes: 32,
+        deleteBytes: 8,
+        conflictFiles: 0,
+        caseOnlyFiles: 0,
+        createDirs: 0,
+        deleteDirs: 1,
+    };
+
+    it("삭제만: move into backup dir를 삭제로 센다(2개, 8 B)", () => {
+        expect(f_Collect("backup-delonly-dryrun")).toMatchObject({
+            copyFiles: 1,
+            touchFiles: 1,
+            deleteFiles: 2,
+            deleteBytes: 8,
+            removeDirs: 1,
+        });
+    });
+
+    it("덮어쓰기만: move(덮어쓰기 이동)는 세지 않고 copy만 센다", () => {
+        expect(f_Collect("backup-overonly-dryrun")).toMatchObject({
+            copyFiles: 3,
+            touchFiles: 1,
+            deleteFiles: 0,
+        });
+    });
+
+    it("AC-16: 삭제 + 덮어쓰기 → 수집기·stats 삭제 수 = 계획(2), 사전 확인 통과", () => {
+        const s = f_Collect("backup-both-dryrun");
+        expect(s).toMatchObject({ copyFiles: 3, touchFiles: 1, deleteFiles: 2 });
+        expect(s.deleteSamples.toSorted()).toEqual(["extra.txt", "gone/old.txt"]);
+        const stats = f_LastStats("backup-both-dryrun");
+        expect(stats?.deletes).toBe(2);
+        expect(checkPreflight(PLAN, s, stats)).toEqual({ ok: true, mismatches: [] });
+    });
+
+    it("회귀: move into backup dir를 삭제로 세지 않으면 사전 확인이 PLAN_DRIFT가 된다", () => {
+        const c = createDryRunCollector();
+        for (const line of fixtureLines("backup-both-dryrun")) {
+            const p = parseLogLine(line);
+            c.push(p.skipped === "delete" ? { ...p, skipped: "other" } : p);
+        }
+        expect(checkPreflight(PLAN, c.summary(), f_LastStats("backup-both-dryrun")).ok).toBe(false);
     });
 });
 

@@ -23,6 +23,8 @@ export interface itfPlanTokenInput {
     mode: typRunMode;
     /** 동기화 범위(INT-002 T-05) */
     scope: typSyncScope;
+    /** 백업 기준 경로(정규화, 실행별 하위 폴더 제외). copy이거나 없으면 null (INT-003 FR-27) */
+    backupDir: string | null;
     /** 적용한 제외 패턴(공용 + 작업 전용)·전달 방식 해시(resolveEffectiveExcludes) */
     excludeSnapshotHash: string;
     options: Pick<
@@ -40,7 +42,7 @@ export function computePlanToken(input: itfPlanTokenInput): string {
     const s = input.summary;
     const o = input.options;
     const fields: unknown[] = [
-        3,
+        4,
         input.jobId,
         input.jobRev,
         input.createdAt,
@@ -48,6 +50,7 @@ export function computePlanToken(input: itfPlanTokenInput): string {
         input.destination,
         input.mode,
         input.scope,
+        input.backupDir,
         input.excludeSnapshotHash,
         [o.checkHashes, o.modtimeToleranceMs, o.skipLinks, o.fastList],
         input.caseInsensitive,

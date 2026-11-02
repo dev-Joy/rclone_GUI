@@ -38,6 +38,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         excludePatternIds: [],
         options,
         configPathOverride: null,
+        backupDir: null,
         autoSync: {
             enabled: false,
             intervalMinutes: 60,

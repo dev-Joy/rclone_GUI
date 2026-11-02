@@ -25,7 +25,7 @@
 | main 폴더 | `stores/`, `shared/rclone/args.ts`, `shared/rclone/log-parser.ts` | `store/`, `main/rclone/command-builder.ts`, `main/parsers/{lsjson,log}-parser.ts` |
 | IPC 정의 | `shared/types/ipc.ts` | `src/shared/ipc-contract.ts` 한 곳(채널은 구현된 것만) |
 | 설정 파일 | `vitest.config.ts` | `vitest.config.mts`, `vitest.integration.config.mts` (Vite ESM 로딩 경고 제거) |
-| 위험 옵션 차단 | 금지 목록(§8.1)만 | `command-builder.ts` 차단 목록: `--delete-excluded`, `--no-check-dest`, `--max-delete` 음수, `--dump*`, **`--backup-dir` 없는 sync `--ignore-errors`**. 실제 sync는 `maxDelete` 없이 인자를 만들 수 없음 |
+| 위험 옵션 차단 | 금지 목록(§8.1)만 | `command-builder.ts` 차단 목록: `--delete-excluded`, `--no-check-dest`, `--max-delete` 음수, `--dump*`, **`--backup-dir` 없는 sync `--ignore-errors`**(플래그 영역의 `--backup-dir`만 인정, INT-003 T-03). 실제 sync는 `maxDelete` 없이 인자를 만들 수 없음 |
 | 운영 CSP | 응답 헤더 | 운영은 빌드 시 `index.html` meta, 개발은 main의 응답 헤더(HMR 예외) |
 | 확인 도구 | - | `scripts/probes/rclone-probes.mjs`(fixture 수집), `scripts/dev/drive-app.mjs`(빌드본/개발 서버를 임시 userData로 띄워 CDP로 확인) |
 | Phase 3 파일 | `services/`, `features/onboarding`, `stores/system.ts`, `preload/api.ts` | `main/rclone/{process,detect,config}.ts`, `main/parsers/{rclone-env,wsl}-parser.ts`, `main/services/{path-service,wsl}.ts`, `main/ipc/{rclone,wsl,dialog,system}.ts`, `pages/{OnboardingBanner,RcloneSetupPanel,PathCheckPanel}.tsx`, `stores/rclone-env-store.ts`, preload는 `index.ts` 한 파일 |
@@ -122,6 +122,23 @@ INT-003 T-01(`docs/intent/planned/INT-003-os-schedule-backup-gcs-followup/` spec
 | 패키징 (§17) | - | 제거 시(업데이트 아님) `build/installer.nsh`가 `Schedule.Service` COM으로 `\rcloneGUI\` 작업과 폴더를 지운다. `electronFuses`: runAsNode·NODE_OPTIONS·--inspect 끔, asar 무결성 확인·asar에서만 로드 |
 | 범위 밖 | - | 암호화된 rclone.conf 헤드리스 실행(안내만), 로그오프 상태 실행, 작업 스케줄러 화면에서 트리거만 바꾼 것 감지, "로그온 직후 실행" 표시(경로 재시도 횟수는 app.log에만) |
 
+### 구현 반영 (INT-003 Phase 3 — 백업 폴더 `--backup-dir`, 2026-11-02)
+
+INT-003 T-03(spec §4.3 FR-23~FR-29·FR-35·FR-36, §7 E-8~E-11·E-15)로 바뀐 항목이다. 본문·위 표보다 이 표가 우선한다. rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #28~#32.
+
+| 항목 | 이 문서·이전 표 | 실제 구현 |
+| :--- | :--- | :--- |
+| 백업 폴더 필드 | 없음(`--backup-dir` 금지) | 작업 최상위 `backupDir: string \| null`(`options` 아님 — 설정 기본값과 같이 쓰지 않음). 저장 입력은 필수(기본값 없음), 예전 데이터는 `null`로 읽음(DDL 없음). copy면 저장은 하되 검사·인자·토큰에서 무시 |
+| 저장 검사 (§6) | - | `checkBackupDir`(path-utils): 형식 → 루트 금지 → 드라이브 상대(`x:folder`) 거부 → 대상과 같은 위치(같은 드라이브·UNC 공유·remote, WSL `/mnt` 표기도 같아야 함) → 대상과 겹침 → 원본과 겹침. job-store 저장·편집기·실행 문맥(`resolveJobContext`)이 같은 함수를 쓴다. 문구는 `백업 폴더: …`(편집기 필드로 매핑) |
+| D4 sync + `--ignore-errors` (S15) | 계속 차단 | 백업 폴더가 없을 때만 차단(`checkPlanSafety`). `BLOCKED_FLAGS`의 "백업 없음" 규칙은 그대로이고, `--backup-dir`는 플래그 영역(`--` 앞)에 있을 때만 인정한다 |
+| 실행 인자 | - | sync + 백업 폴더면 미리보기·사전 확인·실제 실행에 같은 `--backup-dir <기준>\<YYYY-MM-DD_HHmmss>_<jobId 8자>`(remote는 `/`). 하위 폴더는 실행마다 한 번 정하고 같은 프로세스 안에서 시각이 1초 이상씩 늘어난다(`nextBackupTime`, 예전 백업 덮어쓰기 방지). `--max-delete <계획 파일 삭제 수>`는 그대로(덮어쓰기 이동은 세지 않음) |
+| 사전 확인 집계 | `skipped:"delete"` → 삭제 | `move into backup dir` → 삭제, `move`(덮어쓰기 이동) → `backupMove`(세지 않음). 비교 규칙은 그대로 |
+| 이동 지원 확인 | - | remote 대상은 `rclone backend features -- <remote 루트>`의 `Features.Move === true`일 때만 실행(수동은 실제 실행만, 자동·OS 예약은 항상). false·조회 실패면 SAFETY_BLOCKED(자동은 blocked 이력). 결과는 (rclone, conf, 루트) 키로 캐시, 실패는 캐시하지 않음, 10초 제한. 로컬·UNC는 조회하지 않음. `ALLOWED_COMMANDS`에 `backend features`만 추가 |
+| 계획 토큰 (§7.4) | v3 | v4, 백업 기준 경로(정규화, 하위 폴더 제외) 포함 |
+| 이력·로그 | - | `run_records.data.backupDir`(실제 실행만, 하위 폴더 포함). 실행 로그 인자의 `--backup-dir` 값은 `<백업 폴더>`로 가리고 머리말 뒤 `# 백업 위치:` 한 줄에 전체 경로. app.log에는 경로 없음 |
+| 화면 (§13) | - | 편집기 경로 섹션에 `백업 폴더 (선택)`(sync만, copy는 숨기고 값이 있으면 안내), 위험 옵션의 오류 무시 안내가 백업 폴더 유무에 따라 바뀜, 삭제 확인 창에 백업 폴더와 "옮깁니다" 안내, 실행 결과·이력 상세에 백업 위치 |
+| 범위 밖 | - | Move 없는 저장소의 백업 폴더(한도를 늘려야 해 안전 규칙 2와 충돌), 백업 폴더 정리, 편집기에서 Move 미지원 미리 경고(Phase 4 `remotes:features`와 함께) |
+
 ---
 
 ## 0. 핵심 결정 요약
@@ -195,7 +212,7 @@ Tier 1 Fast-path 대상이 아니며, `code-planner → code-implementer → cod
 | 선택 항목만 복사/삭제 | `--files-from-raw` 필터 수명주기, 부분 실행 이력, 안전 확인이 추가로 필요 | 1순위 (GoodSync 유사성) |
 | 파일 감시(watcher) 자동 동기화 | 디바운스/대량 이벤트/잠금 파일 처리 복잡, interval로 MVP 충족 | 2순위 |
 | `rclone bisync` 양방향 | 충돌 해결 정책과 데이터 손실 위험이 큼, 단방향 copy/sync 안정화 후 | 3순위 |
-| `--backup-dir`, `--track-renames` | 삭제/복원 정책과 UI가 복잡 | 3순위 |
+| `--backup-dir`, `--track-renames` | 삭제/복원 정책과 UI가 복잡 | 3순위 (`--backup-dir`는 INT-003 T-03에서 sync 백업 폴더로 구현 — 아래 반영 표) |
 | cron/캘린더 스케줄, 다중 작업 병렬 실행 | MVP는 균등 interval + 전역 1개 실행 | 3순위 |
 | 사전/사후 스크립트, 웹훅/메일 알림 | 로컬 단일 사용자 요구 밖 | 4순위 |
 | 앱 자동 업데이트 | 서명/배포 채널 미정 | 4순위 |
@@ -1043,8 +1060,10 @@ planToken = sha256(
 | logging | `-v --use-json-log --stats 1s` | 항상 | dry-run 포함 |
 | lsjson | `lsjson ...flags -- <path>` | - | `--recursive --files-only --no-mimetype`, `--hash`, `--skip-links`, `--exclude`, `--config` 추가 |
 
-**금지/미사용**: `--delete-excluded`, `--ignore-times`, `--size-only`, `--update`, `--backup-dir`,
+**금지/미사용**: `--delete-excluded`, `--ignore-times`, `--size-only`, `--update`,
 `--track-renames`, `--progress`(JSON 로그와 충돌), 셸 문자열 조합.
+**조건부 사용**: `--backup-dir`는 sync + 작업 백업 폴더가 있을 때만(INT-003 T-03, 아래 반영 표).
+
 
 **정렬 원칙**: `[mode, ...flags, '--', source, destination]` 순서로 결정적으로 생성한다.
 `--`는 positional 경로가 flag로 해석되는 것을 막는다(실측: rclone 1.75.1 copy/lsjson에서 동작).

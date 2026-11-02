@@ -37,10 +37,10 @@
 | `src/main/index.ts` | `requestSingleInstanceLock()` 인자 없음(`:603`), `second-instance`는 창만 보인다(`:607`), `--hidden`만 읽는다(`:96`), `f_Start`가 항상 창·트레이·스케줄러를 만든다(`:369`) | `--run-job <id>` 해석, `additionalData`로 전달, 헤드리스 모드(창·트레이 없이 실행 후 종료), 헤드리스 중 GUI 요청이면 GUI 모드로 바꾼다 |
 | `src/main/services/run-service.ts` | `startAuto(jobId)`가 trigger를 `"scheduler"`로 고정한다(`:384`, `:396`). `f_CheckAutoGate`(`:231`), `buildTransferArgs`는 `spawnTransfer`(`:833`)에서만 부른다 | `startAuto(jobId, trigger)`로 trigger를 받는다. 백업 폴더가 있으면 실행별 하위 폴더를 만들어 `buildTransferArgs`에 넘긴다 |
 | `src/main/services/scheduler.ts` | 켜진 모든 작업을 tick에서 본다 | OS 백엔드 작업은 앱 스케줄러에서 건너뛴다 |
-| `src/shared/schemas/job.ts` | `zAutoSyncInput`(`:76`)에 백엔드 없음, `zJobRunOptions`(`:44`)에 백업 폴더 없음 | `autoSync.backend`(`"app" \| "os"`), `options.backupDir`(문자열 또는 null) 추가. 저장된 값 읽기는 기본값(`"app"`, `null`)으로 예전 데이터를 읽는다 |
+| `src/shared/schemas/job.ts` | `zAutoSyncInput`(`:76`)에 백엔드 없음, `zJobRunOptions`(`:44`)에 백업 폴더 없음 | `autoSync.backend`(`"app" \| "os"`), 작업 최상위 `backupDir`(문자열 또는 null, `options`가 아님 — §6.1) 추가. 저장된 값 읽기는 기본값(`"app"`, `null`)으로 예전 데이터를 읽는다 |
 | `src/shared/schemas/common.ts` | `zRunTrigger = ["manual", "scheduler"]`(`:32`) | `"os-scheduler"` 추가 |
 | `src/shared/run-gates.ts` | `checkPlanSafety`가 sync + `ignoreErrors`를 항상 막는다(`:73`), `SYNC_IGNORE_ERRORS_TEXT`(`:20`) | 백업 폴더가 있으면 통과. 안내 문구 갱신 |
-| `src/main/rclone/command-builder.ts` | `BLOCKED_FLAGS`의 "백업 없음" 규칙(`:57`), `ALLOWED_COMMANDS`(`:85`)에 `backend` 없음, `buildTransferArgs`(`:236`) | 차단 규칙은 그대로. `buildTransferArgs`에 `backupDir` 입력 추가. `["backend", "features"]` 허용과 인자 빌더 추가 |
+| `src/main/rclone/command-builder.ts` | `BLOCKED_FLAGS`의 "백업 없음" 규칙(`:57`), `ALLOWED_COMMANDS`(`:85`)에 `backend` 없음, `buildTransferArgs`(`:236`) | 차단 규칙의 의미는 그대로(`--backup-dir` 탐색만 플래그 영역으로 좁힘). `buildTransferArgs`에 `backupDir` 입력 추가. `["backend", "features"]` 허용과 인자 빌더 추가 |
 | `src/main/services/plan-token.ts` | 토큰 버전 `3`, `backupDir` 없음(`:44`) | 버전 `4`, 백업 폴더 기준 경로(정규화) 포함 |
 | `src/shared/path-utils.ts` | `checkPathPair`(`:230`, S1~S4a), `canonicalLocation`·`pathKey` | 백업 폴더 검사 함수 추가(같은 remote, 원본·대상과 겹침 금지). 기존 함수 재사용 |
 | `src/shared/diff-engine.ts` | `createDirs`·`deleteDirs` 계산(`:293`) | 계산은 그대로 둔다. 표시·자동 판정에서 구분한다(§4.4) |
@@ -85,13 +85,14 @@
 - **FR-34** 헤드리스 실행에는 앱 내부 제한 시간(12시간)을 둔다. 넘으면 기존 취소 경로(`killProcessTree`, taskkill /T /F)로 rclone 트리를 끝내고 이력에 `canceled`(사유: 시간 제한)를 남긴 뒤 종료 코드 1로 끝낸다. 작업 스케줄러의 `ExecutionTimeLimit`(FR-7)은 앱이 응답하지 않을 때의 백스톱이다(§10 Q-8).
 
 ### 4.3 T-03 백업 폴더
-- **FR-23** 작업 옵션에 "백업 폴더"(선택, 비우면 사용 안 함)를 둔다. sync 모드에서만 쓴다(copy는 지우지 않으므로 숨김·무시). 값은 경로 입력 규칙(`zPathInput`)을 따른다.
+- **FR-23** 작업에 "백업 폴더"(작업 최상위 필드 `backupDir`, 선택, 비우면 사용 안 함)를 둔다. 작업 옵션(`options`)은 설정 기본값과 같이 쓰므로 넣지 않는다(§6.1). sync 모드에서만 쓴다(copy는 지우지 않으므로 숨김·무시). 값은 경로 입력 규칙(`zPathInput`)을 따른다.
 - **FR-24** 저장 전 검사: (a) 대상과 같은 remote(로컬이면 같은 드라이브 문자 또는 같은 UNC 공유. 다른 드라이브는 rclone 동작과 상관없이 거부한다 — 이름 바꾸기 대신 복사+삭제가 되어 I/O가 두 배이고 중간 실패 시 반쯤 옮겨진 상태가 남는다, §10 Q-4), (b) 원본·대상과 겹치지 않음(같은 경로, 서로의 상위·하위 모두 금지, 대소문자 설정은 `pathKey` 규칙을 따름), (c) 원본·대상과 같은 형식 검사(S1~S4a 중 해당 항목).
-- **FR-25** 실제 실행(사전 확인 dry-run 포함)마다 `--backup-dir <백업폴더>/<YYYY-MM-DD_HHmmss>_<jobId 앞 8자>`를 준다. 시각은 실행 시작 시각(로컬 시간)이고, 같은 실행의 사전 확인과 실제 실행은 같은 값을 쓴다. 전역 락으로 같은 작업이 같은 초에 두 번 돌 수 없으므로 존재 확인·`_2` 붙이기는 하지 않는다. 시각을 앞에 두어 시간순으로 정렬되게 하고, 작업 이름은 쓰지 않는다(경로 금지 문자·개인정보, §10 Q-6).
-- **FR-26** 백업 폴더가 있으면 `checkPlanSafety`의 "sync + 오류 무시" 차단을 통과한다. 수동·자동·OS 예약 실행 모두 같다. 백업 폴더가 없으면 지금처럼 막는다. `BLOCKED_FLAGS`의 "백업 없음" 규칙은 그대로 둔다(백스톱).
+- **FR-25** 실제 실행(사전 확인 dry-run 포함)마다 `--backup-dir <백업폴더>/<YYYY-MM-DD_HHmmss>_<jobId 앞 8자>`를 준다. 시각은 실행 시작 시각(로컬 시간)이고, 같은 실행의 미리보기·사전 확인·실제 실행은 같은 값을 쓴다. 같은 프로세스 안에서는 마지막으로 쓴 백업 시각보다 1초 이상 늦은 시각을 쓴다(`nextBackupTime`, E-11). 존재 확인·`_2` 붙이기는 하지 않는다. 시각을 앞에 두어 시간순으로 정렬되게 하고, 작업 이름은 쓰지 않는다(경로 금지 문자·개인정보, §10 Q-6).
+- **FR-26** 백업 폴더가 있으면 `checkPlanSafety`의 "sync + 오류 무시" 차단을 통과한다. 수동·자동·OS 예약 실행 모두 같다. 백업 폴더가 없으면 지금처럼 막는다. `BLOCKED_FLAGS`의 "백업 없음" 규칙은 그대로 둔다(백스톱). 이 규칙은 플래그 영역("--" 앞)의 `--backup-dir`만 백업으로 본다.
 - **FR-27** 계획 토큰에 백업 폴더 기준 경로(정규화, 실행별 하위 폴더 제외)를 넣는다. 바뀌면 PLAN_STALE로 다시 비교하게 한다.
 - **FR-28** 삭제 확인 창·실행 결과·이력 상세에 "지우거나 덮어쓴 파일은 <백업폴더>/<하위폴더>로 옮김"을 보인다. 실행 로그 파일에도 남긴다(app.log에는 경로를 남기지 않는다).
-- **FR-35** `--backup-dir`을 쓸 때의 삭제 수는 T-03 첫 단계 probe로 확정하고 fixture로 남긴다: (1) dry-run·실제 실행의 로그 문구(`skipped` 값이 `"delete"`가 아닌 백업 이동 문구로 바뀌는지), (2) 백업 이동이 `--max-delete`에 세어지는지, (3) 덮어쓴 파일의 백업 이동이 어떻게 찍히는지. `log-parser.ts`의 `f_Skip`은 지우는 파일의 백업 이동만 `delete`로 세고, 덮어쓰기 이동은 세지 않게 고친다. 사전 확인의 삭제 수가 계획 삭제 수와 같다는 게이트 규칙과 `--max-delete <계획 삭제 수>`는 그대로 둔다(probe 결과가 다르면 이 FR을 고친 뒤 구현, §10 Q-5).
+- **FR-35** (probe로 확정, rclone-notes #28~#31) `--backup-dir`을 쓰면 dry-run에서 지울 파일은 `skipped:"move into backup dir"`, 덮어쓸 파일은 `skipped:"move"` + `skipped:"copy"`로 찍히고, 최종 stats `deletes`는 지울 파일 수만 센다. `log-parser.ts`의 `f_Skip`은 `move into backup dir`를 `delete`로, `move`를 `backupMove`(세지 않음)로 분류한다. 사전 확인의 삭제 수가 계획 삭제 수와 같다는 게이트 규칙과 `--max-delete <계획 삭제 수>`는 그대로 둔다 — **대상이 서버 쪽 Move를 지원할 때만 맞으므로 FR-36으로 그 조건을 강제한다.** Move가 없으면 덮어쓰기까지 한도를 써서 계획대로여도 exit 7이 되지만, 한도를 늘리지 않는다(안전 규칙 2 유지).
+- **FR-36** 백업 폴더가 있는 sync는 실행(미리보기 제외, 사전 확인·실제, 수동·자동·OS 예약) 전에 대상이 서버 쪽 이동을 지원하는지 확인한다. 로컬·UNC는 FR-24 (a)(같은 드라이브·공유)로 충분해 조회하지 않는다. remote는 `rclone backend features <대상 remote 루트>`의 `Features.Move === true`일 때만 실행한다. false이거나 조회에 실패하면(null) SAFETY_BLOCKED로 막고 "이 저장소는 파일을 옮기지 못해 백업 폴더를 쓸 수 없음"을 안내한다(문구에 remote 이름·경로 없음). 자동·OS 예약은 `blocked` 이력을 남긴다. 결과는 (rclone 경로, conf 경로, remote 루트) 키로 앱 실행 동안 캐시하고 실패는 캐시하지 않는다(rclone-notes #30).
 - **FR-29** 편집기·옵션 안내(`SYNC_IGNORE_ERRORS_TEXT`)를 "백업 폴더를 지정하면 쓸 수 있음"으로 바꾼다. 백업 폴더는 앱이 지우지 않으며 직접 정리해야 한다는 안내를 붙인다.
 
 ### 4.4 T-05 빈 폴더를 만들 수 없는 대상
@@ -119,7 +120,11 @@
 export const zScheduleBackend = z.enum(["app", "os"]);
 zAutoSyncInput  += { backend: zScheduleBackend }                 // 저장 입력: 필수(기본값 없음 — 기존 규칙과 같음)
 zAutoSync       += { backend: zScheduleBackend.default("app") }  // 저장된 값 읽기
-zJobRunOptions  += { backupDir: zPathInput.nullable() }          // 읽기용은 .default(null)
+zJobDraftShape  += { backupDir: zPathInput.nullable() }          // 작업 최상위(options 아님). 저장 입력: 필수(기본값 없음)
+zJobStoredDraft += { backupDir: zPathStored.nullable().default(null) }  // 저장된 값 읽기
+
+// src/shared/schemas/run.ts
+zRunRecord      += { backupDir: z.string().nullable().optional() }     // 실제 실행의 최종 백업 경로(하위 폴더 포함)
 
 // src/shared/schemas/common.ts
 export const zRunTrigger = z.enum(["manual", "scheduler", "os-scheduler"]);
@@ -127,7 +132,7 @@ export const zRunTrigger = z.enum(["manual", "scheduler", "os-scheduler"]);
 // src/shared/schemas/system.ts (또는 새 파일)
 export const zRunJobAdditionalData = z.object({ runJob: z.uuid() }).strict();
 ```
-- `zJobRunOptions`는 저장 입력과 읽기에 같은 객체를 쓰므로(`:44`) 읽기용 기본값을 넣을 방법은 구현 단계에서 정한다(`zJobStoredDraft`에서 `options` 확장).
+- (확정) `backupDir`는 `options`가 아니라 작업 최상위에 둔다. `zJobRunOptions`는 설정 기본값(`zJobDefaults`)과 옵션 화면(`JobOptionsFields`)이 같이 쓰므로 작업마다 다른 경로를 둘 수 없고, 원본·대상 없이 검증할 수도 없다(`configPathOverride`와 같은 패턴).
 
 ### 6.2 함수 (초안)
 ```ts
@@ -136,11 +141,11 @@ startAuto(jobId: string, trigger: "scheduler" | "os-scheduler" = "scheduler")
 
 // src/main/rclone/command-builder.ts
 itfTransferArgsInput += { backupDir: string | null }   // 실행별 하위 폴더까지 붙은 최종 값
-buildBackendFeaturesArgs(remote: string, configPath: string | null): string[]
+buildBackendFeaturesArgs(target: string, configPath: string | null): string[]   // ["backend","features",…,"--",target] (T-03에서 먼저 만들고 T-05가 재사용)
 ALLOWED_COMMANDS += ["backend", "features"]
 
 // src/shared/run-gates.ts
-typGateJob.options += "backupDir"   // checkPlanSafety가 백업 폴더 유무를 본다
+typGateJob = Pick<typJob, "mode" | "backupDir"> & { options }   // checkPlanSafety가 백업 폴더 유무를 본다
 
 // src/shared/path-utils.ts
 checkBackupDir(backup, source, destination, caseInsensitive): itfPathIssue | null
@@ -175,11 +180,11 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **E-8** 백업 폴더가 대상 안에 있음 → 저장 거부(rclone은 필터로 제외하면 허용하지만 지원하지 않는다).
 - **E-9** 백업 폴더가 대상과 다른 remote·다른 드라이브 → 저장 거부(FR-24 (a)).
 - **E-10** 백업 폴더에 원본·대상 제외 패턴이 걸림 → 겹치지 않는 경로만 허용하므로 영향 없다.
-- **E-11** 실행별 하위 폴더 이름 충돌 → 이름에 jobId 앞 8자가 들어가고 전역 락으로 한 번에 하나만 실행되므로 생기지 않는다. 여러 작업이 같은 백업 폴더를 써도 겹치지 않는다(FR-25).
+- **E-11** 실행별 하위 폴더 이름 충돌 → 이름에 jobId 앞 8자가 들어가 여러 작업이 같은 백업 폴더를 써도 겹치지 않는다. 같은 작업은 전역 락이 있어도 짧은 실행 뒤 같은 초에 다음 실행이 시작될 수 있으므로, run-service가 마지막으로 쓴 백업 시각보다 1초 이상 늦은 시각을 쓴다(`nextBackupTime`). 다른 프로세스는 single-instance 락이 막는다. 그래도 겹치면(시계가 뒤로 감·재시작 직후) rclone이 예전 백업을 지우고 덮어쓰며 그 삭제가 한도를 써서 exit 7로 멈춘다 — 예전 백업 1개는 잃을 수 있다(rclone-notes #31).
 - **E-12** `backend features` 조회 실패·시간 초과 → null, 경고·구분 표시 없음, 자동 noop 판정도 지금과 같다.
 - **E-13** 대상 경로의 remote가 alias·union 등 다른 remote를 감싼 것 → `backend features` 결과를 그대로 믿는다.
 - **E-14** 전역 일시정지 중 OS 예약 실행 → 진입 검사에서 차단하고 `blocked`(사유: 일시정지) 이력.
-- **E-15** `--max-delete`와 `--backup-dir`을 같이 쓰면 이동이 삭제로 세어지는지, dry-run 문구가 바뀌어 사전 확인 삭제 수가 0으로 읽히는지 → FR-35 probe·fixture로 확정하고 파서 테스트로 막는다.
+- **E-15** `--max-delete`와 `--backup-dir`을 같이 쓰면 이동이 삭제로 세어지는지, dry-run 문구가 바뀌어 사전 확인 삭제 수가 0으로 읽히는지 → FR-35 probe·fixture로 확정하고 파서 테스트로 막는다. Move가 없는 저장소·다른 드라이브는 dry-run 출력이 같아 사전 확인으로 알 수 없으므로 실행 전 features 확인(FR-36)과 같은 드라이브 검사(FR-24 (a))로 막는다(rclone-notes #30).
 - **E-16** 두 OS 예약이 같은 시각에 실행됨 → 두 번째는 FR-14로 넘겨져 대기열에서 첫 실행이 끝나기를 기다린 뒤 실행된다(FR-16).
 
 ## 8. 수용 기준 (AC-n)
@@ -200,6 +205,8 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **AC-15** Given OS 예약 작업 A가 실행 중, When 작업 B의 OS 예약이 실행, Then B는 A가 끝난 뒤 실행되어 이력이 남는다. 60분 안에 락이 풀리지 않으면 B는 `blocked` 이력을 남긴다.
 - **AC-16** Given 백업 폴더가 있는 sync + 삭제 대상 N개, When 사전 확인 dry-run, Then 파서가 읽은 삭제 수가 N이다(덮어쓰기 이동 제외, fixture 기반 단위 테스트).
 - **AC-17** Given 백업 폴더가 대상과 다른 로컬 드라이브, When 저장, Then 저장이 거부되고 이유가 필드에 보인다.
+- **AC-18** Given Move를 지원하지 않는(또는 조회에 실패한) remote 대상 + 백업 폴더, When 실행(수동·자동), Then rclone 전송 없이 SAFETY_BLOCKED(자동은 `blocked` 이력).
+- **AC-19** Given 같은 작업을 1초 안에 두 번 실행, Then 두 실행의 백업 하위 폴더가 다르다.
 
 ## 9. 가정과 리스크
 - **A-1** (확인 2026-11-02) electron-builder 26.18.0은 `electronFuses` 설정을 지원한다(`app-builder-lib/out/configuration.d.ts:260` `electronFuses?: FuseOptionsV1`). `@electron/fuses@1.8.0`은 app-builder-lib의 기존 의존성이라 새 의존성·THIRD_PARTY_NOTICES 추가가 없다. FR-21은 `electron-builder.yml`의 `electronFuses`로 한다.
@@ -222,7 +229,7 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **Q-3** (결정) BUSY면 바로 blocked로 끝내지 않고 프로세스 안 대기열에서 최대 60분 기다린다. 근거: 두 작업을 같은 시각(예: 매일 03:00)에 걸면 두 번째가 매번 blocked가 되어 매일 예약은 하루 치 실행을 잃는다. 앱 스케줄러도 BUSY면 다음 tick에 다시 본다 → FR-16·FR-17·E-16·AC-15.
 - **Q-4** (결정) 로컬 백업 폴더는 대상과 같은 드라이브(또는 같은 UNC 공유)만 허용한다. rclone이 다른 드라이브를 복사+삭제로 처리하더라도 I/O 두 배·중간 실패 시 반쯤 옮겨진 상태 때문에 1차에서는 막는다 → FR-24·E-9·AC-17. probe로 기록: 다른 드라이브 `--backup-dir` 동작.
 - **Q-5** (결정, probe 필수) T-03 첫 단계에서 probe·fixture로 확정한다. 위험: dry-run 문구가 백업 이동 문구로 바뀌면 `f_Skip`이 `other`로 분류해 사전 확인 삭제 수가 0이 되고, 덮어쓰기 이동이 같은 문구로 찍히면 삭제 수가 늘어난다. 지우는 파일의 백업 이동만 삭제로 센다 → FR-35·E-15·AC-16.
-- **Q-6** (결정) 하위 폴더 이름은 `YYYY-MM-DD_HHmmss_<jobId 앞 8자>`. 충돌이 없어 `_2` 붙이기와 remote 충돌 예외를 뺀다 → FR-25·E-11·R-5.
+- **Q-6** (결정) 하위 폴더 이름은 `YYYY-MM-DD_HHmmss_<jobId 앞 8자>`. `_2` 붙이기와 remote 충돌 예외를 뺀다. 같은 초 충돌은 프로세스 안 단조 증가 시각으로 막는다(2026-11-02 probe 뒤 정정) → FR-25·E-11·R-5.
 - **Q-7** (결정) electron-builder 26.18.0이 `electronFuses`를 지원한다. 새 의존성 없음 → A-1·FR-21. 설치본 실행은 `smoke:installer`로 확인한다(R-2).
 - **Q-8** (결정) 시간 제한은 앱 내부(12시간)에서 걸어 `killProcessTree`로 rclone 트리를 정리한다. `ExecutionTimeLimit=PT13H`는 백스톱이다. 근거: OS가 강제 종료하면 앱에 정상 종료 신호가 없어 정리 코드가 돌지 못하고, rclone이 남은 채 락이 풀려 다음 실행과 겹칠 수 있다 → FR-7·FR-34·E-3. probe로 기록: OS 강제 종료 뒤 rclone 자식이 남는지.
   - probe 결과(2026-11-02, notes #5): **OS 강제 종료 시 자식도 종료됨을 확인**했다. `ExecutionTimeLimit PT1M`에서 부모는 약 63초 뒤 끝났고 그때 자식 프로세스도 이미 없었다. rclone이 남아 다음 실행과 겹칠 위험은 낮지만, 정상 종료 신호 없이 끝나므로 이력은 `running`으로 남아 다음 시작의 `markInterrupted`가 정리한다. 그래서 앱 내부 12시간 제한을 먼저 건다(결정 유지).

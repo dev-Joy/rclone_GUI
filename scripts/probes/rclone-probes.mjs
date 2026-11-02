@@ -7,13 +7,16 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
- *       묶음 이름(copy-cancel-large, excl, scope, features)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       묶음 이름(copy-cancel-large, excl, scope, features, backup)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       backup-s3는 rclone serve s3를 띄우므로 --only=backup-s3로 줄 때만 실행한다.
+ *       RCLONEGUI_PROBE_OTHER_DRIVE(예: D:\\)가 있으면 backup 묶음이 그 드라이브에 임시 폴더를 만들어 다른 드라이브 백업도 확인한다.
  *
  * @author dev-Joy 2026-10-28
  */
 
 // ========== External imports ==========
 import { execFile, spawn, spawnSync } from "node:child_process";
+import { randomBytes, randomInt } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -40,12 +43,24 @@ function f_SetFile(path, text, mtime) {
     utimesSync(path, mtime, mtime);
 }
 
-function f_Sanitize(text) {
-    const fwd = work.replaceAll("\\", "/");
-    const variants = [`//?/${fwd}`, `\\\\?\\${work}`, work.replaceAll("\\", "\\\\"), work, fwd];
+/** 출력에서 가릴 폴더: [경로, 대체 문자열]. 다른 드라이브 임시 폴더(backup 묶음)는 <TMP2> */
+const maskDirs = [[work, "<TMP>"]];
+/** 출력에서 가릴 값: [값, 대체 문자열] (backup-s3 묶음의 포트·키) */
+const maskValues = [];
+
+function f_MaskDir(text, dir, label) {
+    const fwd = dir.replaceAll("\\", "/");
+    const variants = [`//?/${fwd}`, `\\\\?\\${dir}`, dir.replaceAll("\\", "\\\\"), dir, fwd];
     let out = text;
     for (const v of variants.toSorted((a, b) => b.length - a.length))
-        out = out.replaceAll(v, "<TMP>");
+        out = out.replaceAll(v, label);
+    return out;
+}
+
+function f_Sanitize(text) {
+    let out = text;
+    for (const [dir, label] of maskDirs) out = f_MaskDir(out, dir, label);
+    for (const [value, label] of maskValues) out = out.replaceAll(value, label);
     return out;
 }
 
@@ -554,6 +569,225 @@ try {
         f_Features("features-memory", ":memory:");
         f_Features("features-alias-local", `:alias,remote='${fDir}':`);
         f_Features("features-missing-remote", "rclonegui-probe-missing:");
+    }
+    // INT-003 T-03: --backup-dir (삭제만·덮어쓰기만·둘 다·한도·폴더·겹침·하위 폴더 충돌·다른 드라이브)
+    // 앱과 같은 인자 순서: ... --modify-window [--create-empty-src-dirs] --backup-dir X [--dry-run | --max-delete N] -v ...
+    if (f_Selected("backup")) {
+        const g = "backup";
+        const bSrc = join(work, "backup-src");
+        const bDst = join(work, "backup-dst");
+        const bBk = join(work, "backup-bk");
+        const bRun = join(bBk, "run1");
+        // 원본: same, touch(시간만 다름), changed·changed2(덮어쓰기), sub/new(새 파일)
+        f_SetFile(join(bSrc, "same.txt"), "same", OLD);
+        f_SetFile(join(bSrc, "touch.txt"), "touch", NEWER);
+        f_SetFile(join(bSrc, "changed.txt"), "changed-longer", NEWER);
+        f_SetFile(join(bSrc, "changed2.txt"), "changed2-longer", NEWER);
+        f_SetFile(join(bSrc, "sub", "new.txt"), "new", OLD);
+        /** 대상 준비. del: 지울 파일 2개(extra.txt, gone/old.txt), over: 덮어쓸 파일 2개. 백업 폴더는 비운다 */
+        const f_MakeBackupDest = (target, { del, over }) => {
+            rmSync(target, { recursive: true, force: true });
+            rmSync(bBk, { recursive: true, force: true });
+            f_SetFile(join(target, "same.txt"), "same", OLD);
+            f_SetFile(join(target, "touch.txt"), "touch", OLD);
+            f_SetFile(
+                join(target, "changed.txt"),
+                over ? "changed" : "changed-longer",
+                over ? OLD : NEWER,
+            );
+            f_SetFile(
+                join(target, "changed2.txt"),
+                over ? "changed2" : "changed2-longer",
+                over ? OLD : NEWER,
+            );
+            if (del) {
+                f_SetFile(join(target, "extra.txt"), "extra", OLD);
+                f_SetFile(join(target, "gone", "old.txt"), "old", OLD);
+            }
+        };
+        const f_Files = (dir) => {
+            try {
+                return JSON.stringify(f_ListFiles(dir));
+            } catch {
+                return "(없음)";
+            }
+        };
+        const f_Sync = (name, extra, target = bDst) =>
+            f_Probe(
+                name,
+                ["sync", ask, ...common, ...tx, ...mw, ...extra, ...log, "--", bSrc, target],
+                g,
+            );
+        const f_After = (r, target = bDst, bk = bBk) =>
+            r && console.log(`  대상: ${f_Files(target)}  백업: ${f_Files(bk)}`);
+        const f_Show = (r) =>
+            r && console.log(`  건너뛴 동작: ${JSON.stringify(f_SkippedOps(r.stderr))}`);
+        const bd = ["--backup-dir", bRun];
+        for (const [n, o, maxDel] of [
+            ["delonly", { del: true, over: false }, "2"],
+            ["overonly", { del: false, over: true }, "0"],
+            ["both", { del: true, over: true }, "2"],
+        ]) {
+            f_MakeBackupDest(bDst, o);
+            f_Show(f_Sync(`backup-${n}-dryrun`, [...bd, "--dry-run"]));
+            f_After(true);
+            f_MakeBackupDest(bDst, o);
+            f_After(f_Sync(`backup-${n}-real`, [...bd, "--max-delete", maxDel]));
+        }
+        // 한도가 계획 삭제 수(2)보다 작으면 exit 7 전에 몇 개를 옮기는지
+        for (const md of ["1", "0"]) {
+            f_MakeBackupDest(bDst, { del: true, over: true });
+            f_After(f_Sync(`backup-both-maxdelete${md}`, [...bd, "--max-delete", md]));
+        }
+        // 전체 범위: 폴더 삭제는 백업하지 않는다
+        f_MakeBackupDest(bDst, { del: true, over: false });
+        mkdirSync(join(bDst, "emptydir"), { recursive: true });
+        f_Show(f_Sync("backup-dirs-dryrun", ["--create-empty-src-dirs", ...bd, "--dry-run"]));
+        // 겹침: 백업이 대상 안 / 원본 안 → rclone이 dry-run에서도 거부
+        f_MakeBackupDest(bDst, { del: true, over: true });
+        f_Sync("backup-overlap-dest", ["--backup-dir", join(bDst, "bk"), "--dry-run"]);
+        f_Sync("backup-overlap-src", ["--backup-dir", join(bSrc, "bk"), "--dry-run"]);
+        // 하위 폴더에 같은 이름 파일(예전 백업)이 이미 있음 → 예전 백업을 지우고 덮어쓰는지, 한도에 드는지
+        f_MakeBackupDest(bDst, { del: true, over: true });
+        f_SetFile(join(bRun, "extra.txt"), "previous-extra", OLD);
+        f_SetFile(join(bRun, "changed.txt"), "previous-changed", OLD);
+        f_After(f_Sync("backup-collision-real", [...bd, "--max-delete", "2"]));
+        // 다른 드라이브: RCLONEGUI_PROBE_OTHER_DRIVE(예: D:\)가 있을 때만
+        const other = process.env.RCLONEGUI_PROBE_OTHER_DRIVE;
+        if (other) {
+            const work2 = mkdtempSync(join(other, "rclonegui-probe-"));
+            maskDirs.push([work2, "<TMP2>"]);
+            try {
+                const bk2 = join(work2, "backup-bk");
+                const od = ["--backup-dir", join(bk2, "run1")];
+                f_MakeBackupDest(bDst, { del: true, over: true });
+                f_Show(f_Sync("backup-other-drive-dryrun", [...od, "--dry-run"]));
+                f_MakeBackupDest(bDst, { del: true, over: true });
+                f_After(f_Sync("backup-other-drive-real", [...od, "--max-delete", "2"]), bDst, bk2);
+            } finally {
+                rmSync(work2, { recursive: true, force: true });
+            }
+        } else {
+            console.log("  다른 드라이브 실험 생략: RCLONEGUI_PROBE_OTHER_DRIVE가 없음");
+        }
+    }
+    // INT-003 T-03: Move가 없는 저장소 — rclone serve s3(127.0.0.1, 임의 포트·임의 키) 위에서 같은 조합
+    // 서버를 띄우므로 --only=backup-s3로만 실행한다
+    if (only?.has("backup-s3")) {
+        const g = "backup-s3";
+        const port = 53000 + randomInt(1000);
+        const ak = `ak${randomBytes(6).toString("hex")}`;
+        const sk = `sk${randomBytes(12).toString("hex")}`;
+        maskValues.push([sk, "<SK>"], [ak, "<AK>"], [`127.0.0.1:${port}`, "127.0.0.1:<PORT>"]);
+        const store = join(work, "s3-store");
+        mkdirSync(join(store, "bkt"), { recursive: true });
+        // stdio를 ignore하지 않으면 spawnSync 중 서버 출력 파이프가 차서 멈춘다
+        const srv = spawn(
+            rclone,
+            [
+                "serve",
+                "s3",
+                ...common,
+                "--auth-key",
+                `${ak},${sk}`,
+                "--addr",
+                `127.0.0.1:${port}`,
+                store,
+            ],
+            { shell: false, windowsHide: true, stdio: "ignore" },
+        );
+        const R = `:s3,provider=Rclone,endpoint='http://127.0.0.1:${port}',access_key_id=${ak},secret_access_key=${sk},force_path_style=true:`;
+        const f_Rc = (args) =>
+            spawnSync(rclone, [ask, ...common, ...args], {
+                shell: false,
+                windowsHide: true,
+                encoding: "utf8",
+                timeout: 60_000,
+            });
+        try {
+            let ready = false;
+            for (let i = 0; i < 20 && !ready; i += 1) {
+                await new Promise((r) => setTimeout(r, 500));
+                ready = f_Rc(["lsjson", `${R}bkt`]).status === 0;
+            }
+            if (!ready) {
+                console.log("  backup-s3 생략: rclone serve s3가 시작되지 않음");
+            } else {
+                const fr = f_Probe(
+                    "backup-s3-features",
+                    ["backend", "features", ask, ...common, "--", `${R}bkt`],
+                    g,
+                );
+                if (fr) {
+                    try {
+                        const j = JSON.parse(fr.stdout);
+                        console.log(
+                            `  Features.Move: ${j.Features.Move}, Copy: ${j.Features.Copy}`,
+                        );
+                    } catch {
+                        console.log("  features 해석 실패(fixture 확인)");
+                    }
+                }
+                const sSrc = join(work, "backup-src");
+                const seed = join(work, "s3-seed");
+                f_SetFile(join(seed, "same.txt"), "same", OLD);
+                f_SetFile(join(seed, "touch.txt"), "touch", OLD);
+                f_SetFile(join(seed, "changed.txt"), "changed", OLD);
+                f_SetFile(join(seed, "changed2.txt"), "changed2", OLD);
+                f_SetFile(join(seed, "extra.txt"), "extra", OLD);
+                f_SetFile(join(seed, "gone", "old.txt"), "old", OLD);
+                if (!f_Selected("backup")) {
+                    // backup 묶음 없이 돌 때도 원본을 만든다
+                    f_SetFile(join(sSrc, "same.txt"), "same", OLD);
+                    f_SetFile(join(sSrc, "touch.txt"), "touch", NEWER);
+                    f_SetFile(join(sSrc, "changed.txt"), "changed-longer", NEWER);
+                    f_SetFile(join(sSrc, "changed2.txt"), "changed2-longer", NEWER);
+                    f_SetFile(join(sSrc, "sub", "new.txt"), "new", OLD);
+                }
+                const f_Seed = () => {
+                    f_Rc(["purge", `${R}bkt/dst`]);
+                    f_Rc(["purge", `${R}bkt/bk`]);
+                    const r = f_Rc(["copy", ...mw, seed, `${R}bkt/dst`]);
+                    if (r.status !== 0) console.log(`  seed 실패 exit=${r.status}`);
+                };
+                const f_Ls = (p) =>
+                    f_Rc(["lsf", "-R", "--files-only", `${R}bkt/${p}`])
+                        .stdout.trim()
+                        .split("\n")
+                        .filter(Boolean)
+                        .join(",");
+                const f_S3Sync = (name, extra) => {
+                    const r = f_Probe(
+                        name,
+                        [
+                            "sync",
+                            ask,
+                            ...common,
+                            ...tx,
+                            ...mw,
+                            "--backup-dir",
+                            `${R}bkt/bk/run1`,
+                            ...extra,
+                            ...log,
+                            "--",
+                            sSrc,
+                            `${R}bkt/dst`,
+                        ],
+                        g,
+                    );
+                    if (r) console.log(`  대상: ${f_Ls("dst")}  백업: ${f_Ls("bk")}`);
+                };
+                f_Seed();
+                f_S3Sync("backup-s3-dryrun", ["--dry-run"]);
+                f_Seed();
+                f_S3Sync("backup-s3-real-maxdelete2", ["--max-delete", "2"]);
+                f_Seed();
+                f_S3Sync("backup-s3-real-maxdelete4", ["--max-delete", "4"]);
+            }
+        } finally {
+            srv.kill();
+            await new Promise((r) => setTimeout(r, 500)); // 서버가 저장소 파일을 놓을 때까지 대기
+        }
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

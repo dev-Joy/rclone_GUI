@@ -8,6 +8,7 @@ import {
     assertAllowedCommand,
     assertCommandLength,
     assertNoBlockedFlags,
+    buildBackendFeaturesArgs,
     buildConfigFileArgs,
     buildListDirsArgs,
     buildListRemotesArgs,
@@ -36,12 +37,15 @@ function f_Input(over: Partial<itfTransferArgsInput> = {}): itfTransferArgsInput
         scope: "files",
         dryRun: false,
         maxDelete: null,
+        backupDir: null,
         ...over,
     };
 }
 
+const BK = "D:\\bk\\2026-11-02_103000_1a2b3c4d";
+
 function f_IsBlocked(i: itfTransferArgsInput): boolean {
-    return i.mode === "sync" && i.options.ignoreErrors;
+    return i.mode === "sync" && i.options.ignoreErrors && i.backupDir === null;
 }
 
 describe("buildTransferArgs", () => {
@@ -127,6 +131,75 @@ describe("buildTransferArgs", () => {
             clsCommandBlockedError,
         );
         expect(buildTransferArgs(f_Input({ options }))).toContain("--ignore-errors");
+    });
+});
+
+describe("백업 폴더 --backup-dir (INT-003 T-03)", () => {
+    it("sync + 오류 무시 + 백업 폴더 실제 실행: 정확한 순서", () => {
+        const args = buildTransferArgs(
+            f_Input({
+                mode: "sync",
+                configPath: null,
+                excludes: { patterns: [], fromFile: null },
+                options: { ...DEFAULT_OPTIONS, ignoreErrors: true },
+                maxDelete: 2,
+                backupDir: BK,
+            }),
+        );
+        expect(args).toEqual([
+            "sync",
+            "--ask-password=false",
+            "--checkers",
+            "8",
+            "--transfers",
+            "4",
+            "--fast-list",
+            "--skip-links",
+            "--ignore-errors",
+            "--modify-window",
+            "2000ms",
+            "--backup-dir",
+            BK,
+            "--max-delete",
+            "2",
+            "-v",
+            "--use-json-log",
+            "--stats",
+            "1s",
+            "--",
+            "C:\\tmp\\src",
+            "test-remote:dst",
+        ]);
+    });
+
+    it("dry-run(미리보기·사전 확인)에도 같은 --backup-dir를 넣는다", () => {
+        const args = buildTransferArgs(f_Input({ mode: "sync", dryRun: true, backupDir: BK }));
+        const i = args.indexOf("--backup-dir");
+        expect(args.slice(i, i + 3)).toEqual(["--backup-dir", BK, "--dry-run"]);
+    });
+
+    it("copy에는 백업 폴더 값이 있어도 넣지 않는다", () => {
+        expect(buildTransferArgs(f_Input({ backupDir: BK }))).not.toContain("--backup-dir");
+    });
+
+    it("위치 인자(-- 뒤)의 --backup-dir는 백업으로 보지 않는다 (D-9)", () => {
+        expect(() =>
+            assertNoBlockedFlags(["sync", "--ignore-errors", "--", "--backup-dir", "b"]),
+        ).toThrow(clsCommandBlockedError);
+        expect(() =>
+            assertNoBlockedFlags(["sync", "--ignore-errors", "--backup-dir=r:bak", "--", "a", "b"]),
+        ).not.toThrow();
+    });
+
+    it("값이 빈 --backup-dir는 백업으로 보지 않는다", () => {
+        for (const args of [
+            ["sync", "--ignore-errors", "--backup-dir=", "--", "a", "b"],
+            ["sync", "--ignore-errors", "--backup-dir", "", "--", "a", "b"],
+            ["sync", "--ignore-errors", "--backup-dir", "--", "a", "b"],
+            ["sync", "--backup-dir", "--ignore-errors", "--", "a", "b"],
+        ]) {
+            expect(() => assertNoBlockedFlags(args)).toThrow(clsCommandBlockedError);
+        }
     });
 });
 
@@ -270,13 +343,21 @@ describe("차단 목록", () => {
         bools.flatMap((dryRun) =>
             bools.flatMap((fastList) =>
                 bools.flatMap((checkHashes) =>
-                    bools.map((ignoreErrors) =>
-                        f_Input({
-                            mode,
-                            dryRun,
-                            maxDelete: 3,
-                            options: { ...DEFAULT_OPTIONS, fastList, checkHashes, ignoreErrors },
-                        }),
+                    bools.flatMap((ignoreErrors) =>
+                        [null, BK].map((backupDir) =>
+                            f_Input({
+                                mode,
+                                dryRun,
+                                maxDelete: 3,
+                                backupDir,
+                                options: {
+                                    ...DEFAULT_OPTIONS,
+                                    fastList,
+                                    checkHashes,
+                                    ignoreErrors,
+                                },
+                            }),
+                        ),
                     ),
                 ),
             ),
@@ -295,7 +376,7 @@ describe("차단 목록", () => {
     );
 
     it.each(combos.filter(f_IsBlocked))(
-        "sync + ignoreErrors 조합 %# 은 생성 단계에서 거부",
+        "sync + ignoreErrors + 백업 없음 조합 %# 은 생성 단계에서 거부",
         (input) => {
             expect(() => buildTransferArgs(input)).toThrow(clsCommandBlockedError);
         },
@@ -509,6 +590,33 @@ describe("허용 명령 목록", () => {
             "lsjson",
             "copy",
             "sync",
+            "backend features",
+        ]);
+    });
+
+    it("backend의 다른 하위 명령은 거부한다", () => {
+        expect(() => assertAllowedCommand(["backend", "drop", "--", "a:"])).toThrow(
+            clsCommandBlockedError,
+        );
+        expect(() => assertAllowedCommand(["backend"])).toThrow(clsCommandBlockedError);
+    });
+
+    it("buildBackendFeaturesArgs: 대상은 -- 뒤 위치 인자", () => {
+        expect(buildBackendFeaturesArgs("gd:", "C:\\tmp\\rclone.conf")).toEqual([
+            "backend",
+            "features",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+            "--",
+            "gd:",
+        ]);
+        expect(buildBackendFeaturesArgs("gd:", null)).toEqual([
+            "backend",
+            "features",
+            "--ask-password=false",
+            "--",
+            "gd:",
         ]);
     });
 });

@@ -41,6 +41,7 @@ function f_Job(
         excludePatternIds: [],
         options,
         configPathOverride: null,
+        backupDir: null,
         autoSync: {
             enabled: true,
             intervalMinutes: 10,

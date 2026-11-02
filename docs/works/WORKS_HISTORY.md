@@ -193,6 +193,16 @@
 - 검증: `pnpm run check`(단위 68파일 1066), `format:check`(322파일), `test:int` 55(+8 skip, GCS 환경 변수 없음 사유 출력), `test:e2e`, `build:win`, `smoke:installer -- --login-item` 125항목(asar·바로가기·데이터 보존·OS 예약 XML·헤드리스 정상/잘못된 id/예약 아님 `SCHEDULE_SKIPPED`/동시 실행·로그인 항목·fuses·제거 뒤 예약 0건) 통과
 - 특이: 이전 중단 스모크가 남긴 `\rcloneGUI\` 예약 1건(이미 지워진 임시 설치 폴더를 가리킴)이 검증 착수 때 있었고 실행 전에 사라져 확인 후 진행했다 — 앱 시작 reconcile과 제거 스크립트가 정리하는 경로로 보이며 결함은 아니다
 
+[TASK_021] : (2026-11-02) INT-003 Phase 3 — T-03 백업 폴더 `--backup-dir` (관련 Intent: INT-003, T-03)
+- S3-1 probe: `rclone-probes.mjs` `backup` 묶음(다른 드라이브는 `RCLONEGUI_PROBE_OTHER_DRIVE`가 있을 때만)·`backup-s3`(serve s3, `--only`일 때만), fixture `backup-*` 51개(가림 `<TMP>`·`<TMP2>`·포트·키), rclone-notes #28~#32 — dry-run에서 지울 파일은 `move into backup dir`, 덮어쓸 파일은 `move`+`copy`. 서버 쪽 Move가 있으면 덮어쓰기 이동은 `--max-delete`에 세지 않지만, Move가 없는 저장소·다른 드라이브는 복사+삭제가 되어 한도를 넘겨 exit 7. 같은 하위 폴더 파일은 경고 없이 덮어씀. 겹침은 rclone이 fatal로 거부
+- spec·plan: FR-23·25·26·35·E-11·E-15·§6·Q-6 정정, FR-36(remote 대상 `backend features`의 Move가 true가 아니면 SAFETY_BLOCKED)·AC-18·AC-19 추가, S4-1의 features 빌더·파서·캐시를 Phase 3으로 당김
+- 스키마·검사: 작업 최상위 `backupDir`(저장 입력 필수, 예전 데이터 null)·이력 `backupDir`, `checkBackupDir`·`joinBackupPath`(같은 remote·같은 드라이브/UNC 공유/WSL 표기, 같음·안·상위·루트 금지), job-store 저장 검증(sync만)·job-form
+- 실행: 로그 파서 `move into backup dir`→삭제, `move`→`backupMove`(세지 않음). 빌더 `--backup-dir`, `BLOCKED_FLAGS` 백업 판정을 플래그 영역+값 있음으로 좁힘(빈 값·`--` 뒤·다음 인자가 플래그면 백업 아님). `checkPlanSafety`는 백업이 없을 때만 sync+오류 무시 차단. 계획 토큰 v4. `backend-features-parser`·`clsRemoteService.features`(캐시, 실패는 캐시 안 함, 10초)·`assertBackupMovable`. `backup-dir.ts` `buildBackupSubdir`·`nextBackupTime`(프로세스 안 1초 이상 증가), run-service `assignBackupDir`(사전 확인과 실제 실행이 같은 값), 로그 `# 백업 위치:`·인자 `<백업 폴더>` 가림
+- 화면: 편집기 백업 폴더 필드(sync만)·PathField `required`, JobOptionsFields 오류 무시 안내, 삭제 확인 창·실행 결과·이력 상세에 백업 위치, E2E `backup-dir.spec.ts` 2건
+- 문서: CHANGELOG·README·MVP_SPEC(차단표·§8.1·구현 반영)·AGENTS 규칙 2 한 문장(규칙 3 그대로)·COMPONENTS.md
+- 검증: `pnpm run check`(단위 69파일 1169), `format:check`(326), `test:int` 63(+9 skip: GCS 8·rclone-env 1), `test:e2e` 13, `build:win` 통과. 독립 검증 Pass, 낮음 결함 2건(빈 `--backup-dir` 백스톱 빈틈, copy 모드 경고 id 중복)을 바로 고치고 단위·backup-dir E2E 재확인
+- 남은 것: GCS가 서버 쪽 Move를 지원하는지는 키가 없어 미확인(지원하지 않으면 GCS 대상 백업 폴더 sync는 FR-36으로 막힘). 대안(`--max-delete` 상향)은 안전 규칙 2 변경이라 채택하지 않음
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

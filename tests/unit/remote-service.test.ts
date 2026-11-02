@@ -13,6 +13,7 @@ import { clsSqliteDb } from "@/main/store/sqlite-db";
 import type { itfPathProbe } from "@/shared/ipc-contract";
 import { LIST_DIR_MAX } from "@/shared/option-limits";
 import type { typTestPathInput } from "@/shared/schemas/rclone";
+import { readFixture } from "./fixtures";
 
 const BIN = "C:\\fake\\rclone.exe";
 const CONF = "C:\\fake\\rclone.conf";
@@ -296,5 +297,46 @@ describe("clsRemoteService.listDir", () => {
         await expect(
             service.listDir({ path: "test-remote:base", configPath: null }),
         ).rejects.toMatchObject({ code: "RCLONE_PARSE_ERROR" });
+    });
+});
+
+describe("clsRemoteService.features (INT-003 FR-36)", () => {
+    it("backend features -- <루트>, 시간 제한 10초, 성공은 캐시", async () => {
+        const m = f_Make({ result: { stdout: readFixture("backup-s3-features", "stdout") } });
+        expect(await m.service.features("test-remote:", CONF)).toEqual({
+            canMove: false,
+            canHaveEmptyDirs: false,
+        });
+        expect(m.runs).toEqual([
+            {
+                args: [
+                    "backend",
+                    "features",
+                    "--ask-password=false",
+                    "--config",
+                    CONF,
+                    "--",
+                    "test-remote:",
+                ],
+                timeoutMs: 10_000,
+            },
+        ]);
+        await m.service.features("test-remote:", CONF);
+        expect(m.runs).toHaveLength(1);
+        expect(m.opsCalls).toEqual([]); // 실행 락 안에서도 부르므로 탐색 락을 쓰지 않는다
+    });
+
+    it.each([
+        ["exit 1", { exitCode: 1, stdout: "" }],
+        ["시간 초과", { timedOut: true, exitCode: null }],
+        ["해석 실패", { stdout: "not json" }],
+    ])("%s → 알 수 없음(null), 캐시하지 않음", async (_label, result) => {
+        const m = f_Make({ result });
+        expect(await m.service.features("test-remote:", CONF)).toEqual({
+            canMove: null,
+            canHaveEmptyDirs: null,
+        });
+        await m.service.features("test-remote:", CONF);
+        expect(m.runs).toHaveLength(2);
     });
 });

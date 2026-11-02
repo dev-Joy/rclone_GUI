@@ -23,7 +23,7 @@ import { clsAppError } from "@/main/lib/app-error";
 import { nowIso } from "@/main/lib/time";
 import { clsSqliteError, type clsSqliteDb } from "@/main/store/sqlite-db";
 import type { itfAppNotice } from "@/shared/ipc-contract";
-import { checkPathPair } from "@/shared/path-utils";
+import { checkBackupDir, checkPathPair } from "@/shared/path-utils";
 import { nextRunAfterEdit } from "@/shared/schedule";
 import {
     zJob,
@@ -101,6 +101,7 @@ function f_DraftOf(job: typJob): typJobDraft {
         excludePatternIds: job.excludePatternIds,
         options: job.options,
         configPathOverride: job.configPathOverride,
+        backupDir: job.backupDir,
         autoSync: {
             enabled: job.autoSync.enabled,
             intervalMinutes: job.autoSync.intervalMinutes,
@@ -191,7 +192,7 @@ export class clsJobStore {
 
     async create(draftInput: typJobDraft): Promise<typJob> {
         const draft = zJobDraft.parse(draftInput);
-        this.assertPaths(draft.source, draft.destination);
+        this.assertPaths(draft);
         const now = nowIso();
         const job: typJob = {
             ...draft,
@@ -231,7 +232,7 @@ export class clsJobStore {
         };
         // 저장할 때만 새 한도로 막는다(예전 값이 한도를 넘어도 읽기·관리 기록은 계속된다)
         zJobDraft.parse(f_DraftOf(next));
-        this.assertPaths(next.source, next.destination);
+        this.assertPaths(next);
         return this.replace(next, true);
     }
 
@@ -278,8 +279,12 @@ export class clsJobStore {
         });
     }
 
-    private assertPaths(source: string, destination: string): void {
-        const { errors } = checkPathPair(source, destination, this.opts.caseInsensitive());
+    /** 원본·대상(S1~S4a)과, sync면 백업 폴더(INT-003 FR-24)를 검사한다. copy의 백업 폴더 값은 무시한다 */
+    private assertPaths(
+        next: Pick<typJobDraft, "source" | "destination" | "mode" | "backupDir">,
+    ): void {
+        const caseInsensitive = this.opts.caseInsensitive();
+        const { errors } = checkPathPair(next.source, next.destination, caseInsensitive);
         const first = errors[0];
         if (first) {
             throw new clsAppError(
@@ -287,6 +292,15 @@ export class clsJobStore {
                 first.message,
                 errors.map((e) => e.message).join("\n"),
             );
+        }
+        if (next.mode === "sync" && next.backupDir !== null) {
+            const issue = checkBackupDir(
+                next.backupDir,
+                next.source,
+                next.destination,
+                caseInsensitive,
+            );
+            if (issue) throw new clsAppError(issue.code, issue.message);
         }
     }
 

@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-02 16:11:11
+- 생성일시: 2026-11-02 18:55:29
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 320 건
+- 총 인덱싱 자산: 322 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -55,7 +55,7 @@
 | `isDraftEqual` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | isDraftEqual(a: typJobDraft, b: typJobDraft) - 편집 가능한 값이 같은지 (dirty 판정). excludes 순서까지 비교 |
 | `jobToDraft` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | jobToDraft(job: typJob) - 저장된 Job에서 편집 가능한 필드만 뽑는다 (id·rev·lastRun·nextRunAt 등 제외) |
 | `parseExcludesText` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | parseExcludesText(text: string) - textarea 문자열 → excludes (trim, 빈 줄 제거, 순서 유지) |
-| `serverErrorToCheck` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | serverErrorToCheck(error: typAppErrorPayload) - main 오류 envelope를 폼 오류로. SAFETY_BLOCKED/PATH_INVALID 메시지의 "원본:"/"대상:" 접두사는 해당 필드로, 나머지는 formErrors |
+| `serverErrorToCheck` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | serverErrorToCheck(error: typAppErrorPayload) - main 오류 envelope를 폼 오류로. SAFETY_BLOCKED/PATH_INVALID 메시지의 "원본:"/"대상:"/"백업 폴더:" 접두사는 해당 필드로, 나머지는 formErrors |
 | `sortJobs` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | sortJobs(jobs: readonly typJob[]) - 사이드바 정렬: 이름(ko, base) → createdAt |
 | `validateJobDraft` | [`src/lib/job-form.ts`](src/lib/job-form.ts) | validateJobDraft(draft: typJobDraft, caseInsensitive: boolean) - 화면 검증: zJobDraft.safeParse + checkPathPair + 경고 규칙 |
 | `jobListItem` | [`src/lib/job-list-view.ts`](src/lib/job-list-view.ts) | jobListItem(job: typJob, opts: { showStatus: boolean }) - 작업 목록 한 줄의 문구 |
@@ -79,13 +79,13 @@
 | `redactSecrets` | [`src/main/lib/logger.ts`](src/main/lib/logger.ts) | redactSecrets(text: string) - 공통 함수/유틸리티 |
 | `fileStamp` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | fileStamp(d = new Date() - 파일 이름용 시각. 예: 20261028-173500 (로컬 시각) |
 | `nowIso` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | nowIso() - 공통 함수/유틸리티 |
+| `buildBackupSubdir` | [`src/main/services/backup-dir.ts`](src/main/services/backup-dir.ts) | buildBackupSubdir(at: Date, jobId: string) - 실행별 하위 폴더 이름. 예: 2026-11-02_103000_1a2b3c4d |
+| `nextBackupTime` | [`src/main/services/backup-dir.ts`](src/main/services/backup-dir.ts) | nextBackupTime(now: Date, last: Date \| null) - 이번 실행의 백업 시각. last(같은 프로세스에서 마지막으로 쓴 시각)가 없거나 now가 초 단위로 더 늦으면 now, 아니면(같은 초·시계가 뒤로 감) last + 1초. 초 아래는 버린다. |
 | `checkDestProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
 | `checkSourceProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
 | `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
 | `isExcludeFileName` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | isExcludeFileName(name: string) - 앱이 만든 제외 파일 이름인지(테스트·로그 확인용) |
-| `remoteNameOf` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | remoteNameOf(p: itfParsedPath) - remote 경로면 remote 이름("gdrive"), 아니면 null (오류 안내 문구용) |
-| `remoteNamesOfJob` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | remoteNamesOfJob(job: Pick<typJob, "source" \| "destination">) - 작업의 원본·대상이 쓰는 remote 이름(중복 제거). 로컬·UNC만 쓰면 빈 배열 |
-| _(외 52 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 54 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
 ## 4. Shared Services & Clients
 

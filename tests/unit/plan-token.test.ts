@@ -14,6 +14,7 @@ function f_Input(): itfPlanTokenInput {
         destination: "test-remote:dst",
         mode: "sync",
         scope: "files",
+        backupDir: null,
         excludeSnapshotHash: "0123456789abcdef0123456789abcdef",
         options: { checkHashes: false, modtimeToleranceMs: 2000, skipLinks: true, fastList: true },
         caseInsensitive: true,
@@ -35,6 +36,7 @@ describe("computePlanToken", () => {
         ["createdAt", (i) => (i.createdAt = "2026-10-28T00:00:01.000Z")],
         ["mode", (i) => (i.mode = "copy")],
         ["scope", (i) => (i.scope = "all")],
+        ["백업 폴더", (i) => (i.backupDir = "test-remote:bk")],
         ["createDirs", (i) => (i.summary = { ...i.summary, createDirs: 1 })],
         ["deleteDirs", (i) => (i.summary = { ...i.summary, deleteDirs: 1 })],
         ["제외 패턴 해시", (i) => (i.excludeSnapshotHash = "f".repeat(32))],
@@ -49,6 +51,12 @@ describe("computePlanToken", () => {
         const changed = f_Input();
         mutate(changed);
         expect(computePlanToken(changed)).not.toBe(base);
+    });
+
+    it("백업 폴더 기준 경로가 다르면 다르고, 같으면 같다 (INT-003 FR-27)", () => {
+        const a = computePlanToken({ ...f_Input(), backupDir: "test-remote:bk" });
+        expect(computePlanToken({ ...f_Input(), backupDir: "test-remote:bk" })).toBe(a);
+        expect(computePlanToken({ ...f_Input(), backupDir: "test-remote:bk2" })).not.toBe(a);
     });
 
     it("토큰 형식 v2: 고정 입력의 값이 바뀌지 않는다(형식을 바꾸면 이 값도 바꾼다)", () => {

@@ -17,9 +17,9 @@ import {
     type itfNumberRange,
 } from "@/lib/form-utils";
 import { PATH_MAX_INPUT } from "@/shared/option-limits";
-import { checkPathPair } from "@/shared/path-utils";
+import { BACKUP_DIR_LABEL, checkBackupDir, checkPathPair } from "@/shared/path-utils";
 import { driveLetterRemoteWarning, looksLikeDriveLetterRemotePath } from "@/shared/remote-name";
-import { SYNC_IGNORE_ERRORS_TEXT } from "@/shared/run-gates";
+import { BACKUP_DIR_NOTE_TEXT, SYNC_IGNORE_ERRORS_TEXT } from "@/shared/run-gates";
 import type { typAppErrorPayload } from "@/shared/schemas/common";
 import { zJobDraft, type typJob, type typJobDraft } from "@/shared/schemas/job";
 
@@ -32,6 +32,7 @@ export type typJobFormField =
     | "scope"
     | "excludes"
     | "configPathOverride"
+    | "backupDir"
     | "options.checkers"
     | "options.transfers"
     | "options.modtimeToleranceMs"
@@ -61,7 +62,11 @@ export const JOB_NUMBER_RANGES = {
 
 type typNumberField = keyof typeof JOB_NUMBER_RANGES;
 
-const PAIR_FIELD = { "원본: ": "source", "대상: ": "destination" } as const;
+const PAIR_FIELD = {
+    "원본: ": "source",
+    "대상: ": "destination",
+    [`${BACKUP_DIR_LABEL}: `]: "backupDir",
+} as const;
 const PAIR_ERROR_HIGHLIGHT = "원본과 대상 경로를 확인하세요.";
 
 const WARN_SYNC_IGNORE_ERRORS = SYNC_IGNORE_ERRORS_TEXT;
@@ -69,6 +74,8 @@ const WARN_SYNC_NO_PREFLIGHT =
     "실행 직전 사전 확인을 끄면 비교 뒤 바뀐 삭제는 삭제 한도(--max-delete)로만 막습니다.";
 const WARN_COPY_ALLOW_DELETES =
     "복사 모드에서는 삭제가 일어나지 않으므로 ‘자동 실행 때 삭제 허용’은 쓰이지 않습니다.";
+const WARN_COPY_BACKUP_DIR =
+    "복사 모드는 파일을 지우거나 덮어써 옮기지 않으므로 백업 폴더를 쓰지 않습니다.";
 const WARN_AUTO_DELETES =
     "자동 실행이 대상에만 있는 파일을 지울 수 있습니다(설정의 ‘자동 실행 최대 삭제 수’ 이하·대량 삭제 아님·사전 확인 켜짐일 때만).";
 
@@ -91,7 +98,7 @@ function f_AddWarning(c: itfJobFormCheck, field: typJobFormField, message: strin
     c.fieldWarnings[field] = list;
 }
 
-/** "원본: …" / "대상: …" 접두사가 있으면 필드와 나머지 문구 */
+/** "원본: …" / "대상: …" / "백업 폴더: …" 접두사가 있으면 필드와 나머지 문구 */
 function f_SplitPairPrefix(message: string): { field: typJobFormField; text: string } | null {
     for (const [prefix, field] of Object.entries(PAIR_FIELD)) {
         if (message.startsWith(prefix)) return { field, text: message.slice(prefix.length) };
@@ -108,6 +115,7 @@ function f_StringIssueText(field: typJobFormField, issue: z.core.$ZodIssue): str
             return "메모는 4000자 이내로 입력하세요.";
         case "source":
         case "destination":
+        case "backupDir":
             return big ? `경로는 ${PATH_MAX_INPUT}자 이내로 입력하세요.` : "경로를 입력하세요.";
         case "configPathOverride":
             return big
@@ -154,7 +162,8 @@ function f_MapIssue(
         head === "destination" ||
         head === "mode" ||
         head === "scope" ||
-        head === "configPathOverride"
+        head === "configPathOverride" ||
+        head === "backupDir"
     ) {
         // 제어문자 등 custom 메시지는 이미 한국어
         if (issue.code === "custom") return { field: head, text: issue.message };
@@ -176,6 +185,7 @@ export function jobToDraft(job: typJob): typJobDraft {
         excludePatternIds: [...job.excludePatternIds],
         options: { ...job.options },
         configPathOverride: job.configPathOverride,
+        backupDir: job.backupDir,
         autoSync: {
             enabled: job.autoSync.enabled,
             intervalMinutes: job.autoSync.intervalMinutes,
@@ -234,7 +244,24 @@ export function validateJobDraft(draft: typJobDraft, caseInsensitive: boolean): 
         }
     }
 
-    if (draft.mode === "sync" && draft.options.ignoreErrors)
+    // 백업 폴더(INT-003 T-03): sync에서만 검사하고, copy면 값이 있어도 쓰지 않는다고 알린다
+    if (draft.backupDir !== null && draft.backupDir.trim() !== "") {
+        if (draft.mode === "sync") {
+            const issue = checkBackupDir(
+                draft.backupDir,
+                draft.source,
+                draft.destination,
+                caseInsensitive,
+            );
+            const split = issue ? f_SplitPairPrefix(issue.message) : null;
+            if (split) f_SetError(c, split.field, split.text);
+            c.formWarnings.push(BACKUP_DIR_NOTE_TEXT);
+        } else {
+            f_AddWarning(c, "backupDir", WARN_COPY_BACKUP_DIR);
+        }
+    }
+
+    if (draft.mode === "sync" && draft.options.ignoreErrors && draft.backupDir === null)
         c.formWarnings.push(WARN_SYNC_IGNORE_ERRORS);
     if (draft.mode === "sync" && !draft.options.preflightBeforeDestructive)
         c.formWarnings.push(WARN_SYNC_NO_PREFLIGHT);
@@ -248,7 +275,7 @@ export function validateJobDraft(draft: typJobDraft, caseInsensitive: boolean): 
 
 /**
  * main 오류 envelope를 폼 오류로.
- * SAFETY_BLOCKED/PATH_INVALID 메시지의 "원본:"/"대상:" 접두사는 해당 필드로, 나머지는 formErrors
+ * SAFETY_BLOCKED/PATH_INVALID 메시지의 "원본:"/"대상:"/"백업 폴더:" 접두사는 해당 필드로, 나머지는 formErrors
  */
 export function serverErrorToCheck(error: typAppErrorPayload): itfJobFormCheck {
     const c = f_Empty();

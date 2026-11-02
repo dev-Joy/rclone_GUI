@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
+import type { itfBackendFeatures } from "@/main/parsers/backend-features-parser";
 import {
     clsProcessSpawnError,
     type itfProcessResult,
@@ -54,6 +55,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         excludePatternIds: [],
         options,
         configPathOverride: null,
+        backupDir: null,
         autoSync: {
             enabled: false,
             intervalMinutes: 60,
@@ -173,6 +175,8 @@ interface itfHarnessOptions {
     autoCompare?: itfCompareResult | Error | "hang";
     /** rclone 감지 실패 */
     requireError?: clsAppError;
+    /** backend features 결과(기본: Move 지원) */
+    features?: itfBackendFeatures;
 }
 
 let caseNo = 0;
@@ -193,6 +197,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
     const activeOps: string[] = [];
     const written: typActiveRunFile[] = [];
     const autoCompareCalls: string[] = [];
+    const featureCalls: string[] = [];
     let idSeq = 0;
     const script = o.script === undefined ? { lines: fixtureLines("copy-dryrun") } : o.script;
 
@@ -300,6 +305,12 @@ function f_Harness(o: itfHarnessOptions = {}) {
         logsDir,
         excludes: NO_LIBRARY,
         excludeFileDir: join(logsDir, "exclude-files"),
+        features: {
+            features: async (root) => {
+                featureCalls.push(root);
+                return o.features ?? { canMove: true, canHaveEmptyDirs: true };
+            },
+        },
         logger: { info: (m) => logs.push(m), warn: (m) => logs.push(m) },
         run,
         now: () => new Date(T0),
@@ -325,6 +336,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
         activeOps,
         written,
         autoCompareCalls,
+        featureCalls,
         logsDir,
         excludeFileDir: join(logsDir, "exclude-files"),
         finished: () => events.filter((e) => e.type === "finished"),
@@ -601,6 +613,7 @@ describe("clsRunService 실제 실행 게이트", () => {
             logsDir: h.logsDir,
             excludes: NO_LIBRARY,
             excludeFileDir: join(h.logsDir, "exclude-files"),
+            features: { features: async () => ({ canMove: true, canHaveEmptyDirs: true }) },
             logger: { info: () => undefined, warn: () => undefined },
         });
         const e = await f_Err(
@@ -1495,5 +1508,139 @@ describe("clsRunService OS 예약 (INT-003 T-01)", () => {
         u.svc.cancel(s2.runId);
         u.svc.cancel(s2.runId, "timeLimit");
         expect((await s2.done).error?.message).toContain("비교 중에 중지");
+    });
+});
+
+/** --backup-dir 값. 없으면 null */
+function f_BackupArg(args: readonly string[]): string | null {
+    const i = args.indexOf("--backup-dir");
+    return i === -1 ? null : args[i + 1]!;
+}
+
+describe("clsRunService 백업 폴더 (INT-003 T-03)", () => {
+    const BK = "C:\\fake\\bk";
+    const SUB_RE = /^C:\\fake\\bk\\\d{4}-\d{2}-\d{2}_\d{6}_00000000$/;
+    const SYNC_INPUT = { jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 2 };
+
+    function f_BackupJob(over: Partial<typJob> = {}): typJob {
+        return f_Job({
+            mode: "sync",
+            backupDir: BK,
+            options: { ...f_Job().options, ignoreErrors: true },
+            ...over,
+        });
+    }
+
+    it("사전 확인·실제 실행이 같은 --backup-dir(기준\\YYYY-MM-DD_HHmmss_<id8>)를 쓰고 이력·로그 파일에 남긴다", async () => {
+        const h = f_Harness({
+            job: f_BackupJob(),
+            compare: f_SyncCompare(),
+            scripts: [
+                { lines: fixtureLines("backup-both-dryrun") },
+                { lines: fixtureLines("backup-both-real") },
+            ],
+        });
+        await h.svc.start(SYNC_INPUT);
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("success");
+        expect(h.procs).toHaveLength(2);
+        const pre = f_BackupArg(h.procs[0]!.args);
+        expect(pre).toMatch(SUB_RE);
+        expect(f_BackupArg(h.procs[1]!.args)).toBe(pre);
+        expect(h.procs[1]!.args).toContain("--ignore-errors");
+        const md = h.procs[1]!.args.indexOf("--max-delete");
+        expect(h.procs[1]!.args[md + 1]).toBe("2");
+        expect(h.begun[0]!.backupDir).toBe(pre);
+        expect(rec.backupDir).toBe(pre);
+        expect(h.featureCalls).toEqual([]); // 로컬 대상은 조회하지 않는다
+        const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
+        expect(text).toContain(`# 백업 위치: ${pre}`);
+        expect(text).toContain("--backup-dir <백업 폴더>");
+        expect(h.logs.join("\n")).not.toContain("bk");
+    });
+
+    it("AC-19: 같은 시각에 두 번 실행해도 하위 폴더가 다르다(두 번째는 1초 뒤). 미리보기는 이력에 남기지 않는다", async () => {
+        const h = f_Harness({ job: f_BackupJob(), compare: f_SyncCompare() });
+        await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        expect(await h.svc.whenIdle(2000)).toBe(true);
+        await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        expect(await h.svc.whenIdle(2000)).toBe(true);
+        const [a, b] = h.procs.map((p) => f_BackupArg(p.args));
+        expect(a).toMatch(SUB_RE);
+        expect(b).toMatch(SUB_RE);
+        expect(b).not.toBe(a);
+        expect(h.procs[0]!.args).toContain("--dry-run");
+        expect(h.begun.map((r) => r.backupDir)).toEqual([undefined, undefined]);
+    });
+
+    it("copy는 백업 폴더 값이 있어도 --backup-dir·Move 확인 없음", async () => {
+        const job = f_Job({ mode: "copy", destination: "gd:dst", backupDir: "gd:bk" });
+        const h = f_Harness({ job, script: { lines: fixtureLines("copy-real") } });
+        await h.svc.start({ jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 0 });
+        await f_Done(h);
+        expect(f_BackupArg(h.procs[0]!.args)).toBeNull();
+        expect(h.featureCalls).toEqual([]);
+    });
+
+    for (const f of [
+        { name: "Move 미지원", features: { canMove: false, canHaveEmptyDirs: true } },
+        { name: "조회 실패", features: { canMove: null, canHaveEmptyDirs: null } },
+    ]) {
+        it(`AC-18 수동: remote 대상 ${f.name} → SAFETY_BLOCKED, 이력·프로세스 없음`, async () => {
+            const job = f_BackupJob({ destination: "gd:dst", backupDir: "gd:bk" });
+            const h = f_Harness({ job, compare: f_SyncCompare(), features: f.features });
+            const e = await f_Err(h.svc.start(SYNC_INPUT));
+            expect(e.code).toBe("SAFETY_BLOCKED");
+            expect(e.message).not.toContain("gd");
+            expect(h.featureCalls).toEqual(["gd:"]);
+            expect(h.begun).toEqual([]);
+            expect(h.procs).toEqual([]);
+            expect(h.activity.current()).toBeNull();
+        });
+
+        it(`AC-18 자동: remote 대상 ${f.name} → blocked 이력, 비교·프로세스 없음`, async () => {
+            const job = {
+                ...f_AutoJob({ mode: "sync", allowDeletes: true }),
+                destination: "gd:dst",
+                backupDir: "gd:bk",
+            };
+            const h = f_Harness({ job, compare: f_SyncCompare(), features: f.features });
+            const o = await f_Auto(h);
+            expect(o).toMatchObject({ status: "blocked", recorded: true });
+            expect(o.error?.code).toBe("SAFETY_BLOCKED");
+            expect(h.autoCompareCalls).toEqual([]);
+            expect(h.procs).toEqual([]);
+        });
+    }
+
+    it("remote 대상 미리보기는 Move를 확인하지 않고 --backup-dir를 준다", async () => {
+        const job = f_BackupJob({ destination: "gd:dst", backupDir: "gd:bk" });
+        const h = f_Harness({ job, features: { canMove: false, canHaveEmptyDirs: true } });
+        await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_Done(h);
+        expect(h.featureCalls).toEqual([]);
+        expect(f_BackupArg(h.procs[0]!.args)).toMatch(/^gd:bk\/\d{4}-\d{2}-\d{2}_\d{6}_00000000$/);
+    });
+
+    it("자동: Move 지원 remote + 백업 폴더 + 오류 무시 → 사전 확인 후 실행", async () => {
+        const job = {
+            ...f_AutoJob({ mode: "sync", allowDeletes: true }),
+            destination: "gd:dst",
+            backupDir: "gd:bk",
+            options: { ...f_AutoJob().options, ignoreErrors: true },
+        };
+        const h = f_Harness({
+            job,
+            compare: f_SyncCompare(),
+            scripts: [
+                { lines: fixtureLines("backup-both-dryrun") },
+                { lines: fixtureLines("backup-both-real") },
+            ],
+        });
+        const o = await f_Auto(h);
+        expect(o.status).toBe("success");
+        expect(h.featureCalls).toEqual(["gd:"]);
+        expect(f_BackupArg(h.procs[1]!.args)).toBe(f_BackupArg(h.procs[0]!.args));
+        expect(h.begun[0]!.backupDir).toBe(f_BackupArg(h.procs[1]!.args));
     });
 });

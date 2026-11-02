@@ -5,15 +5,23 @@
  * - 연결 테스트는 기존 경로 확인(probe)을 그대로 쓴다.
  * - 폴더 탐색은 `lsjson --max-depth 1 --dirs-only`로 한 단계만 읽고, 탐색·테스트는 remote-ops로 직렬화한다.
  * - 탐색 결과는 이름 순 최대 LIST_DIR_MAX개. 더 있으면 truncated로 알린다.
+ * - 저장소 기능(features, INT-003 FR-36): `backend features <remote 루트>`를 (rclone 경로, conf 경로, 루트) 키로
+ *   앱 실행 동안 캐시한다. 실패·시간 초과는 알 수 없음(null)으로 돌려주고 캐시하지 않는다. 실행 락 안에서도
+ *   부르므로 탐색 락(remote-ops)을 쓰지 않는다.
  *
  * @author dev-Joy 2026-10-30
  */
 
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
+import {
+    parseBackendFeatures,
+    UNKNOWN_FEATURES,
+    type itfBackendFeatures,
+} from "@/main/parsers/backend-features-parser";
 import { clsLsjsonParseError, parseLsjsonDirEntries } from "@/main/parsers/lsjson-parser";
 import { hintForRcloneError, summarizeStderr } from "@/main/parsers/rclone-env-parser";
-import { buildListDirsArgs } from "@/main/rclone/command-builder";
+import { buildBackendFeaturesArgs, buildListDirsArgs } from "@/main/rclone/command-builder";
 import { RCLONE_TIMEOUTS } from "@/main/rclone/config";
 import type { clsRcloneEnv } from "@/main/rclone/detect";
 import { clsProcessSpawnError, runRclone, type typRunRclone } from "@/main/rclone/process";
@@ -45,6 +53,8 @@ type typResolvedDeps = Omit<itfRemoteServiceDeps, "run"> & { run: typRunRclone }
 
 export class clsRemoteService {
     private readonly deps: typResolvedDeps;
+    /** backend features 결과(성공만). 키: [rclone 경로, conf 경로, remote 루트] */
+    private readonly featuresCache = new Map<string, itfBackendFeatures>();
 
     constructor(deps: itfRemoteServiceDeps) {
         this.deps = { ...deps, run: deps.run ?? runRclone };
@@ -161,6 +171,30 @@ export class clsRemoteService {
                 truncated: dirs.length > LIST_DIR_MAX,
             };
         });
+    }
+
+    /**
+     * remote 루트("name:")의 저장소 기능. 실패(시작 실패·시간 초과·0이 아닌 exit·해석 실패)는 모두 null 값이다.
+     * rclone 실행 파일이 없으면 RCLONE_* 오류를 던진다.
+     */
+    async features(root: string, configPath: string | null): Promise<itfBackendFeatures> {
+        const rt = await this.deps.rcloneEnv.require();
+        const key = JSON.stringify([rt.binaryPath, configPath, root]);
+        const hit = this.featuresCache.get(key);
+        if (hit) return { ...hit };
+        let r;
+        try {
+            r = await this.deps.run(rt.binaryPath, buildBackendFeaturesArgs(root, configPath), {
+                timeoutMs: RCLONE_TIMEOUTS.features,
+            });
+        } catch (e) {
+            if (e instanceof clsProcessSpawnError) return { ...UNKNOWN_FEATURES };
+            throw e;
+        }
+        if (r.timedOut || r.exitCode !== 0 || r.stdoutTruncated) return { ...UNKNOWN_FEATURES };
+        const f = parseBackendFeatures(r.stdout);
+        if (f.canMove !== null || f.canHaveEmptyDirs !== null) this.featuresCache.set(key, f);
+        return { ...f };
     }
 
     /** rclone.conf에 없는 remote는 북마크로 저장하지 않는다 */

@@ -2,7 +2,7 @@
  * 실제 실행 안전 게이트 (MVP_SPEC §9.1 S5·S6·S7·S11·S15, §8.4). 순수 함수.
  * main(run-service 재검증)과 화면(실행 버튼·삭제 확인 모달)이 같은 함수를 쓴다.
  *
- * - checkPlanSafety: 확인해도 넘길 수 없는 차단(형식 충돌·대소문자만 다름·빈 원본 sync·오류 무시 sync).
+ * - checkPlanSafety: 확인해도 넘길 수 없는 차단(형식 충돌·대소문자만 다름·빈 원본 sync·백업 없는 오류 무시 sync).
  * - isLargeDelete: 대량 삭제(추가 확인 필요). 기준값을 엄격히 넘을 때만이며, 기준값 0이면 삭제 1개도 대량이다.
  * - needsPreflight: 실제 sync 직전 같은 실행 안에서 사전 확인 dry-run을 할지(폴더 삭제만 있어도 한다).
  *
@@ -17,11 +17,14 @@ import type { typRunPlan } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
 
 /**
- * 동기화 + ‘오류가 나도 계속’ 안내(편집기 경고·옵션 주의·실행 차단 공통, INT-002 FR-28).
- * 백업 폴더(--backup-dir)는 아직 지정할 수 없으므로 차단은 그대로 두고 안내만 한다.
+ * 동기화 + ‘오류가 나도 계속’ + 백업 폴더 없음 → 실행 차단 안내(편집기·옵션·실행 공통, INT-003 FR-26·FR-29).
  */
 export const SYNC_IGNORE_ERRORS_TEXT =
-    "동기화에서 ‘오류가 나도 계속’을 쓰려면 지워질 파일을 옮겨 둘 백업 폴더가 필요하지만, 이 앱은 아직 백업 폴더를 지정할 수 없습니다. 이 옵션을 끄거나, 오류 난 파일만 건너뛰고 계속하려면 복사 모드를 쓰세요.";
+    "동기화에서 ‘오류가 나도 계속’을 쓰려면 백업 폴더를 지정하세요. 백업 폴더가 없으면 실행하지 않습니다. 오류 난 파일만 건너뛰고 계속하려면 복사 모드를 쓰세요.";
+
+/** 백업 폴더 안내(편집기, INT-003 FR-28·FR-29) */
+export const BACKUP_DIR_NOTE_TEXT =
+    "지우거나 덮어쓸 대상 파일은 실행마다 백업 폴더 아래 ‘날짜_시각_작업ID’ 폴더로 옮깁니다. 앱은 백업 폴더를 지우지 않으니 직접 정리하세요.";
 
 /** 게이트에 걸린 이유 (IPC 오류로 그대로 쓴다) */
 export interface itfGateBlock {
@@ -34,7 +37,7 @@ export type typDeleteThresholds = Pick<
     "deleteConfirmFiles" | "deleteConfirmPercent"
 >;
 
-type typGateJob = Pick<typJob, "mode"> & {
+type typGateJob = Pick<typJob, "mode" | "backupDir"> & {
     options: Pick<typJob["options"], "ignoreErrors" | "preflightBeforeDestructive">;
 };
 
@@ -71,7 +74,7 @@ export function checkPlanSafety(plan: typRunPlan, job: typGateJob): itfGateBlock
             message: `원본에 파일이 없어 대상 파일 ${plan.destFiles}개를 모두 지우게 되므로 막았습니다. 원본 경로를 확인하세요.`,
         };
     }
-    if (job.mode === "sync" && job.options.ignoreErrors) {
+    if (job.mode === "sync" && job.options.ignoreErrors && job.backupDir === null) {
         return {
             code: "SAFETY_BLOCKED",
             message: SYNC_IGNORE_ERRORS_TEXT,

@@ -63,6 +63,7 @@ export function createJobDraft(settings: typSettings): typJobDraft {
         excludePatternIds: [],
         options: { ...options },
         configPathOverride: null,
+        backupDir: null,
         autoSync: {
             enabled: false,
             intervalMinutes: 60,

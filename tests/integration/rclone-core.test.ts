@@ -82,6 +82,7 @@ function f_Transfer(mode: "copy" | "sync", dryRun: boolean, maxDelete: number | 
             scope: "files",
             dryRun,
             maxDelete,
+            backupDir: null,
         }),
     );
 }

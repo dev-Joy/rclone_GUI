@@ -95,6 +95,9 @@ const WEEKDAY_OPTIONS: ReadonlyArray<{ bit: number; label: string }> = [
     { bit: 0, label: "일" },
 ];
 
+/** 백업 폴더 입력 안내(INT-003 T-03). 앱이 지우지 않는다는 안내는 경고 목록(BACKUP_DIR_NOTE_TEXT)에 있다 */
+const BACKUP_DIR_HINT =
+    "비우면 쓰지 않습니다. 대상과 같은 드라이브(같은 네트워크 공유·리모트)에서 원본·대상 밖의 폴더를 고르세요. 지정하면 동기화에서 ‘오류가 나도 계속’을 쓸 수 있습니다.";
 const BACKEND_APP_LABEL = "앱이 켜져 있을 때";
 const BACKEND_OS_LABEL = "Windows 작업 스케줄러(앱이 꺼져 있어도)";
 
@@ -215,6 +218,8 @@ export default function JobEditor() {
         setField("scope", e.target.value as typSyncScope);
     const h_Source = (v: string) => setField("source", v);
     const h_Destination = (v: string) => setField("destination", v);
+    /** 빈 값은 null(백업 폴더 쓰지 않음) */
+    const h_BackupDir = (v: string) => setField("backupDir", v.trim() === "" ? null : v);
     const h_Excludes = (v: string[]) => setField("excludes", v);
     const h_ExcludeIds = (v: string[]) => setField("excludePatternIds", v);
     const h_Notes = (v: string) => setField("notes", v);
@@ -385,6 +390,34 @@ export default function JobEditor() {
                         error={err("destination")}
                         warnings={warn("destination")}
                     />
+                    {draft.mode === "sync" ? (
+                        <>
+                            <PathField
+                                id="job-backup-dir"
+                                name="backupDir"
+                                label="백업 폴더 (선택)"
+                                value={draft.backupDir ?? ""}
+                                onChange={h_BackupDir}
+                                configPath={override}
+                                error={err("backupDir")}
+                                warnings={warn("backupDir")}
+                                required={false}
+                            />
+                            <p className={styles.muted} id="job-backup-dir-note">
+                                {BACKUP_DIR_HINT}
+                            </p>
+                        </>
+                    ) : (
+                        warn("backupDir").map((w, i) => (
+                            <p
+                                key={w}
+                                className={styles.muted}
+                                id={i === 0 ? "job-backup-dir-note" : undefined}
+                            >
+                                {w}
+                            </p>
+                        ))
+                    )}
                 </section>
 
                 <section className={styles.section} aria-labelledby="job-excludes-title">
@@ -462,6 +495,7 @@ export default function JobEditor() {
                         value={draft.options}
                         onChange={setOptions}
                         mode={draft.mode}
+                        hasBackupDir={draft.backupDir !== null}
                         errors={{
                             checkers: err("options.checkers") ?? undefined,
                             transfers: err("options.transfers") ?? undefined,

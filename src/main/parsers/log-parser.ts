@@ -18,8 +18,17 @@ export type typLogLevel = "debug" | "info" | "notice" | "warning" | "error";
  * copy/delete는 계획 수에 들어가고, touch(파일 수정시간만 갱신)·dir 동작은 들어가지 않는다.
  * dirTime(폴더 수정시간)은 --create-empty-src-dirs에서 기존 폴더에도 size 0으로 나오므로
  * touch와 나눈다(rclone-notes #26).
+ * backupMove는 --backup-dir에서 덮어쓸 파일을 백업 폴더로 옮김이다. copy 줄이 따로 나오므로 계획 수에
+ * 넣지 않는다. 지울 파일을 백업 폴더로 옮김(move into backup dir)은 delete로 센다(rclone-notes #28).
  */
-export type typSkipKind = "copy" | "delete" | "touch" | "dirTime" | "removeDir" | "other";
+export type typSkipKind =
+    | "copy"
+    | "delete"
+    | "touch"
+    | "dirTime"
+    | "removeDir"
+    | "backupMove"
+    | "other";
 
 export interface itfParsedLogLine {
     raw: boolean;
@@ -57,7 +66,10 @@ function f_Skip(value: unknown): typSkipKind | null {
         case "copy":
             return "copy";
         case "delete":
+        case "move into backup dir": // --backup-dir: 지울 파일을 백업 폴더로 옮김(rclone-notes #28)
             return "delete";
+        case "move": // --backup-dir: 덮어쓸 파일을 백업 폴더로 옮김. 세지 않는다
+            return "backupMove";
         case "update modification time":
             return "touch";
         case "set directory modification time":

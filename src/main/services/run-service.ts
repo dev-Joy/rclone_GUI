@@ -5,12 +5,15 @@
  *   → [삭제가 있는 sync면 사전 확인 dry-run] → rclone 실행(stderr 줄 단위: 로그 파일·화면 이벤트·dry-run 집계)
  *   → 결과 판정 → 마무리.
  * - 실제 실행 게이트(f_CheckRealGate, 락 전): 비교의 planToken(없으면 PLAN_REQUIRED) → 계획 안전 검사
- *   (checkPlanSafety: 형식 충돌·대소문자·빈 원본 sync·오류 무시 sync) → 계획에서 다시 계산한 삭제 수 ==
+ *   (checkPlanSafety: 형식 충돌·대소문자·빈 원본 sync·백업 없는 오류 무시 sync) → 계획에서 다시 계산한 삭제 수 ==
  *   확인한 삭제 수(전체 범위면 폴더 삭제 수도) → 대량 삭제면 confirmLargeDeletes. 실패하면 이력도 프로세스도
  *   만들지 않는다.
  * - 사전 확인(preflight): sync + 삭제(파일 또는 폴더) > 0 + 작업 옵션 켜짐이면 같은 runId 안에서 --dry-run(--max-delete 없음)을
  *   먼저 돌려 계획과 맞춰 본다(checkPreflight). 다르면 blocked + PLAN_DRIFT, 취소면 canceled, rclone 오류면
  *   failed로 끝내고 실제 실행은 하지 않는다. 옵션을 끄면 --max-delete만 백스톱이다.
+ * - 백업 폴더(INT-003 T-03): sync + 백업 폴더면 실행마다 하위 폴더(assignBackupDir, 프로세스 안에서 시각 단조 증가)를
+ *   정해 미리보기·사전 확인·실제 실행에 같은 --backup-dir를 준다. remote 대상은 실행 전에 backend features의
+ *   Move를 확인한다(assertBackupMovable: 수동은 실제 실행만, 자동은 항상. 아니면 SAFETY_BLOCKED).
  * - 실제 sync에는 항상 --max-delete <계획 파일 삭제 수>(0 포함)를 준다. rclone은 폴더 삭제를 세지 않으므로
  *   (rclone-notes #25) 폴더 삭제는 계획 토큰·확인한 폴더 삭제 수·사전 확인이 막는다(INT-002 T-05).
  * - 자동 실행(startAuto, 스케줄러·OS 예약 `--run-job`): trigger는 "scheduler" 또는 "os-scheduler". 락을 await 전에 동기로 잡고 같은 runId 안에서 비교(compareForAuto,
@@ -54,20 +57,24 @@ import {
     type typRunRclone,
 } from "@/main/rclone/process";
 import { busyMessageFor, type clsActivityLock } from "@/main/services/activity-lock";
+import { buildBackupSubdir, nextBackupTime } from "@/main/services/backup-dir";
 import type { clsCompareService } from "@/main/services/compare-service";
 import { writeExcludeFile, type itfExcludeFileHandle } from "@/main/services/exclude-file";
 import {
+    assertBackupMovable,
     remoteNameOf,
     remoteNamesOfJob,
     resolveJobContext,
     type itfJobContext,
 } from "@/main/services/job-context";
+import type { clsRemoteService } from "@/main/services/remote-service";
 import { clsRunEventBatcher, type itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunLogFile, maskArgsForLog, runLogFileName } from "@/main/services/run-log-file";
 import type { clsActiveRunStore } from "@/main/services/run-recovery";
 import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
+import { joinBackupPath } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
 import { checkPreflight, planFromCompare, plannedDeleteCount } from "@/shared/run-plan";
 import type {
@@ -102,6 +109,8 @@ export interface itfRunServiceDeps {
     excludes: Pick<clsExcludeStore, "patternsFor">;
     /** --exclude-from 임시 파일 폴더(userData/exclude-files) */
     excludeFileDir: string;
+    /** 백업 폴더 대상 remote의 저장소 기능(Move) 조회(INT-003 FR-36) */
+    features: Pick<clsRemoteService, "features">;
     logger: Pick<clsLogger, "info" | "warn">;
     /** 기본 runRclone */
     run?: typRunRclone;
@@ -168,6 +177,8 @@ interface itfActiveRun {
     excludeFile: string | null;
     /** 첫 취소 요청의 사유. 취소하지 않았으면 null */
     cancelReason: typCancelReason | null;
+    /** 이 실행의 --backup-dir(실행별 하위 폴더 포함). 백업 폴더가 없거나 copy면 null */
+    backupDir: string | null;
 }
 
 /** 자동 실행 결과(스케줄러가 예약·알림에 쓴다). recorded가 false면 이력에 없다(noop 등) */
@@ -317,6 +328,14 @@ function f_AutoFailure(e: unknown, canceled: boolean): itfAutoStop {
     return { status: "failed", error: f_StartFailure(e), plan: null };
 }
 
+/** 자동 실행의 백업 폴더 이동 확인 실패: 차단(SAFETY_BLOCKED)은 blocked, 그 밖(rclone 없음 등)은 f_AutoFailure */
+function f_AutoMovableFailure(e: unknown, canceled: boolean): itfAutoStop {
+    if (e instanceof clsAppError && e.code === "SAFETY_BLOCKED") {
+        return { status: "blocked", error: { code: e.code, message: e.message }, plan: null };
+    }
+    return f_AutoFailure(e, canceled);
+}
+
 /** 삭제 수 문구: "파일 3개" 또는 "파일 3개, 폴더 2개" */
 function f_DeleteText(plan: Pick<typRunPlan, "deleteFiles" | "deleteDirs">): string {
     const files = `파일 ${plan.deleteFiles}개`;
@@ -348,6 +367,8 @@ export class clsRunService {
     private readonly deps: Required<Omit<itfRunServiceDeps, "timers">> &
         Pick<itfRunServiceDeps, "timers">;
     private active: itfActiveRun | null = null;
+    /** 이 프로세스에서 마지막으로 쓴 백업 시각(하위 폴더 이름 충돌 방지, INT-003 E-11) */
+    private lastBackupAt: Date | null = null;
 
     constructor(deps: itfRunServiceDeps) {
         this.deps = {
@@ -366,6 +387,8 @@ export class clsRunService {
     async start(input: typStartRunInput): Promise<{ runId: string }> {
         const job = this.deps.jobs.get(input.jobId);
         const ctx = await resolveJobContext(job, this.deps);
+        // 미리보기는 옮기지 않으므로 확인하지 않는다(rclone-notes #28: dry-run 출력이 같음)
+        if (!input.dryRun) await assertBackupMovable(ctx, this.deps.features);
         const gate = input.dryRun
             ? null
             : f_CheckRealGate(
@@ -391,6 +414,7 @@ export class clsRunService {
             plan: gate ? gate.plan : this.dryRunPlan(job),
         });
         this.active = active;
+        this.assignBackupDir(ctx, active);
         await this.beginRecord(active, release, true);
         active.done = this.execute(ctx, gate, active, release);
         return { runId };
@@ -555,7 +579,20 @@ export class clsRunService {
             final: null,
             excludeFile: null,
             cancelReason: null,
+            backupDir: null,
         };
+    }
+
+    /**
+     * sync + 백업 폴더면 이 실행의 --backup-dir(기준 폴더\YYYY-MM-DD_HHmmss_<id8>)를 정한다. 이력 시작 전에 한 번만 부른다.
+     * 미리보기·사전 확인·실제 실행이 같은 값을 쓰고, 이력에는 실제 실행만 남긴다.
+     */
+    private assignBackupDir(ctx: itfJobContext, active: itfActiveRun): void {
+        if (ctx.backup === null) return;
+        const at = nextBackupTime(new Date(active.record.startedAt), this.lastBackupAt);
+        this.lastBackupAt = at;
+        active.backupDir = joinBackupPath(ctx.backup, buildBackupSubdir(at, ctx.job.id));
+        if (!active.record.dryRun) active.record.backupDir = active.backupDir;
     }
 
     /** running 이력을 남기고 알린다. 기록에 실패하면 락을 풀고 던진다(수동·자동 공통) */
@@ -588,6 +625,26 @@ export class clsRunService {
         let result: itfCompareResult;
         try {
             ctx = await resolveJobContext(job, this.deps);
+        } catch (e) {
+            return this.finishEarly(
+                active,
+                f_AutoFailure(e, active.snapshot.cancelRequested),
+                release,
+                true,
+            );
+        }
+        // 백업 폴더 대상이 파일을 옮기지 못하면 비교도 하지 않고 blocked(INT-003 FR-36)
+        try {
+            await assertBackupMovable(ctx, this.deps.features);
+        } catch (e) {
+            return this.finishEarly(
+                active,
+                f_AutoMovableFailure(e, active.snapshot.cancelRequested),
+                release,
+                true,
+            );
+        }
+        try {
             if (active.snapshot.cancelRequested) throw new clsAppError("CANCELED");
             result = await this.deps.compare.compareForAuto(job.id, active.controller.signal);
         } catch (e) {
@@ -648,6 +705,7 @@ export class clsRunService {
             );
         }
         active.record.plan = gate.plan;
+        this.assignBackupDir(ctx, active);
         try {
             await this.beginRecord(active, release, false);
         } catch (e) {
@@ -906,6 +964,7 @@ export class clsRunService {
             scope: job.scope,
             dryRun: !real,
             maxDelete: step.kind === "real" ? step.gate.maxDelete : null,
+            backupDir: active.backupDir,
         });
         const masked = maskArgsForLog(args, { source, destination, configPath: ctx.configPath });
         if (active.logStarted) {
@@ -920,6 +979,8 @@ export class clsRunService {
                 ...(step.kind === "preflight" ? { stage: STAGE_TEXT.preflight } : {}),
                 args: masked,
             });
+            // 백업 위치는 실행 로그 파일에만 쓴다(app.log에는 경로를 남기지 않음, INT-003 FR-28)
+            if (active.backupDir !== null) active.logFile.write(`# 백업 위치: ${active.backupDir}`);
         }
         const imageName = f_ImageName(ctx.binaryPath);
         const phase: typRunPhase = step.kind === "preflight" ? "preflight" : "transferring";

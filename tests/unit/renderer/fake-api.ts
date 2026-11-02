@@ -114,6 +114,7 @@ export function makeJob(over: Partial<typJob> = {}): typJob {
         excludePatternIds: [],
         options,
         configPathOverride: null,
+        backupDir: null,
         autoSync: {
             enabled: false,
             intervalMinutes: 60,

@@ -1,5 +1,5 @@
 /**
- * 원본·대상 경로 입력란. 텍스트 입력 + 종류 배지 + 폴더 선택 + WSL 도우미 + remote 빠른 입력 + 접근 확인.
+ * 원본·대상·백업 폴더 경로 입력란. 텍스트 입력 + 종류 배지 + 폴더 선택 + WSL 도우미 + remote 빠른 입력 + 접근 확인.
  * 접근 확인은 버튼을 눌렀을 때만 main의 rclone:testPath를 부른다.
  *
  * @author dev-Joy 2026-10-28
@@ -24,10 +24,10 @@ import styles from "./PathField.module.css";
 
 // ========== Props & Types ==========
 export interface itfPathFieldProps {
-    /** "job-source" | "job-destination" */
+    /** "job-source" | "job-destination" | "job-backup-dir" */
     id: string;
-    name: "source" | "destination";
-    /** "원본" | "대상" */
+    name: "source" | "destination" | "backupDir";
+    /** "원본" | "대상" | "백업 폴더 (선택)" */
     label: string;
     value: string;
     onChange: (value: string) => void;
@@ -35,11 +35,14 @@ export interface itfPathFieldProps {
     configPath: string | null;
     error?: string | null;
     warnings?: readonly string[];
+    /** 필수 표시. 백업 폴더처럼 비워 둘 수 있으면 false */
+    required?: boolean;
 }
 
 const propsDefault = {
     error: null,
     warnings: [],
+    required: true,
 } satisfies Partial<itfPathFieldProps>;
 
 const PLACEHOLDER = "예: D:\\Data, \\\\wsl.localhost\\배포판\\home\\..., remote:폴더";
@@ -54,6 +57,7 @@ export default function PathField(props: itfPathFieldProps) {
         configPath,
         error = propsDefault.error,
         warnings = propsDefault.warnings,
+        required = propsDefault.required,
     } = props;
 
     // ========== hook & state 변수 선언 ==========
@@ -107,7 +111,7 @@ export default function PathField(props: itfPathFieldProps) {
                 error={error}
                 warnings={warnings}
                 hint={hint}
-                required
+                required={required}
             >
                 <div className={styles.row}>
                     <div className={styles.input}>

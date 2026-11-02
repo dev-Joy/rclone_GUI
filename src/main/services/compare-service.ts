@@ -447,6 +447,7 @@ export class clsCompareService {
             destination: dst.normalized,
             mode: job.mode,
             scope: job.scope,
+            backupDir: ctx.backup?.normalized ?? null,
             excludeSnapshotHash: ctx.excludes.snapshotHash,
             options: {
                 checkHashes: job.options.checkHashes,

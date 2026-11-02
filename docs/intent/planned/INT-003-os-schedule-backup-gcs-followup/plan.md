@@ -78,18 +78,20 @@
 
 **S3-1 `--backup-dir` probe**
 - 목표: **Q-5를 가장 먼저 확정한다(FR-35)**: `--backup-dir`을 줬을 때 dry-run·실제 실행 JSON 로그의 `skipped`·`msg` 문구, 백업 이동이 `--max-delete`에 세어지는지, 덮어쓴 파일의 백업 이동이 어떻게 찍히는지. 결과가 FR-35와 다르면 S3-3 전에 spec FR-35를 고친다. 그 밖에 동작 기록: 로컬 다른 드라이브(Q-4 — 결과와 상관없이 앱은 거부), 겹침 오류 메시지, GCS 서버 쪽 이동(환경 변수 있을 때).
-- 변경: `scripts/probes/rclone-probes.mjs`, `tests/fixtures/rclone/`(백업 폴더 sync의 dry-run·실제 실행 출력 — 삭제만·덮어쓰기만·둘 다), `docs/knowhow/rclone-notes.md`.
+- 변경: `scripts/probes/rclone-probes.mjs`(`backup`·`backup-s3` 묶음), `tests/fixtures/rclone/backup-*`(삭제만·덮어쓰기만·둘 다·한도·폴더·겹침·하위 폴더 충돌·다른 드라이브·Move 없는 S3), `docs/knowhow/rclone-notes.md` #28~#32.
+- 결과(2026-11-02): FR-35 방향은 맞다. 단 Move 없는 저장소·다른 드라이브는 덮어쓰기까지 한도를 써서 exit 7 → FR-36(실행 전 Move 확인) 추가. 같은 초 재실행은 예전 백업을 덮어씀 → E-11 정정(`nextBackupTime`).
 - 검증: probe 실행(임시 폴더만).
 - 롤백: probe·fixture 되돌림.
 
 **S3-2 스키마·경로 검사**
-- 목표: `options.backupDir`(읽기 기본 null), `checkBackupDir`(같은 remote·겹침 금지·형식).
-- 변경: `src/shared/schemas/job.ts`, `src/shared/path-utils.ts`, `src/lib/job-form.ts`(화면 검증 공용).
+- 목표: 작업 최상위 `backupDir`(읽기 기본 null, 저장 입력 필수), 이력 `backupDir`, `checkBackupDir`(같은 위치·겹침 금지·형식·루트·드라이브 상대 거부)·`joinBackupPath`.
+- 변경: `src/shared/schemas/job.ts`·`run.ts`, `src/shared/path-utils.ts`, `src/main/store/job-store.ts`(저장 검증), `src/lib/job-form.ts`(화면 검증 공용).
 - 검증: 단위 — 같은 경로·상위·하위·대소문자(설정별)·다른 remote·다른 로컬 드라이브 거부(AC-17)·같은 UNC 공유만 허용·WSL 경로. `pnpm run check`.
 - 롤백: 커밋 되돌림.
 
 **S3-3 실행 경로: 명령 빌더·게이트·토큰**
-- 목표: FR-25~FR-28, FR-35.
+- 목표: FR-25~FR-28, FR-35, FR-36.
+- 추가(FR-36): `backend features` 인자 빌더·파서·`clsRemoteService.features` 캐시를 S4-1에서 당겨 이 단계에서 만든다(S4-1은 IPC `remotes:features`와 `CanHaveEmptyDirectories` 사용만 남는다). `job-context.ts`에 `assertBackupMovable`(remote 대상만 `Move === true` 확인, 수동은 실제 실행만·자동은 항상), 새 `backup-dir.ts`(`buildBackupSubdir`·`nextBackupTime`), `BLOCKED_FLAGS` 백업 규칙의 `--backup-dir` 탐색을 플래그 영역으로 좁힘.
 - 변경: `command-builder.ts`(`backupDir` 입력 → `--backup-dir`), `run-gates.ts`(`checkPlanSafety` 조건, `SYNC_IGNORE_ERRORS_TEXT`), `plan-token.ts`(버전 4 + 백업 기준 경로), `run-service.ts`(`buildBackupSubdir`로 `YYYY-MM-DD_HHmmss_<jobId 앞 8자>` 결정, 사전 확인·실제 실행 공유, 로그 파일에 백업 위치), `src/main/parsers/log-parser.ts`(`f_Skip`: 지우는 파일의 백업 이동만 `delete`, 덮어쓰기 이동은 세지 않음 — S3-1 fixture 기준), `compare-service.ts`(토큰 입력).
 - 검증: 단위 — `tests/unit/command-builder.test.ts`(백업 없는 sync + `--ignore-errors`는 여전히 차단, 있으면 통과), 게이트 표, 토큰 변화, `buildBackupSubdir`(로컬 시각·0 채움·jobId 앞 8자), 파서 fixture로 백업 폴더 사전 확인 삭제 수 = 계획 수(AC-16). 통합 — `run.sync.test.ts`·`run.gates.test.ts`에 백업 폴더로 삭제 파일 이동 확인(AC-10), 백업 폴더 + 덮어쓰기·삭제가 섞인 sync가 사전 확인·`--max-delete`에 막히지 않음. `pnpm run check`, `pnpm run test:int`.
 - 롤백: 커밋 되돌림.
@@ -104,7 +106,7 @@
 
 **S4-1 `backend features` 조회**
 - 목표: FR-30.
-- 변경: `command-builder.ts`(`ALLOWED_COMMANDS`에 `["backend","features"]`, `buildBackendFeaturesArgs`), 파서(`src/main/parsers/`, 순수 함수 + fixture), `remote-service.ts` 조회·캐시, `ipc-contract.ts`(`remotes:features`).
+- 변경: (인자 빌더·파서 `backend-features-parser.ts`·`clsRemoteService.features` 캐시는 S3-3에서 만들었다 — 재사용) `ipc-contract.ts`(`remotes:features`), 비교 시작 때 조회.
 - 검증: 단위 — 허용 목록에 `backend` 다른 하위 명령은 여전히 거부, 파서 fixture(로컬 probe 출력), 캐시 키. `pnpm run check`.
 - 롤백: 커밋 되돌림.
 

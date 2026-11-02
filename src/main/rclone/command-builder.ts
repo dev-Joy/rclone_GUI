@@ -25,6 +25,23 @@ export class clsCommandBlockedError extends Error {
     }
 }
 
+/** 플래그 영역의 끝("--"의 위치, 없으면 길이). 그 뒤는 위치 인자(경로)다 */
+function f_FlagEnd(args: readonly string[]): number {
+    const end = args.indexOf("--");
+    return end === -1 ? args.length : end;
+}
+
+/** 플래그 영역에 값이 비어 있지 않은 --backup-dir가 있는지(빈 값은 rclone이 백업 없음으로 본다) */
+function f_HasBackupDir(args: readonly string[]): boolean {
+    const flags = args.slice(0, f_FlagEnd(args));
+    return flags.some((x, i) => {
+        if (x.startsWith("--backup-dir=")) return x.length > "--backup-dir=".length;
+        if (x !== "--backup-dir") return false;
+        const v = flags[i + 1];
+        return v !== undefined && v !== "" && !v.startsWith("--");
+    });
+}
+
 interface itfBlockRule {
     test: (args: readonly string[], index: number) => boolean;
     reason: string;
@@ -59,15 +76,15 @@ export const BLOCKED_FLAGS: ReadonlyArray<{ flag: string } & itfBlockRule> = [
         test: (a, i) =>
             a[i] === "--ignore-errors" &&
             a[0] === "sync" &&
-            !a.some((x) => x === "--backup-dir" || x.startsWith("--backup-dir=")),
+            // 백업 폴더는 플래그 영역에 값과 함께 있을 때만 인정한다(위치 인자 "--backup-dir"는 경로일 뿐)
+            !f_HasBackupDir(a),
         reason: "IO 오류가 나도 대상 파일을 삭제함",
     },
 ];
 
 /** 인자 배열에 차단 옵션이 있으면 clsCommandBlockedError를 던진다 */
 export function assertNoBlockedFlags(args: readonly string[]): void {
-    const end = args.indexOf("--");
-    const flagEnd = end === -1 ? args.length : end;
+    const flagEnd = f_FlagEnd(args);
     for (let i = 0; i < flagEnd; i += 1) {
         for (const rule of BLOCKED_FLAGS) {
             if (rule.test(args, i)) throw new clsCommandBlockedError(rule.flag, rule.reason);
@@ -86,6 +103,7 @@ export const ALLOWED_COMMANDS: ReadonlyArray<readonly string[]> = [
     ["lsjson"],
     ["copy"],
     ["sync"],
+    ["backend", "features"],
 ];
 
 /** 허용 목록에 없는 하위 명령이면 clsCommandBlockedError를 던진다 */
@@ -127,6 +145,17 @@ export function buildListRemotesArgs(configPath: string | null): string[] {
 export function buildListRemotesLongArgs(configPath: string | null): string[] {
     const args = ["listremotes", "--long", NO_ASK_PASSWORD];
     if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+/**
+ * rclone backend features <대상> — 저장소 기능(Move·CanHaveEmptyDirectories, INT-003 FR-36·FR-30).
+ * 대상은 "--" 뒤 위치 인자로 준다(rclone-notes #30).
+ */
+export function buildBackendFeaturesArgs(target: string, configPath: string | null): string[] {
+    const args = ["backend", "features", NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    args.push("--", target);
     return f_Finish(args);
 }
 
@@ -232,6 +261,11 @@ export interface itfTransferArgsInput {
      * copy와 dry-run에서는 무시한다.
      */
     maxDelete: number | null;
+    /**
+     * sync에서 지우거나 덮어쓸 파일을 옮길 위치(실행별 하위 폴더까지 붙은 최종 값). 없으면 null.
+     * copy에서는 무시한다. dry-run·사전 확인·실제 실행에 같은 값을 준다(INT-003 FR-25).
+     */
+    backupDir: string | null;
 }
 
 /** copy/sync 인자. 실제 sync는 maxDelete 없이 만들 수 없다 */
@@ -246,6 +280,8 @@ export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     if (o.checkHashes) args.push("--checksum");
     args.push("--modify-window", `${o.modtimeToleranceMs}ms`);
     if (input.scope === "all") args.push("--create-empty-src-dirs");
+    if (input.mode === "sync" && input.backupDir !== null)
+        args.push("--backup-dir", input.backupDir);
     if (input.dryRun) {
         args.push("--dry-run");
     } else if (input.mode === "sync") {

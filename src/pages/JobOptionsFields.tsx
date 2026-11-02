@@ -29,14 +29,20 @@ export interface itfJobOptionsFieldsProps {
     errors?: Partial<Record<typOptionNumberField, string>>;
     /** 동기화 모드일 때만 위험 경고를 강조한다. 설정 화면(기본값)은 생략 */
     mode?: typRunMode;
+    /** 작업에 백업 폴더가 있는지(INT-003 T-03). 있으면 동기화 + 오류 무시도 실행할 수 있다. 설정 화면은 생략 */
+    hasBackupDir?: boolean;
 }
 
 const propsDefault = {
     errors: {},
+    hasBackupDir: false,
 } satisfies Partial<itfJobOptionsFieldsProps>;
 
+const BACKUP_IGNORE_ERRORS_TEXT =
+    "백업 폴더가 있어 실행할 수 있습니다. 지우거나 덮어쓸 파일은 백업 폴더로 옮깁니다.";
+
 export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
-    const { idPrefix, value, onChange, mode } = props;
+    const { idPrefix, value, onChange, mode, hasBackupDir = propsDefault.hasBackupDir } = props;
     const errors: NonNullable<itfJobOptionsFieldsProps["errors"]> =
         props.errors ?? propsDefault.errors;
 
@@ -191,8 +197,11 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
                         label="오류가 나도 계속 (--ignore-errors)"
                         description="읽기 오류가 있어도 대상에서 파일을 지울 수 있습니다."
                     />
-                    {mode === "sync" && value.ignoreErrors && (
+                    {mode === "sync" && value.ignoreErrors && !hasBackupDir && (
                         <p className={styles.warning}>주의: {SYNC_IGNORE_ERRORS_TEXT}</p>
+                    )}
+                    {mode === "sync" && value.ignoreErrors && hasBackupDir && (
+                        <p className={styles.warning}>{BACKUP_IGNORE_ERRORS_TEXT}</p>
                     )}
                 </div>
             </details>

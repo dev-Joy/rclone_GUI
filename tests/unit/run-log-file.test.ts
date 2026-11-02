@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
     clsRunLogFile,
     maskArgsForLog,
+    MASK_BACKUP_DIR,
     MASK_CONFIG,
     MASK_DEST,
     MASK_SOURCE,
@@ -64,6 +65,19 @@ describe("maskArgsForLog", () => {
                 configPath: "x",
             }),
         ).toEqual(["copy", `--config=${MASK_CONFIG}`]);
+    });
+
+    it("--backup-dir 값은 <백업 폴더>로 가린다 (INT-003 FR-28)", () => {
+        expect(
+            maskArgsForLog(
+                ["sync", "--backup-dir", "D:\\bk\\2026-11-02_103000_1a2b3c4d", "--", "a", "b"],
+                {
+                    source: "a",
+                    destination: "b",
+                    configPath: null,
+                },
+            ),
+        ).toEqual(["sync", "--backup-dir", MASK_BACKUP_DIR, "--", MASK_SOURCE, MASK_DEST]);
     });
 });
 

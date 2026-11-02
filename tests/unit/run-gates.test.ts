@@ -25,9 +25,13 @@ function f_Plan(over: Partial<typRunPlan> = {}): typRunPlan {
     };
 }
 
-function f_Job(mode: "copy" | "sync", over: { ignoreErrors?: boolean; preflight?: boolean } = {}) {
+function f_Job(
+    mode: "copy" | "sync",
+    over: { ignoreErrors?: boolean; preflight?: boolean; backupDir?: string | null } = {},
+) {
     return {
         mode,
+        backupDir: over.backupDir ?? null,
         options: {
             ignoreErrors: over.ignoreErrors ?? false,
             preflightBeforeDestructive: over.preflight ?? true,
@@ -100,6 +104,24 @@ describe("checkPlanSafety", () => {
             "SAFETY_BLOCKED",
         );
         expect(checkPlanSafety(f_Plan(), f_Job("copy", { ignoreErrors: true }))).toBeNull();
+    });
+
+    it("S15 표: sync + 오류 무시 + 백업 폴더 없음만 차단 (INT-003 FR-26)", () => {
+        for (const mode of ["copy", "sync"] as const) {
+            for (const ignoreErrors of [false, true]) {
+                for (const backupDir of [null, "D:\\bk"]) {
+                    const r = checkPlanSafety(f_Plan(), f_Job(mode, { ignoreErrors, backupDir }));
+                    const blocked = mode === "sync" && ignoreErrors && backupDir === null;
+                    expect(r?.code ?? null).toBe(blocked ? "SAFETY_BLOCKED" : null);
+                }
+            }
+        }
+    });
+
+    it("백업 폴더가 있어도 앞선 차단(빈 원본 sync)은 그대로", () => {
+        const empty = f_Plan({ sourceFiles: 0, destFiles: 3 });
+        const job = f_Job("sync", { ignoreErrors: true, backupDir: "D:\\bk" });
+        expect(checkPlanSafety(empty, job)?.code).toBe("EMPTY_SOURCE_BLOCKED");
     });
 
     it("순서: 충돌이 빈 원본보다 먼저", () => {

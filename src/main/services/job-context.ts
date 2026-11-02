@@ -1,6 +1,7 @@
 /**
  * 작업 실행 문맥 해석. 비교와 실행이 rclone을 부르기 전에 같은 순서로 확인한다.
- * 경로 형식·안전 검사(드라이브 상대 경로 포함) → rclone 실행 파일 → 설정 파일(remote면 필수).
+ * 경로 형식·안전 검사(드라이브 상대 경로 포함, sync면 백업 폴더 재검사) → rclone 실행 파일 → 설정 파일(remote면 필수).
+ * 백업 폴더 대상이 서버 쪽 이동을 지원하는지(assertBackupMovable)는 실행만 확인한다(비교는 rclone이 옮기지 않음).
  * 프로세스를 실행하지 않는 검사가 먼저이므로 경로 오류면 rclone 감지도 하지 않는다.
  * 제외 패턴(공용 + 작업 전용)은 마지막 await 뒤 동기 구간에서 해석한다(비교·실행은 ctx.excludes만 쓴다).
  *
@@ -10,12 +11,13 @@
 // ========== Internal imports ==========
 import { clsAppError } from "@/main/lib/app-error";
 import type { clsRcloneEnv } from "@/main/rclone/detect";
+import type { clsRemoteService } from "@/main/services/remote-service";
 import {
     resolveEffectiveExcludes,
     type itfEffectiveExcludes,
 } from "@/main/services/effective-excludes";
 import type { clsExcludeStore } from "@/main/store/exclude-store";
-import { checkRunPaths, parsePath, type itfParsedPath } from "@/shared/path-utils";
+import { checkBackupDir, checkRunPaths, parsePath, type itfParsedPath } from "@/shared/path-utils";
 import type { typJob } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 
@@ -33,6 +35,8 @@ export interface itfJobContext {
     caseInsensitive: boolean;
     src: itfParsedPath;
     dst: itfParsedPath;
+    /** sync에서 지우거나 덮어쓸 파일을 옮길 기준 폴더(INT-003 T-03). copy이거나 없으면 null */
+    backup: itfParsedPath | null;
     binaryPath: string;
     /** --config로 넘길 경로. 없으면 null */
     configPath: string | null;
@@ -86,6 +90,13 @@ export async function resolveJobContext(
     }
     const src = f_Parse(job.source);
     const dst = f_Parse(job.destination);
+    // 저장 뒤 대소문자 설정이 바뀌었을 수 있으므로 실행 때 다시 검사한다(copy는 백업 폴더를 쓰지 않음)
+    let backup: itfParsedPath | null = null;
+    if (job.mode === "sync" && job.backupDir !== null) {
+        const issue = checkBackupDir(job.backupDir, job.source, job.destination, caseInsensitive);
+        if (issue) throw new clsAppError(issue.code, issue.message);
+        backup = f_Parse(job.backupDir);
+    }
 
     // 2) rclone·설정 파일
     const rt = await deps.rcloneEnv.require();
@@ -104,8 +115,28 @@ export async function resolveJobContext(
         caseInsensitive,
         src,
         dst,
+        backup,
         binaryPath: rt.binaryPath,
         configPath,
         excludes,
     };
+}
+
+/** Move를 지원하지 않거나 확인하지 못한 저장소의 백업 폴더 실행 차단 문구(경로·remote 이름 없음) */
+export const BACKUP_NOT_MOVABLE_TEXT =
+    "이 저장소는 파일을 옮기지 못하거나(서버 쪽 이동 미지원) 지원 여부를 확인하지 못해 백업 폴더를 쓸 수 없습니다. 실행하지 않았습니다. 백업 폴더를 비우거나 다른 대상을 쓰세요.";
+
+/**
+ * 백업 폴더를 쓸 수 있는 저장소인지(INT-003 FR-36). 백업 폴더가 없으면 통과.
+ * 로컬·UNC는 checkBackupDir(같은 드라이브·공유)로 충분해 조회하지 않는다.
+ * remote 대상은 backend features의 Move가 true일 때만 통과하고, false·null이면 SAFETY_BLOCKED를 던진다.
+ * Move가 없으면 덮어쓰기까지 삭제 한도를 써서 계획대로여도 exit 7로 멈춘다(rclone-notes #30).
+ */
+export async function assertBackupMovable(
+    ctx: Pick<itfJobContext, "backup" | "dst" | "configPath">,
+    features: Pick<clsRemoteService, "features">,
+): Promise<void> {
+    if (ctx.backup === null || ctx.dst.kind !== "remote") return;
+    const f = await features.features(ctx.dst.root, ctx.configPath);
+    if (f.canMove !== true) throw new clsAppError("SAFETY_BLOCKED", BACKUP_NOT_MOVABLE_TEXT);
 }

@@ -33,6 +33,8 @@ export const RCLONE_TIMEOUTS = {
     configFile: 10_000,
     listRemotes: 20_000,
     probe: 60_000,
+    /** 저장소 기능(backend features). 넘으면 알 수 없음으로 본다(INT-003 FR-36) */
+    features: 10_000,
     /** 폴더 탐색(lsjson --max-depth 1 --dirs-only) */
     listDir: 60_000,
     /** 비교용 전체 목록(lsjson --recursive) 한 쪽 */

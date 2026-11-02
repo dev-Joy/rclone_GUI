@@ -11,6 +11,7 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCModal from "@/components/ZBCModal";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import { HISTORY_KIND_LABEL, historyKind } from "@/lib/history-view";
+import { shortenPath } from "@/lib/path-display";
 import { runStatusText } from "@/lib/run-view";
 import { formatBytes, formatDuration, formatLocalDateTime } from "@/shared/format";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
@@ -81,6 +82,14 @@ export default function HistoryDetail() {
                                     새 파일 {rec.plan.createFiles} · 변경 {rec.plan.updateFiles} ·
                                     삭제 {rec.plan.deleteFiles} (복사{" "}
                                     {formatBytes(rec.plan.transferBytes)})
+                                </dd>
+                            </>
+                        )}
+                        {rec.backupDir && (
+                            <>
+                                <dt>백업 위치</dt>
+                                <dd title={rec.backupDir} id="history-backup-dir">
+                                    지우거나 덮어쓴 파일은 {shortenPath(rec.backupDir, 60)}로 옮김
                                 </dd>
                             </>
                         )}

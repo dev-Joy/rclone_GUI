@@ -677,6 +677,7 @@ async function f_InitCore(): Promise<itfServices> {
         logsDir: paths.logs,
         excludes: excludeStore,
         excludeFileDir,
+        features: remoteService,
         logger,
         emit: (e) => {
             if (mainWindow && !mainWindow.isDestroyed()) {

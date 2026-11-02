@@ -3,6 +3,7 @@
  * 경로의 형식·안전 검사(S1~S4a)는 path-utils의 checkJobPaths가 담당한다.
  * 저장된 값 읽기(zJob)와 새로 저장하는 입력(zJobDraft·zJobPatch) 모두 경로 4096자 한도를
  * 쓰고, 제외 패턴 합계 한도는 저장 입력에만 적용한다 (INT-002 T-09).
+ * 백업 폴더(backupDir, INT-003 T-03)는 options가 아닌 작업 최상위 필드다(설정 기본값과 같이 쓰지 않음).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -119,15 +120,18 @@ const zJobDraftShape = {
     excludePatternIds: zExcludePatternIds,
     options: zJobRunOptions,
     configPathOverride: zPathInput.nullable(),
+    /** sync에서 지우거나 덮어쓸 파일을 옮길 기준 폴더(INT-003 T-03). null이면 쓰지 않음, copy에서는 무시 */
+    backupDir: zPathInput.nullable(),
     autoSync: zAutoSyncInput,
 };
 
-/** 저장된 작업 읽기용 초안(예전 한도). excludePatternIds가 없으면 [], scope가 없으면 "files" */
+/** 저장된 작업 읽기용 초안(예전 한도). excludePatternIds가 없으면 [], scope가 없으면 "files", backupDir가 없으면 null */
 export const zJobStoredDraft = z.object({
     ...zJobDraftShape,
     source: zPathStored,
     destination: zPathStored,
     configPathOverride: zPathStored.nullable(),
+    backupDir: zPathStored.nullable().default(null),
     excludePatternIds: zExcludePatternIds.default([]),
     scope: zSyncScope.default("files"),
 });

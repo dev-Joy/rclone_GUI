@@ -312,6 +312,93 @@ export function checkRunPaths(
     return { errors: [...driveErrors, ...pair.errors], warnings: pair.warnings };
 }
 
+/** 백업 폴더 오류 문구 접두사(편집기 필드 매핑용, INT-003 T-03) */
+export const BACKUP_DIR_LABEL = "백업 폴더";
+
+/** "백업 폴더: …" 문구의 검사 결과 */
+function f_BackupIssue(code: typErrorCode, text: string): itfPathIssue {
+    return { code, message: `${BACKUP_DIR_LABEL}: ${text}` };
+}
+
+/** a와 b의 관계: 같은 폴더, a가 b 안, b가 a 안, 겹치지 않음(루트가 다르면 null) */
+function f_Overlap(
+    a: { root: string; keys: string[] },
+    b: { root: string; keys: string[] },
+): "same" | "aInB" | "bInA" | null {
+    if (a.root !== b.root) return null;
+    if (a.keys.length === b.keys.length && a.keys.every((k, i) => b.keys[i] === k)) return "same";
+    if (f_IsPrefix(b.keys, a.keys)) return "aInB";
+    if (f_IsPrefix(a.keys, b.keys)) return "bInA";
+    return null;
+}
+
+/**
+ * 백업 폴더 검사(INT-003 FR-24, E-8·E-9). 통과하면 null. 문구는 "백업 폴더: …".
+ * 순서: 형식 → 루트 금지 → 드라이브 상대(`x:folder`) → 대상과 같은 위치(같은 드라이브·UNC 공유·remote,
+ * WSL /mnt 표기도 같아야 함) → 대상과 겹침 → 원본과 겹침.
+ * 다른 위치면 rclone이 옮기지 못하고 복사+삭제를 해 덮어쓰기까지 삭제 한도를 쓴다(rclone-notes #30).
+ * 원본·대상이 해석되지 않으면 그 비교는 건너뛴다(checkPathPair가 따로 알린다).
+ */
+export function checkBackupDir(
+    backupRaw: string,
+    sourceRaw: string,
+    destRaw: string,
+    caseInsensitive: boolean,
+): itfPathIssue | null {
+    const r = parsePath(backupRaw);
+    if (!r.ok) return f_BackupIssue(r.issue.code, r.issue.message);
+    const bk = canonicalLocation(r.path, caseInsensitive);
+    if (bk.keys.length === 0) {
+        return f_BackupIssue(
+            "SAFETY_BLOCKED",
+            "드라이브·공유·리모트 루트 전체는 지정할 수 없습니다. 하위 폴더를 고르세요.",
+        );
+    }
+    if (looksLikeDriveLetterRemotePath(backupRaw)) {
+        const shown = backupRaw.trim();
+        const letter = shown.charAt(0).toUpperCase();
+        return f_BackupIssue(
+            "PATH_INVALID",
+            `‘${shown}’는 ${letter} 드라이브의 현재 폴더 기준 경로라 위치가 정해지지 않습니다. ${letter}:\\${shown.slice(2)}처럼 ‘:’ 뒤에 \\를 넣으세요.`,
+        );
+    }
+    const d = parsePath(destRaw);
+    if (d.ok) {
+        const dst = canonicalLocation(d.path, caseInsensitive);
+        const remoteMixed = (r.path.kind === "remote") !== (d.path.kind === "remote");
+        if (bk.root !== dst.root || remoteMixed) {
+            return f_BackupIssue(
+                "SAFETY_BLOCKED",
+                "대상과 같은 드라이브(네트워크 공유·리모트도 같은 곳)에 있어야 합니다. 다른 곳이면 파일을 옮기지 못하고 복사한 뒤 지우게 되어, 삭제 한도에 걸려 실행이 멈춥니다.",
+            );
+        }
+        if (bk.wslMntAlias !== dst.wslMntAlias) {
+            return f_BackupIssue(
+                "SAFETY_BLOCKED",
+                "대상과 같은 표기(…\\mnt\\… 또는 드라이브 문자)로 쓰세요.",
+            );
+        }
+        if (f_Overlap(bk, dst) !== null) {
+            return f_BackupIssue(
+                "SAFETY_BLOCKED",
+                "대상 폴더와 겹칩니다(같은 폴더이거나 한쪽이 다른 쪽 안에 있음). 대상 밖의 폴더를 고르세요.",
+            );
+        }
+    }
+    const s = parsePath(sourceRaw);
+    if (s.ok && f_Overlap(bk, canonicalLocation(s.path, caseInsensitive)) !== null) {
+        return f_BackupIssue("SAFETY_BLOCKED", "원본 폴더와 겹칩니다. 원본 밖의 폴더를 고르세요.");
+    }
+    return null;
+}
+
+/** 백업 기준 경로 + 실행별 하위 폴더 이름 → rclone에 넘길 경로. 로컬·UNC는 "\\", remote는 "/" */
+export function joinBackupPath(base: itfParsedPath, subdir: string): string {
+    return base.kind === "remote"
+        ? `${base.normalized}/${subdir}`
+        : `${base.normalized}\\${subdir}`;
+}
+
 /** WSL 리눅스 절대 경로를 UNC로 바꾼다. 예: ("Distro", "/home/a") → \\wsl.localhost\Distro\home\a */
 export function linuxPathToWslUnc(distro: string, linuxPath: string): string | null {
     const name = distro.trim();

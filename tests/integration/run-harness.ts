@@ -28,12 +28,15 @@ import { clsActivityLock } from "@/main/services/activity-lock";
 import { clsCompareService } from "@/main/services/compare-service";
 import { EXCLUDE_FILE_DIR } from "@/main/services/exclude-file";
 import { clsPathService } from "@/main/services/path-service";
+import { clsRemoteOps } from "@/main/services/remote-ops";
+import { clsRemoteService } from "@/main/services/remote-service";
 import { clsActiveRunStore } from "@/main/services/run-recovery";
 import { clsRunService } from "@/main/services/run-service";
 import { openAppDb } from "@/main/store/app-db";
 import { clsExcludeStore } from "@/main/store/exclude-store";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
+import { clsRemoteStore } from "@/main/store/remote-store";
 import { createDefaultSettings } from "@/shared/defaults";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobRunOptions, typSyncScope } from "@/shared/schemas/job";
@@ -96,6 +99,8 @@ export interface itfEnvOptions {
     options?: Partial<typJobRunOptions>;
     /** 자동 실행 설정(기본: 꺼짐) */
     autoSync?: Partial<typJobDraft["autoSync"]>;
+    /** sync의 백업 폴더(기본: 없음, INT-003 T-03) */
+    backupDir?: string | null;
     /** 작업 전용 제외 패턴(기본: 설정 기본값 + "*.tmp") */
     excludes?: string[];
     /** 작업을 만들기 전에 공용 라이브러리에 넣고 연결할 패턴 */
@@ -132,6 +137,7 @@ export async function makeEnv(o: itfEnvOptions) {
         excludePatternIds: libraryIds,
         options: { ...defaults, ...o.options },
         configPathOverride: null,
+        backupDir: o.backupDir ?? null,
         autoSync: {
             enabled: false,
             intervalMinutes: 60,
@@ -167,6 +173,15 @@ export async function makeEnv(o: itfEnvOptions) {
     const holder: { runs: clsRunService | null } = { runs: null };
     const runFn = o.wrapRun ? o.wrapRun(runRclone, () => holder.runs!) : runRclone;
     const logsDir = join(userData, "logs");
+    // 백업 폴더 대상 remote의 Move 확인(backend features)은 실제 rclone으로 한다
+    const remoteStore = new clsRemoteStore({ db });
+    remoteStore.load();
+    const remoteService = new clsRemoteService({
+        store: remoteStore,
+        rcloneEnv,
+        pathService,
+        remoteOps: new clsRemoteOps({ activity, jobs }),
+    });
     const runs = new clsRunService({
         jobs,
         settings: settingsSource,
@@ -178,6 +193,7 @@ export async function makeEnv(o: itfEnvOptions) {
         logsDir,
         excludes: excludeStore,
         excludeFileDir,
+        features: remoteService,
         logger: LOGGER,
         run: runFn,
         emit: (e) => events.push(e),

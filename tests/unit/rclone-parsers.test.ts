@@ -85,6 +85,18 @@ describe("parseLogLine (실제 rclone 1.75.1 출력)", () => {
         });
     });
 
+    it("--backup-dir dry-run: move into backup dir → delete, move → backupMove (rclone-notes #28)", () => {
+        const parsed = fixtureLines("backup-both-dryrun").map(parseLogLine);
+        const objects = (k: string) =>
+            parsed
+                .filter((p) => p.skipped === k)
+                .map((p) => p.object)
+                .toSorted();
+        expect(objects("delete")).toEqual(["extra.txt", "gone/old.txt"]);
+        expect(objects("backupMove")).toEqual(["changed.txt", "changed2.txt"]);
+        expect(parsed.some((p) => p.skipped === "other")).toBe(false);
+    });
+
     it("copy dry-run에는 delete가 없다", () => {
         const parsed = fixtureLines("copy-dryrun").map(parseLogLine);
         expect(parsed.some((p) => p.skipped === "delete")).toBe(false);

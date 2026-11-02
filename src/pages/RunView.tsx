@@ -11,6 +11,7 @@
  */
 
 // ========== Internal imports ==========
+import { shortenPath } from "@/lib/path-display";
 import { runStatusText } from "@/lib/run-view";
 import { formatDuration, formatLocalDateTime } from "@/shared/format";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
@@ -147,6 +148,16 @@ export default function RunView(props: itfRunViewProps) {
                                     </pre>
                                 </details>
                             )}
+                        {shownLast.record.backupDir && (
+                            <p
+                                className={styles.note}
+                                title={shownLast.record.backupDir}
+                                id="run-backup-dir"
+                            >
+                                지우거나 덮어쓴 파일은 {shortenPath(shownLast.record.backupDir, 60)}
+                                로 옮김
+                            </p>
+                        )}
                         {mayLeavePartial(shownLast.record) && (
                             <p className={styles.warning} role="note">
                                 {PARTIAL_LEFT_NOTICE}

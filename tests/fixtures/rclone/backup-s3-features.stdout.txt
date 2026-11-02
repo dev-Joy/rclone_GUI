@@ -1,0 +1,134 @@
+{
+	"Name": ":s3",
+	"Root": "bkt",
+	"String": "S3 bucket bkt",
+	"Precision": 1,
+	"Hashes": [
+		"md5"
+	],
+	"Features": {
+		"About": false,
+		"BucketBased": true,
+		"BucketBasedRootOK": true,
+		"CanHaveEmptyDirectories": false,
+		"CaseInsensitive": false,
+		"ChangeNotify": false,
+		"ChunkWriterDoesntSeek": false,
+		"CleanUp": true,
+		"Command": true,
+		"Copy": true,
+		"DirCacheFlush": false,
+		"DirModTimeUpdatesOnWrite": false,
+		"DirMove": false,
+		"DirSetModTime": false,
+		"Disconnect": false,
+		"DoubleSlash": false,
+		"DuplicateFiles": false,
+		"FilterAware": false,
+		"GetTier": false,
+		"IsLocal": false,
+		"ListP": true,
+		"ListR": true,
+		"MergeDirs": false,
+		"MkdirMetadata": false,
+		"Move": false,
+		"NoMultiThreading": false,
+		"OpenChunkWriter": true,
+		"OpenWriterAt": false,
+		"Overlay": false,
+		"PartialUploads": false,
+		"PublicLink": true,
+		"Purge": true,
+		"PutStream": true,
+		"PutUnchecked": false,
+		"ReadDirMetadata": false,
+		"ReadMetadata": true,
+		"ReadMimeType": true,
+		"ServerSideAcrossConfigs": false,
+		"SetTier": false,
+		"SetWrapper": false,
+		"Shutdown": false,
+		"SlowHash": false,
+		"SlowModTime": true,
+		"UnWrap": false,
+		"UserDirMetadata": false,
+		"UserInfo": false,
+		"UserMetadata": true,
+		"WrapFs": false,
+		"WriteDirMetadata": false,
+		"WriteDirSetModTime": false,
+		"WriteMetadata": true,
+		"WriteMimeType": true
+	},
+	"MetadataInfo": {
+		"System": {
+			"btime": {
+				"Help": "Time of file birth (creation) read from Last-Modified header",
+				"Type": "RFC 3339",
+				"Example": "2006-01-02T15:04:05.999999999Z07:00",
+				"ReadOnly": true
+			},
+			"cache-control": {
+				"Help": "Cache-Control header",
+				"Type": "string",
+				"Example": "no-cache",
+				"ReadOnly": false
+			},
+			"content-disposition": {
+				"Help": "Content-Disposition header",
+				"Type": "string",
+				"Example": "inline",
+				"ReadOnly": false
+			},
+			"content-encoding": {
+				"Help": "Content-Encoding header",
+				"Type": "string",
+				"Example": "gzip",
+				"ReadOnly": false
+			},
+			"content-language": {
+				"Help": "Content-Language header",
+				"Type": "string",
+				"Example": "en-US",
+				"ReadOnly": false
+			},
+			"content-type": {
+				"Help": "Content-Type header",
+				"Type": "string",
+				"Example": "text/plain",
+				"ReadOnly": false
+			},
+			"mtime": {
+				"Help": "Time of last modification, read from rclone metadata",
+				"Type": "RFC 3339",
+				"Example": "2006-01-02T15:04:05.999999999Z07:00",
+				"ReadOnly": false
+			},
+			"object-lock-legal-hold-status": {
+				"Help": "Object Lock legal hold status: ON or OFF",
+				"Type": "string",
+				"Example": "OFF",
+				"ReadOnly": false
+			},
+			"object-lock-mode": {
+				"Help": "Object Lock mode: GOVERNANCE or COMPLIANCE",
+				"Type": "string",
+				"Example": "GOVERNANCE",
+				"ReadOnly": false
+			},
+			"object-lock-retain-until-date": {
+				"Help": "Object Lock retention until date",
+				"Type": "RFC 3339",
+				"Example": "2030-01-02T15:04:05Z",
+				"ReadOnly": false
+			},
+			"tier": {
+				"Help": "Tier of the object",
+				"Type": "string",
+				"Example": "GLACIER",
+				"ReadOnly": true
+			}
+		},
+		"Help": "User metadata is stored as x-amz-meta- keys. S3 metadata keys are case insensitive and are always returned in lower case."
+	}
+}

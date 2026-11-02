@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    checkBackupDir,
     checkPathPair,
     checkRunPaths,
     isRemoteAbsolute,
+    joinBackupPath,
     linuxPathToWslUnc,
     mntPathToWindows,
     parsePath,
@@ -192,6 +194,82 @@ describe("checkRunPaths (비교·실행 시작 전)", () => {
 
     it("저장용 checkPathPair는 드라이브 상대 경로를 막지 않는다(경고만, Phase 4 동작 유지)", () => {
         expect(checkPathPair("x:folder", "F:\\dst", true).errors).toEqual([]);
+    });
+});
+
+describe("checkBackupDir (INT-003 FR-24, AC-11·AC-17)", () => {
+    const SRC = "D:\\work\\src";
+    const DST = "D:\\work\\dst";
+    const f_Check = (bk: string, src = SRC, dst = DST, ci = false) =>
+        checkBackupDir(bk, src, dst, ci);
+
+    it.each([
+        ["대상과 같음", "D:\\work\\dst", "대상 폴더와 겹칩니다"],
+        ["대상 안", "D:\\work\\dst\\bk", "대상 폴더와 겹칩니다"],
+        ["대상의 상위", "D:\\work", "대상 폴더와 겹칩니다"],
+        ["원본 안", "D:\\work\\src\\bk", "원본 폴더와 겹칩니다"],
+        ["다른 로컬 드라이브(AC-17)", "E:\\bk", "같은 드라이브"],
+        ["루트", "D:\\", "루트 전체"],
+        ["드라이브 상대", "x:folder", "현재 폴더 기준"],
+        ["형식 오류", "relative\\bk", "상대 경로"],
+    ])("거부: %s", (_label, bk, text) => {
+        const r = f_Check(bk);
+        expect(r?.message).toContain(text);
+        expect(r?.message.startsWith("백업 폴더: ")).toBe(true);
+    });
+
+    it("원본의 상위는 대상의 상위이기도 해 대상 겹침으로 거부", () => {
+        expect(f_Check("D:\\work\\src\\..")?.code).toBe("SAFETY_BLOCKED");
+    });
+
+    it.each([
+        ["다른 UNC 공유", "\\\\srv\\other\\bk", "\\\\srv\\share\\dst"],
+        ["UNC와 로컬", "D:\\bk", "\\\\srv\\share\\dst"],
+        ["다른 remote", "gd2:bk", "gd:dst"],
+        ["local과 remote", "D:\\bk", "gd:dst"],
+        ["공유 루트", "\\\\srv\\share", "\\\\srv\\share\\dst"],
+        ["remote 루트", "gd:", "gd:dst"],
+    ])("거부: %s", (_label, bk, dst) => {
+        expect(f_Check(bk, "C:\\src", dst)?.code).toBe("SAFETY_BLOCKED");
+    });
+
+    it("WSL /mnt 표기와 드라이브 문자가 섞이면 거부", () => {
+        expect(f_Check("\\\\wsl.localhost\\U\\mnt\\d\\bk")?.message).toContain("같은 표기");
+    });
+
+    it.each([
+        ["같은 드라이브 형제", "D:\\work\\bk", SRC, DST],
+        ["이름 접두사만 같은 형제", "D:\\work\\dst2", SRC, DST],
+        ["같은 UNC 공유", "\\\\srv\\share\\bk", "C:\\src", "\\\\srv\\share\\dst"],
+        ["같은 remote 다른 폴더", "gd:bk", "C:\\src", "gd:dst"],
+        [
+            "WSL 배포판 경로끼리",
+            "\\\\wsl.localhost\\U\\home\\a\\bk",
+            "C:\\src",
+            "\\\\wsl.localhost\\U\\home\\a\\dst",
+        ],
+        [
+            "WSL /mnt 표기끼리",
+            "\\\\wsl.localhost\\U\\mnt\\d\\bk",
+            "C:\\src",
+            "\\\\wsl.localhost\\U\\mnt\\d\\dst",
+        ],
+    ])("허용: %s", (_label, bk, src, dst) => {
+        expect(f_Check(bk, src, dst)).toBeNull();
+    });
+
+    it("대소문자: remote는 설정을 따르고, 로컬은 항상 무시", () => {
+        expect(f_Check("gd:Dst/bk", "C:\\src", "gd:dst", false)).toBeNull();
+        expect(f_Check("gd:Dst/bk", "C:\\src", "gd:dst", true)?.code).toBe("SAFETY_BLOCKED");
+        expect(f_Check("d:\\WORK\\DST\\bk")?.code).toBe("SAFETY_BLOCKED");
+    });
+
+    it("joinBackupPath: 로컬·UNC는 \\, remote는 /", () => {
+        const sub = "2026-11-02_103000_1a2b3c4d";
+        expect(joinBackupPath(f_Ok("D:\\bk\\"), sub)).toBe(`D:\\bk\\${sub}`);
+        expect(joinBackupPath(f_Ok("\\\\srv\\share\\bk"), sub)).toBe(`\\\\srv\\share\\bk\\${sub}`);
+        expect(joinBackupPath(f_Ok("gd:bk"), sub)).toBe(`gd:bk/${sub}`);
+        expect(joinBackupPath(f_Ok("sftp:/abs/bk"), sub)).toBe(`sftp:/abs/bk/${sub}`);
     });
 });
 
