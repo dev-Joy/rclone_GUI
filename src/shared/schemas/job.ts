@@ -54,13 +54,38 @@ export const zJobRunOptions = z.object({
 });
 export type typJobRunOptions = z.infer<typeof zJobRunOptions>;
 
+/** 자동 실행 예약 종류(INT-002 T-06). interval: 일정 간격, daily: 매일 HH:MM, weekly: 고른 요일의 HH:MM */
+export const zScheduleKind = z.enum(["interval", "daily", "weekly"]);
+export type typScheduleKind = z.infer<typeof zScheduleKind>;
+
+export const TIME_OF_DAY_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const DEFAULT_TIME_OF_DAY = "09:00";
+/** 요일 bit 마스크. bit0 = 일요일 (Date.getDay()와 같다) */
+export const WEEKDAYS_ALL = 0b1111111;
+/** 월~금 */
+export const WEEKDAYS_WEEKDAYS = 0b0111110;
+
+export const zTimeOfDay = z.string().regex(TIME_OF_DAY_RE, "시각은 00:00~23:59로 입력하세요.");
+export const zWeekdays = z.number().int().min(0).max(WEEKDAYS_ALL);
+
+/**
+ * 저장 입력. 새 필드도 필수이고 기본값이 없다 — job-store가 patch를 기존 값과 합치므로
+ * 기본값이 있으면 daily·weekly 작업이 interval로 되돌아간다.
+ */
 export const zAutoSyncInput = z.object({
     enabled: z.boolean(),
     intervalMinutes: z.number().int().min(1).max(10_080),
     allowDeletes: z.boolean(),
+    kind: zScheduleKind,
+    timeOfDay: zTimeOfDay,
+    weekdays: zWeekdays,
 });
 
+/** 저장된 값 읽기. 예전 데이터(종류·시각·요일 없음)는 interval·09:00·평일로 읽는다 */
 export const zAutoSync = zAutoSyncInput.extend({
+    kind: zScheduleKind.default("interval"),
+    timeOfDay: zTimeOfDay.default(DEFAULT_TIME_OF_DAY),
+    weekdays: zWeekdays.default(WEEKDAYS_WEEKDAYS),
     nextRunAt: zIsoDate.nullable(),
     lastAutoRunAt: zIsoDate.nullable(),
 });
@@ -107,10 +132,27 @@ function f_ExcludesTotal(
     if (issue) ctx.addIssue({ code: "custom", path: ["excludes"], message: issue });
 }
 
+/** 요일 지정 예약은 요일을 하나 이상 골라야 한다 */
+function f_ScheduleCheck(
+    v: { autoSync: { kind: typScheduleKind; weekdays: number } },
+    ctx: z.RefinementCtx,
+): void {
+    if (v.autoSync.kind === "weekly" && v.autoSync.weekdays === 0) {
+        ctx.addIssue({
+            code: "custom",
+            path: ["autoSync", "weekdays"],
+            message: "요일을 하나 이상 고르세요.",
+        });
+    }
+}
+
 const zJobDraftBase = z.object(zJobDraftShape);
 
 /** 저장 입력(새 한도). 알 수 없는 키는 거부한다 */
-export const zJobDraft = zJobDraftBase.strict().superRefine(f_ExcludesTotal);
+export const zJobDraft = zJobDraftBase
+    .strict()
+    .superRefine(f_ExcludesTotal)
+    .superRefine(f_ScheduleCheck);
 export type typJobDraft = z.infer<typeof zJobDraft>;
 
 /** 사용자가 바꿀 수 있는 필드만 받는다. 알 수 없는 키는 거부한다. 합계는 병합 뒤 zJobDraft로 다시 검사한다 */

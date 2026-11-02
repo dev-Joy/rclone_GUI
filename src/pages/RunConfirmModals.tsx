@@ -20,7 +20,7 @@ export interface itfRunConfirmModalsProps {
     safety: typDeleteThresholds;
 }
 
-const CANCEL_NOTE = "취소해도 이미 복사된 파일은 대상에 남습니다.";
+const CANCEL_NOTE = "중지해도 이미 복사된 파일은 대상에 남습니다.";
 
 export default function RunConfirmModals(props: itfRunConfirmModalsProps) {
     const { flow, safety } = props;

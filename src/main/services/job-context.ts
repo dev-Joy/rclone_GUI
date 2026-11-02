@@ -93,7 +93,7 @@ export async function resolveJobContext(
     if ((src.kind === "remote" || dst.kind === "remote") && configPath === null) {
         throw new clsAppError(
             "CONFIG_REQUIRED",
-            "remote 경로를 쓰려면 rclone 설정 파일이 필요합니다.",
+            "리모트 경로를 쓰려면 rclone 설정 파일이 필요합니다.",
         );
     }
     // 3) 제외 패턴: 마지막 await 뒤 동기로 해석해 이후 비교·실행이 같은 값을 쓴다

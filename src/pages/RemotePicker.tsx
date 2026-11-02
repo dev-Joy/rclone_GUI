@@ -116,23 +116,23 @@ export default function RemotePicker(props: itfRemotePickerProps) {
     };
 
     let status: string | null = null;
-    if (list.loading) status = "remote 목록을 불러오는 중…";
-    else if (list.error) status = `remote 목록을 읽지 못했습니다: ${list.error}`;
+    if (list.loading) status = "리모트 목록을 불러오는 중…";
+    else if (list.error) status = `리모트 목록을 읽지 못했습니다: ${list.error}`;
     else if (list.remotes !== null && remotes.length === 0)
-        status = "설정 파일에 remote가 없습니다.";
+        status = "설정 파일에 리모트가 없습니다.";
 
     return (
         <div className={styles.RemotePicker}>
             {options.length > 0 && (
                 <div className={styles.row}>
                     <label className={styles.label} htmlFor={id}>
-                        remote 빠른 입력
+                        리모트 빠른 입력
                     </label>
                     <ZBCSelect
                         id={id}
                         value=""
                         options={options}
-                        placeholder="remote 고르기"
+                        placeholder="리모트 고르기"
                         onChange={h_Change}
                     />
                 </div>

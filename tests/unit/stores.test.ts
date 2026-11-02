@@ -168,12 +168,29 @@ describe("clsJobStore", () => {
     it("update: rev +1, updatedAt 갱신, 관리 필드는 patch로 못 바꾼다", async () => {
         const jobs = await f_Jobs();
         const job = await jobs.create(
-            f_Draft({ autoSync: { enabled: true, intervalMinutes: 5, allowDeletes: false } }),
+            f_Draft({
+                autoSync: {
+                    enabled: true,
+                    intervalMinutes: 5,
+                    allowDeletes: false,
+                    kind: "interval",
+                    timeOfDay: "09:00",
+                    weekdays: 62,
+                },
+            }),
         );
         await jobs.setBookkeeping(job.id, { nextRunAt: "2030-01-01T00:00:00.000Z" });
         const patch = {
             name: "새 이름",
-            autoSync: { enabled: true, intervalMinutes: 5, allowDeletes: false, nextRunAt: null },
+            autoSync: {
+                enabled: true,
+                intervalMinutes: 5,
+                allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
+                nextRunAt: null,
+            },
         } as unknown as Parameters<typeof jobs.update>[1];
         const updated = await jobs.update(job.id, patch);
         expect(updated).toMatchObject({ name: "새 이름", rev: 1 });
@@ -192,25 +209,55 @@ describe("clsJobStore", () => {
         const off = await jobs.create(f_Draft());
         expect(off.autoSync.nextRunAt).toBeNull();
         const on = await jobs.update(off.id, {
-            autoSync: { enabled: true, intervalMinutes: 30, allowDeletes: false },
+            autoSync: {
+                enabled: true,
+                intervalMinutes: 30,
+                allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
+            },
         });
         expect(f_Mins(on.autoSync.nextRunAt)).toBeCloseTo(30, 0);
         await jobs.setBookkeeping(on.id, { nextRunAt: "2030-01-01T00:00:00.000Z" });
         const renamed = await jobs.update(on.id, { name: "이름만" });
         expect(renamed.autoSync.nextRunAt).toBe("2030-01-01T00:00:00.000Z");
         const faster = await jobs.update(on.id, {
-            autoSync: { enabled: true, intervalMinutes: 2, allowDeletes: false },
+            autoSync: {
+                enabled: true,
+                intervalMinutes: 2,
+                allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
+            },
         });
         expect(f_Mins(faster.autoSync.nextRunAt)).toBeCloseTo(2, 0);
         const copy = await jobs.duplicate(on.id);
         expect(f_Mins(copy.autoSync.nextRunAt)).toBeCloseTo(2, 0);
         expect(copy.autoSync.lastAutoRunAt).toBeNull();
         const disabled = await jobs.update(on.id, {
-            autoSync: { enabled: false, intervalMinutes: 2, allowDeletes: false },
+            autoSync: {
+                enabled: false,
+                intervalMinutes: 2,
+                allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
+            },
         });
         expect(disabled.autoSync.nextRunAt).toBeNull();
         const created = await jobs.create(
-            f_Draft({ autoSync: { enabled: true, intervalMinutes: 10, allowDeletes: false } }),
+            f_Draft({
+                autoSync: {
+                    enabled: true,
+                    intervalMinutes: 10,
+                    allowDeletes: false,
+                    kind: "interval",
+                    timeOfDay: "09:00",
+                    weekdays: 62,
+                },
+            }),
         );
         expect(f_Mins(created.autoSync.nextRunAt)).toBeCloseTo(10, 0);
     });

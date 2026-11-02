@@ -143,7 +143,7 @@ function RemoteBrowserBody(props: itfRemoteBrowserBodyProps) {
                 variant="primary"
                 onClick={h_Pick}
                 disabled={!canPick}
-                title={canPick ? undefined : "remote 루트는 작업 경로로 쓸 수 없습니다."}
+                title={canPick ? undefined : "리모트 루트는 작업 경로로 쓸 수 없습니다."}
             >
                 이 폴더 선택
             </ZBCButton>
@@ -151,7 +151,7 @@ function RemoteBrowserBody(props: itfRemoteBrowserBodyProps) {
     );
 
     return (
-        <ZBCModal open title="remote 폴더 찾아보기" onClose={onClose} footer={footer}>
+        <ZBCModal open title="리모트 폴더 찾아보기" onClose={onClose} footer={footer}>
             <div className={styles.RemoteBrowser}>
                 <p className={styles.bookmark}>{bookmark.alias}</p>
                 <div className={styles.location}>

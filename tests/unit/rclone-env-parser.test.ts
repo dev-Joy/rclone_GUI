@@ -143,7 +143,7 @@ describe("summarizeStderr", () => {
 });
 
 describe("hintForRcloneError", () => {
-    it("토큰 만료 → reconnect 안내(remote 이름 포함)", () => {
+    it("토큰 만료 → reconnect 안내(리모트 이름 포함)", () => {
         expect(
             hintForRcloneError("Failed to create file system: couldn't fetch token", "test-remote"),
         ).toContain("rclone config reconnect test-remote:");
@@ -152,7 +152,7 @@ describe("hintForRcloneError", () => {
 
     it("없는 섹션 / 암호화 설정 / 해당 없음", () => {
         expect(hintForRcloneError('didn\'t find section in config file ("x")', "x")).toContain(
-            "remote가 없습니다",
+            "리모트가 없습니다",
         );
         expect(hintForRcloneError("unable to decrypt configuration", null)).toContain(
             "RCLONE_CONFIG_PASS",

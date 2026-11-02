@@ -61,22 +61,22 @@ function f_Alias(raw: string): string {
 
 function f_RemoteName(raw: string): string {
     const name = raw.trim();
-    if (name === "") throw new clsAppError("VALIDATION", "remote를 고르세요.");
+    if (name === "") throw new clsAppError("VALIDATION", "리모트를 고르세요.");
     if (name.length > REMOTE_NAME_MAX) {
-        throw new clsAppError("VALIDATION", `remote 이름은 ${REMOTE_NAME_MAX}자 이내여야 합니다.`);
+        throw new clsAppError("VALIDATION", `리모트 이름은 ${REMOTE_NAME_MAX}자 이내여야 합니다.`);
     }
     if (isDriveLetterRemoteName(name)) {
         throw new clsAppError(
             "VALIDATION",
-            "영문 한 글자 remote는 Windows에서 드라이브 문자로 해석되어 쓸 수 없습니다.",
+            "영문 한 글자 리모트는 Windows에서 드라이브 문자로 해석되어 쓸 수 없습니다.",
         );
     }
     const parsed = parsePath(`${name}:`);
     if (!parsed.ok || parsed.path.kind !== "remote" || parsed.path.root !== `${name}:`) {
-        throw new clsAppError("VALIDATION", "remote 이름 형식이 올바르지 않습니다.");
+        throw new clsAppError("VALIDATION", "리모트 이름 형식이 올바르지 않습니다.");
     }
     if (parsed.path.segments.length !== 0 || parsed.path.normalized !== parsed.path.root) {
-        throw new clsAppError("VALIDATION", "remote 이름에는 경로를 넣을 수 없습니다.");
+        throw new clsAppError("VALIDATION", "리모트 이름에는 경로를 넣을 수 없습니다.");
     }
     return name;
 }
@@ -122,7 +122,7 @@ export class clsRemoteStore {
 
     get(id: string): itfRemoteBookmark {
         const item = this.items.find((x) => x.id === id);
-        if (!item) throw new clsAppError("NOT_FOUND", "remote 북마크를 찾을 수 없습니다.");
+        if (!item) throw new clsAppError("NOT_FOUND", "리모트 북마크를 찾을 수 없습니다.");
         return item;
     }
 
@@ -136,7 +136,7 @@ export class clsRemoteStore {
         if (this.items.length >= REMOTE_BOOKMARKS_MAX) {
             throw new clsAppError(
                 "VALIDATION",
-                `remote 북마크는 ${REMOTE_BOOKMARKS_MAX}개까지 저장할 수 있습니다.`,
+                `리모트 북마크는 ${REMOTE_BOOKMARKS_MAX}개까지 저장할 수 있습니다.`,
             );
         }
         const now = nowIso();
@@ -187,7 +187,7 @@ export class clsRemoteStore {
             basePath: next.basePath,
             updatedAt: next.updatedAt,
         });
-        if (changes === 0) throw new clsAppError("NOT_FOUND", "remote 북마크를 찾을 수 없습니다.");
+        if (changes === 0) throw new clsAppError("NOT_FOUND", "리모트 북마크를 찾을 수 없습니다.");
         this.items = this.items.map((x) => (x.id === next.id ? next : x)).toSorted(f_Compare);
         return next;
     }
@@ -195,7 +195,7 @@ export class clsRemoteStore {
     remove(id: string): void {
         this.get(id);
         const { changes } = this.db.run(SQL_DELETE, { id });
-        if (changes === 0) throw new clsAppError("NOT_FOUND", "remote 북마크를 찾을 수 없습니다.");
+        if (changes === 0) throw new clsAppError("NOT_FOUND", "리모트 북마크를 찾을 수 없습니다.");
         this.items = this.items.filter((x) => x.id !== id);
     }
 }

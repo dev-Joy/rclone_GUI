@@ -353,12 +353,12 @@ export class clsRcloneEnv {
                 const detail = e instanceof clsAppError ? (e.detail ?? "") : "";
                 const hint = hintForRcloneError(detail, null);
                 const message =
-                    e instanceof clsAppError ? e.message : "remote 목록을 읽지 못했습니다.";
+                    e instanceof clsAppError ? e.message : "리모트 목록을 읽지 못했습니다.";
                 warnings.push(hint && !message.includes(hint) ? `${message} ${hint}` : message);
                 // 종류를 못 읽어도 이름 목록은 예전 방식으로 보여 준다
                 try {
                     env.remotes = await listRemotes(bin.path, env.configPath, this.deps);
-                    warnings.push("remote 종류를 읽지 못해 이름만 표시합니다.");
+                    warnings.push("리모트 종류를 읽지 못해 이름만 표시합니다.");
                 } catch {
                     // 이름 목록 실패는 위 경고로 충분하다
                 }

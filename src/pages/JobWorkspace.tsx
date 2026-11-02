@@ -23,6 +23,7 @@ import { sortJobs } from "@/lib/job-form";
 import { canStartRun, RUN_LABEL } from "@/lib/run-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
+import { scheduleText } from "@/shared/schedule";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
@@ -32,6 +33,7 @@ import { useToastStore } from "@/stores/toast-store";
 import { useUiStore, type typJobTab } from "@/stores/ui-store";
 import CompareView from "./CompareView";
 import HistoryView from "./HistoryView";
+import JobActivityBar from "./JobActivityBar";
 import JobEditor from "./JobEditor";
 import PlanDriftModal from "./PlanDriftModal";
 import RunConfirmModals from "./RunConfirmModals";
@@ -45,12 +47,12 @@ const DEFAULT_SAFETY = createDefaultSettings().safety;
 /** 비교 결과 낡음 판정을 다시 하는 간격 */
 const STALE_TICK_MS = 30_000;
 
-/** 비교·실행·이력 탭은 저장된 작업에서만 연다 */
+/** 단계 순서 탭(비교·미리보기 → 실행 → 결과·이력). 저장된 작업에서만 연다 */
 function f_Tabs(isNew: boolean): readonly itfZBCTab<typJobTab>[] {
     return [
-        { id: "compare", label: "비교", disabled: isNew },
+        { id: "compare", label: "비교·미리보기", disabled: isNew },
         { id: "run", label: "실행", disabled: isNew },
-        { id: "history", label: "이력", disabled: isNew },
+        { id: "history", label: "결과·이력", disabled: isNew },
         { id: "edit", label: "작업 설정" },
     ];
 }
@@ -151,9 +153,10 @@ export default function JobWorkspace() {
         setTab("compare");
         void runCompare(job.id);
     };
+    /** 미리보기 결과는 1단계(비교·미리보기)에 보인다 */
     const h_DryRun = () => {
         if (!job) return;
-        setTab("run");
+        setTab("compare");
         void startRun(job.id, true);
     };
     const h_AskRun = () => {
@@ -185,7 +188,7 @@ export default function JobWorkspace() {
                         </ZBCBadge>
                     )}
                     {job?.autoSync.enabled && (
-                        <ZBCBadge tone="accent">자동 {job.autoSync.intervalMinutes}분</ZBCBadge>
+                        <ZBCBadge tone="accent">자동 · {scheduleText(job.autoSync)}</ZBCBadge>
                     )}
                 </div>
                 {job && (
@@ -211,40 +214,48 @@ export default function JobWorkspace() {
                         </>
                     )}
                     <span className={styles.spacer} />
-                    <ZBCButton
-                        onClick={h_Compare}
-                        disabled={!compareCheck.ok}
-                        title={
-                            compareReason ??
-                            "원본·대상 목록을 읽어 차이를 봅니다(파일은 바꾸지 않음)."
-                        }
-                    >
-                        {comparing ? "비교 중…" : "비교"}
-                    </ZBCButton>
-                    <ZBCButton
-                        onClick={h_DryRun}
-                        disabled={!dryCheck.ok}
-                        title={dryReason ?? "rclone이 할 일을 미리 봅니다(파일은 바꾸지 않음)."}
-                    >
-                        미리보기
-                    </ZBCButton>
-                    <ZBCButton
-                        variant="primary"
-                        onClick={h_AskRun}
-                        disabled={!realCheck.ok}
-                        title={
-                            realReason ??
-                            (job?.mode === "sync"
-                                ? "비교 결과대로 대상을 원본과 같게 만듭니다(삭제 포함)."
-                                : "비교 결과대로 대상에 복사합니다.")
-                        }
-                    >
-                        {RUN_LABEL[job?.mode ?? "copy"]}
-                    </ZBCButton>
+                    <fieldset className={styles.step} aria-label="1단계: 비교·미리보기">
+                        <ZBCButton
+                            onClick={h_Compare}
+                            disabled={!compareCheck.ok}
+                            title={
+                                compareReason ??
+                                "원본·대상 목록을 읽어 차이를 봅니다(파일은 바꾸지 않음)."
+                            }
+                        >
+                            {comparing ? "비교 중…" : "비교"}
+                        </ZBCButton>
+                        <ZBCButton
+                            onClick={h_DryRun}
+                            disabled={!dryCheck.ok}
+                            title={dryReason ?? "rclone이 할 일을 미리 봅니다(파일은 바꾸지 않음)."}
+                        >
+                            미리보기
+                        </ZBCButton>
+                    </fieldset>
+                    <span className={styles.arrow} aria-hidden="true">
+                        →
+                    </span>
+                    <fieldset className={styles.step} aria-label="2단계: 실행">
+                        <ZBCButton
+                            variant="primary"
+                            onClick={h_AskRun}
+                            disabled={!realCheck.ok}
+                            title={
+                                realReason ??
+                                (job?.mode === "sync"
+                                    ? "비교 결과대로 대상을 원본과 같게 만듭니다(삭제 포함)."
+                                    : "비교 결과대로 대상에 복사합니다.")
+                            }
+                        >
+                            {RUN_LABEL[job?.mode ?? "copy"]}
+                        </ZBCButton>
+                    </fieldset>
                 </div>
                 <output className={styles.reason}>{reasonText}</output>
             </header>
 
+            {job && <JobActivityBar jobId={job.id} />}
             <ZBCTabs
                 id="job-tabs"
                 tabs={f_Tabs(isNew)}
@@ -259,7 +270,7 @@ export default function JobWorkspace() {
                     id="job-tabs-panel-run"
                     aria-labelledby="job-tabs-tab-run"
                 >
-                    <RunView job={job} />
+                    <RunView job={job} kind="real" />
                 </div>
             ) : activeTab === "history" && job ? (
                 <div
@@ -277,6 +288,7 @@ export default function JobWorkspace() {
                     id="job-tabs-panel-compare"
                     aria-labelledby="job-tabs-tab-compare"
                 >
+                    <RunView job={job} kind="preview" />
                     <CompareView job={job} />
                 </div>
             ) : (

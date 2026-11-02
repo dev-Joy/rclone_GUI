@@ -3,12 +3,17 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    convertIntervalUnit,
     excludesToText,
+    intervalDisplay,
+    intervalMinutesFrom,
+    intervalUnitOf,
     isDraftEqual,
     jobToDraft,
     nextSelectionAfterRemove,
     parseExcludesText,
     serverErrorToCheck,
+    shouldShowLoginHint,
     sortJobs,
     validateJobDraft,
 } from "@/lib/job-form";
@@ -81,6 +86,40 @@ describe("validateJobDraft 기본", () => {
         expect(validateJobDraft(d, true).fieldErrors["autoSync.intervalMinutes"]).toBeDefined();
     });
 
+    it("자동 실행 시각·요일 오류는 필드에 붙는다 (INT-002 T-06)", () => {
+        const d = f_Draft();
+        d.autoSync = { ...d.autoSync, kind: "daily", timeOfDay: "25:00" };
+        expect(validateJobDraft(d, true).fieldErrors["autoSync.timeOfDay"]).toBe(
+            "시각은 00:00~23:59로 입력하세요.",
+        );
+        d.autoSync = { ...d.autoSync, kind: "weekly", timeOfDay: "09:00", weekdays: 0 };
+        expect(validateJobDraft(d, true).fieldErrors["autoSync.weekdays"]).toBe(
+            "요일을 하나 이상 고르세요.",
+        );
+    });
+
+    it("간격 단위 도우미: 60의 배수는 시간, 단위 전환은 가장 가까운 시간", () => {
+        expect(intervalUnitOf(120)).toBe("hour");
+        expect(intervalUnitOf(90)).toBe("minute");
+        expect(intervalUnitOf(Number.NaN)).toBe("minute");
+        expect(intervalDisplay(120, "hour")).toBe(2);
+        expect(intervalDisplay(90, "minute")).toBe(90);
+        expect(intervalMinutesFrom(3, "hour")).toBe(180);
+        expect(intervalMinutesFrom(Number.NaN, "hour")).toBeNaN();
+        expect(convertIntervalUnit(90, "hour")).toBe(120);
+        expect(convertIntervalUnit(20, "hour")).toBe(60);
+        expect(convertIntervalUnit(120, "minute")).toBe(120);
+    });
+
+    it("로그인 시 시작 안내: 새로 켰고 로그인 시작이 꺼져 있고 아직 안 보였을 때만", () => {
+        const base = { wasAuto: false, nowAuto: true, launchAtLogin: false, shown: false };
+        expect(shouldShowLoginHint(base)).toBe(true);
+        expect(shouldShowLoginHint({ ...base, wasAuto: true })).toBe(false);
+        expect(shouldShowLoginHint({ ...base, nowAuto: false })).toBe(false);
+        expect(shouldShowLoginHint({ ...base, launchAtLogin: true })).toBe(false);
+        expect(shouldShowLoginHint({ ...base, shown: true })).toBe(false);
+    });
+
     it("제외 규칙 101개·513자", () => {
         const many = validateJobDraft(
             f_Draft({ excludes: Array.from({ length: 101 }, (_, i) => `a${i}`) }),
@@ -132,7 +171,7 @@ describe("validateJobDraft 경로", () => {
         );
     });
 
-    it("remote 루트는 대상 필드 오류", () => {
+    it("리모트 루트는 대상 필드 오류", () => {
         const r = validateJobDraft(f_Draft({ destination: "remote:" }), true);
         expect(r.fieldErrors.destination).toContain("루트 전체는 지정할 수 없습니다");
     });
@@ -157,7 +196,7 @@ describe("validateJobDraft 경고", () => {
         d.options = { ...d.options, ignoreErrors: true, preflightBeforeDestructive: false };
         const r = validateJobDraft(d, true);
         expect(r.ok).toBe(true);
-        expect(r.formWarnings.some((w) => w.includes("오류 무시"))).toBe(true);
+        expect(r.formWarnings.some((w) => w.includes("오류가 나도 계속"))).toBe(true);
         expect(r.formWarnings.some((w) => w.includes("사전 확인"))).toBe(true);
     });
 
@@ -170,7 +209,7 @@ describe("validateJobDraft 경고", () => {
         expect(validateJobDraft(sync, true).formWarnings.join()).toContain("자동 실행이");
     });
 
-    it("x:folder 대상은 한 글자 remote 경고(저장은 허용)", () => {
+    it("x:folder 대상은 한 글자 리모트 경고(저장은 허용)", () => {
         const r = validateJobDraft(f_Draft({ destination: "x:folder" }), true);
         expect(r.ok).toBe(true);
         expect(r.fieldWarnings.destination?.[0]).toContain("드라이브 문자로 해석");

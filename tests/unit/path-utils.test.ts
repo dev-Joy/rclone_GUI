@@ -56,7 +56,7 @@ describe("parsePath 분류·정규화", () => {
         expect(parsePath(raw)).toMatchObject({ ok: false, issue: { code } });
     });
 
-    it("remote 루트는 segments가 비어 있다", () => {
+    it("리모트 루트는 segments가 비어 있다", () => {
         expect(f_Ok("remote:").segments).toEqual([]);
         expect(f_Ok("remote:/").segments).toEqual([]);
     });
@@ -66,7 +66,7 @@ describe("parsePath 분류·정규화", () => {
         ["sftp://a//b/", "sftp:/a/b"],
         ["rr:\\a", "rr:/a"],
         ["rr:/", "rr:/"],
-    ])("remote 맨 앞 / 보존: %s → %s", (raw, normalized) => {
+    ])("리모트 맨 앞 / 보존: %s → %s", (raw, normalized) => {
         const p = f_Ok(raw);
         expect(p.normalized).toBe(normalized);
         expect(isRemoteAbsolute(p)).toBe(true);
@@ -87,7 +87,7 @@ describe("pathKey", () => {
         expect(pathKey(f_Ok(nfd), true)).toBe(pathKey(f_Ok("X:\\한글"), true));
     });
 
-    it("remote는 설정에 따라 대소문자를 구분한다", () => {
+    it("리모트는 설정에 따라 대소문자를 구분한다", () => {
         expect(pathKey(f_Ok("r:Dir"), true)).toBe(pathKey(f_Ok("r:dir"), true));
         expect(pathKey(f_Ok("r:Dir"), false)).not.toBe(pathKey(f_Ok("r:dir"), false));
     });
@@ -140,17 +140,17 @@ describe("checkPathPair 안전 규칙", () => {
         expect(codes("F:\\x", "remote:")).toEqual(["SAFETY_BLOCKED"]);
     });
 
-    it("S4a remote의 . / .. 세그먼트", () => {
+    it("S4a 리모트의 . / .. 세그먼트", () => {
         expect(codes("F:\\x", "remote:a/../b")).toEqual(["VALIDATION"]);
     });
 
-    it("remote 절대·상대는 같은 위치로 보고 보수적으로 막는다", () => {
+    it("리모트 절대·상대는 같은 위치로 보고 보수적으로 막는다", () => {
         expect(codes("sftp:/x", "sftp:x/y")).toEqual(["SAFETY_BLOCKED"]);
         expect(codes("sftp:/x", "sftp:x")).toEqual(["SAFETY_BLOCKED"]);
         expect(codes("F:\\x", "remote:/")).toEqual(["SAFETY_BLOCKED"]);
     });
 
-    it("다른 remote끼리는 같은 경로여도 허용", () => {
+    it("다른 리모트끼리는 같은 경로여도 허용", () => {
         expect(codes("r1:a", "r2:a")).toEqual([]);
     });
 
@@ -173,7 +173,7 @@ describe("checkRunPaths (비교·실행 시작 전)", () => {
         expect(r.errors[0]?.message).toContain(fixed);
     });
 
-    it("X:\\folder 와 두 글자 이상 remote는 통과", () => {
+    it("X:\\folder 와 두 글자 이상 리모트는 통과", () => {
         expect(checkRunPaths("X:\\folder", "remote:a", true).errors).toEqual([]);
     });
 
@@ -208,5 +208,37 @@ describe("WSL 변환", () => {
         expect(mntPathToWindows("/mnt/x/sample dir/a")).toBe("X:\\sample dir\\a");
         expect(mntPathToWindows("/mnt/c")).toBe("C:\\");
         expect(mntPathToWindows("/home/x")).toBeNull();
+    });
+
+    it("/mnt/x 변환: 대소문자·끝 슬래시·.. 처리, 형식이 다르면 null (INT-002 FR-25)", () => {
+        expect(mntPathToWindows("/mnt/X/a")).toBe("X:\\a");
+        expect(mntPathToWindows("/mnt/x/a/")).toBe("X:\\a");
+        expect(mntPathToWindows("/mnt/x/a/../b")).toBe("X:\\b");
+        expect(mntPathToWindows("/mnt/x/..")).toBeNull();
+        expect(mntPathToWindows("/mnt/xy/a")).toBeNull();
+        expect(mntPathToWindows("/mnt/")).toBeNull();
+        expect(mntPathToWindows("/mnt")).toBeNull();
+    });
+
+    it("변환 결과는 local 경로로 그대로 실행하고, 변환 전 /mnt/x는 거부한다", () => {
+        const win = mntPathToWindows("/mnt/x/a/b");
+        expect(win).toBe("X:\\a\\b");
+        const p = f_Ok(win!);
+        expect(p.kind).toBe("local");
+        expect(p.normalized).toBe("X:\\a\\b");
+        expect(parsePath("/mnt/x/a")).toMatchObject({
+            ok: false,
+            issue: { code: "PATH_INVALID" },
+        });
+    });
+
+    it("WSL UNC의 /mnt/x는 같은 위치로 경고만 하고 rclone에는 UNC 그대로 넘긴다", () => {
+        const unc = "\\\\wsl.localhost\\TestDistro\\mnt\\x\\a";
+        const r = checkRunPaths(unc, "F:\\b", true);
+        expect(r.errors).toEqual([]);
+        expect(r.warnings).toHaveLength(1);
+        const p = f_Ok(unc);
+        expect(p.kind).toBe("unc");
+        expect(p.normalized.startsWith("\\\\wsl.localhost\\TestDistro\\mnt\\x")).toBe(true);
     });
 });

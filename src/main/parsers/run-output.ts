@@ -107,7 +107,7 @@ export function decideRunOutcome(input: itfRunOutcomeInput): itfRunOutcome {
             status: "canceled",
             error: {
                 code: "CANCELED",
-                message: "실행을 취소했습니다. 이미 복사된 파일은 대상에 남습니다.",
+                message: "실행을 중지했습니다. 이미 복사된 파일은 대상에 남습니다.",
             },
         };
     }

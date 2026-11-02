@@ -286,7 +286,7 @@ describe("run-store 이벤트", () => {
             record: f_Record({
                 mode: "sync",
                 status: "canceled",
-                error: { code: "CANCELED", message: "실행을 취소했습니다." },
+                error: { code: "CANCELED", message: "실행을 중지했습니다." },
             }),
             dryRunSummary: null,
         });
@@ -297,11 +297,11 @@ describe("run-store 이벤트", () => {
             record: f_Record({
                 mode: "sync",
                 status: "canceled",
-                error: { code: "CANCELED", message: "사전 확인 중 취소했습니다." },
+                error: { code: "CANCELED", message: "사전 확인 중 중지했습니다." },
             }),
             dryRunSummary: null,
         });
-        expect(useToastStore.getState().toasts.at(-1)?.message).toBe("동기화 취소됨");
+        expect(useToastStore.getState().toasts.at(-1)?.message).toBe("동기화 중지됨");
         off();
     });
 

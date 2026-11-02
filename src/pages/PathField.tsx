@@ -71,7 +71,7 @@ export default function PathField(props: itfPathFieldProps) {
     // remote를 고른 직후("name:")에는 루트라 저장할 수 없다 → 폴더를 이어 쓰라고 안내
     const hint =
         parsed.ok && parsed.path.kind === "remote" && parsed.path.segments.length === 0
-            ? `remote 루트 전체는 쓸 수 없습니다. 뒤에 폴더를 이어 쓰세요 (예: ${parsed.path.root}폴더).`
+            ? `리모트 루트 전체는 쓸 수 없습니다. 뒤에 폴더를 이어 쓰세요 (예: ${parsed.path.root}폴더).`
             : undefined;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========

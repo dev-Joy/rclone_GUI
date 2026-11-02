@@ -1,0 +1,24 @@
+/**
+ * JobActivityBar 스타일
+ *
+ * @author dev-Joy 2026-11-02
+ */
+
+@layer pages {
+    .JobActivityBar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: var(--radius);
+        background: var(--panel);
+
+        .text {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 13px;
+        }
+    }
+}

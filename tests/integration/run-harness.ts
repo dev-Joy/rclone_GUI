@@ -132,7 +132,15 @@ export async function makeEnv(o: itfEnvOptions) {
         excludePatternIds: libraryIds,
         options: { ...defaults, ...o.options },
         configPathOverride: null,
-        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, ...o.autoSync },
+        autoSync: {
+            enabled: false,
+            intervalMinutes: 60,
+            allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
+            ...o.autoSync,
+        },
     });
     const history = new clsHistoryStore(db, () => 500);
     await history.load();

@@ -213,14 +213,14 @@ describe("remote probe (가짜 rclone)", () => {
         expect((err as clsAppError).detail).toContain("couldn't fetch token");
     });
 
-    it("remote 루트는 그 자체를 나열하고 isRoot", async () => {
+    it("리모트 루트는 그 자체를 나열하고 isRoot", async () => {
         const { svc, calls } = f_Remote({ stdout: "[]" });
         const r = await svc.probe({ path: "test-remote:" });
         expect(r).toMatchObject({ exists: true, isDirectory: true, isRoot: true });
         expect(calls[0]!.at(-1)).toBe("test-remote:");
     });
 
-    it("맨 앞 / remote는 부모도 절대 경로(rr:/)로 나열한다", async () => {
+    it("맨 앞 / 리모트는 부모도 절대 경로(rr:/)로 나열한다", async () => {
         const { svc, calls } = f_Remote({ stdout: "[]" });
         await svc.probe({ path: "test-remote:/a" });
         expect(calls[0]!.slice(-2)).toEqual(["--", "test-remote:/"]);

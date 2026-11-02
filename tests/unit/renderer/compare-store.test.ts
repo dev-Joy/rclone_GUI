@@ -85,7 +85,7 @@ describe("compare-store run", () => {
         await p2;
         expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
             level: "info",
-            message: "비교를 취소했습니다.",
+            message: "비교를 중지했습니다.",
         });
     });
 

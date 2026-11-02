@@ -1,5 +1,6 @@
 /**
- * 작업 화면의 "비교" 탭 본문. 상태: 결과 없음 / 진행 중(단계·파일 수, 비교 취소) / 오류 / 결과.
+ * 작업 화면의 "비교·미리보기" 탭 본문. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과.
+ * 비교 중지는 작업 화면의 공통 중지 막대(JobActivityBar)에 있다.
  * 결과: 안내 배너(낡음·형식 충돌·경고) → 비교 방식 → 요약 카드 → 도구 막대 → 가상 목록 표.
  * 비교는 원본·대상 목록을 읽기만 하고 파일은 바꾸지 않는다.
  *
@@ -10,7 +11,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 // ========== Internal imports ==========
-import ZBCButton from "@/components/ZBCButton";
 import {
     compareStaleReason,
     dirSummaryText,
@@ -75,7 +75,6 @@ export default function CompareView(props: itfCompareViewProps) {
     const error = useCompareStore((s) => s.error);
     const view = useCompareStore((s) => s.view);
     const setView = useCompareStore((s) => s.setView);
-    const cancel = useCompareStore((s) => s.cancel);
     const maxAgeMinutes = useSettingsStore((s) => s.settings?.safety.compareMaxAgeMinutes ?? 10);
     const [nowMs, setNowMs] = useState(() => Date.now());
     const query = useDebouncedValue(view.query, SEARCH_DEBOUNCE_MS);
@@ -99,7 +98,6 @@ export default function CompareView(props: itfCompareViewProps) {
     const dirText = shown ? dirSummaryText(shown.summary, shown.mode) : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const h_Cancel = () => void cancel();
     const h_Pick = (filter: typCompareFilterStatus) => setView({ status: filter });
     const h_Sort = (key: typCompareSortKey) =>
         setView(
@@ -118,7 +116,6 @@ export default function CompareView(props: itfCompareViewProps) {
                     <p className={styles.note}>
                         원본·대상 목록을 읽기만 하고 파일은 바꾸지 않습니다.
                     </p>
-                    <ZBCButton onClick={h_Cancel}>비교 취소</ZBCButton>
                 </div>
             </div>
         );

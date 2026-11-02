@@ -80,7 +80,7 @@ describe("clsRemoteStore", () => {
         }
     });
 
-    it("remote 이름: 한 글자·경로 포함·형식 오류는 VALIDATION", () => {
+    it("리모트 이름: 한 글자·경로 포함·형식 오류는 VALIDATION", () => {
         const store = f_Store();
         for (const remoteName of ["x", "test-remote:base", "a/b", ""]) {
             expect(() => store.create({ ...INPUT, remoteName })).toThrow(

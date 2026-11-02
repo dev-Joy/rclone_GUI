@@ -139,6 +139,50 @@ describe("저장 한도와 읽기 한도 (INT-002 T-09)", () => {
         expect(zJobDraft.safeParse({ ...f_Draft(), scope: "all" }).success).toBe(true);
     });
 
+    it("스케줄 필드가 없는 예전 autoSync는 interval·09:00·평일로 읽는다 (INT-002 T-06)", () => {
+        const old = f_Stored({
+            autoSync: {
+                enabled: true,
+                intervalMinutes: 30,
+                allowDeletes: false,
+                nextRunAt: null,
+                lastAutoRunAt: null,
+            },
+        });
+        const a = zJob.parse(old).autoSync;
+        expect(a.kind).toBe("interval");
+        expect(a.timeOfDay).toBe("09:00");
+        expect(a.weekdays).toBe(62);
+        expect(a.intervalMinutes).toBe(30);
+    });
+
+    it("저장 입력의 스케줄 필드는 필수이고 patch는 기본값을 채우지 않는다", () => {
+        const d = f_Draft();
+        const { kind: _k, ...noKind } = d.autoSync;
+        expect(zJobDraft.safeParse({ ...d, autoSync: noKind }).success).toBe(false);
+        const p = zJobPatch.parse({ autoSync: { ...d.autoSync, kind: "daily" } });
+        expect(p.autoSync?.kind).toBe("daily");
+        expect("autoSync" in zJobPatch.parse({})).toBe(false);
+    });
+
+    it("시각은 HH:MM, weekly는 요일을 하나 이상", () => {
+        const d = f_Draft();
+        const auto = (over: Record<string, unknown>) => ({
+            ...d,
+            autoSync: { ...d.autoSync, ...over },
+        });
+        expect(zJobDraft.safeParse(auto({ kind: "daily", timeOfDay: "23:59" })).success).toBe(true);
+        expect(zJobDraft.safeParse(auto({ timeOfDay: "24:00" })).success).toBe(false);
+        expect(zJobDraft.safeParse(auto({ timeOfDay: "9:00" })).success).toBe(false);
+        expect(zJobDraft.safeParse(auto({ weekdays: 128 })).success).toBe(false);
+        const empty = zJobDraft.safeParse(auto({ kind: "weekly", weekdays: 0 }));
+        expect(empty.success).toBe(false);
+        expect(empty.error?.issues[0]?.path).toEqual(["autoSync", "weekdays"]);
+        // interval·daily는 요일 0개여도 통과(쓰지 않는 값)
+        expect(zJobDraft.safeParse(auto({ kind: "daily", weekdays: 0 })).success).toBe(true);
+        expect(zJobDraft.safeParse(auto({ kind: "weekly", weekdays: 2 })).success).toBe(true);
+    });
+
     it("공용 + 작업 전용 합계 501은 거부, 500은 통과", () => {
         const jobOnly = Array.from({ length: 100 }, (_v, i) => `p${i}`);
         expect(

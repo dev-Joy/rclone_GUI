@@ -2,6 +2,7 @@
  * 화면 전환 상태 (zustand): 작업 화면 / 설정 화면, 작업 화면의 탭.
  * 라우터 없이 이 값으로 전환한다. 메모리에만 둔다(재시작 시 작업 화면).
  * 설정 화면에 저장하지 않은 변경이 있으면 화면을 떠나기 전에 확인한다(leaveSettings).
+ * 로그인 시 시작 안내(자동 실행을 처음 켤 때)는 세션당 한 번만 보인다(loginHintShown).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -20,6 +21,8 @@ interface itfUiState {
     settingsDirty: boolean;
     /** 설정 변경 버리기 확인 대기 중인 이동 */
     pendingLeave: (() => void) | null;
+    /** 이번 세션에 로그인 시 시작 안내를 보였는지 */
+    loginHintShown: boolean;
     setView: (v: typAppView) => void;
     setTab: (t: typJobTab) => void;
     setSettingsDirty: (dirty: boolean) => void;
@@ -28,6 +31,7 @@ interface itfUiState {
     /** 설정 변경을 버리고 보관한 이동 실행 */
     confirmLeave: () => void;
     cancelLeave: () => void;
+    markLoginHintShown: () => void;
 }
 
 export const useUiStore = create<itfUiState>((set, get) => ({
@@ -35,6 +39,7 @@ export const useUiStore = create<itfUiState>((set, get) => ({
     tab: "edit",
     settingsDirty: false,
     pendingLeave: null,
+    loginHintShown: false,
     setView: (view) => set({ view }),
     setTab: (tab) => set({ tab }),
     setSettingsDirty: (settingsDirty) => set({ settingsDirty }),
@@ -49,4 +54,5 @@ export const useUiStore = create<itfUiState>((set, get) => ({
         action?.();
     },
     cancelLeave: () => set({ pendingLeave: null }),
+    markLoginHintShown: () => set({ loginHintShown: true }),
 }));

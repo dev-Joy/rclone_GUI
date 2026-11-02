@@ -59,7 +59,14 @@ async function f_Setup() {
         source: "C:\\tmp\\a",
         mode: "sync",
         excludePatternIds: [pattern.id],
-        autoSync: { enabled: true, intervalMinutes: 60, allowDeletes: false },
+        autoSync: {
+            enabled: true,
+            intervalMinutes: 60,
+            allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
+        },
     });
     const copyJob = await jobs.create({
         ...base,

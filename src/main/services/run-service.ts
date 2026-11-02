@@ -174,7 +174,7 @@ interface itfAutoStop {
 
 const AUTO_CANCELED: typAppErrorPayload = {
     code: "CANCELED",
-    message: "자동 실행을 비교 중에 취소했습니다. 대상은 바뀌지 않았습니다.",
+    message: "자동 실행을 비교 중에 중지했습니다. 대상은 바뀌지 않았습니다.",
 };
 
 /**
@@ -785,7 +785,7 @@ export class clsRunService {
             status: "canceled",
             error: {
                 code: "CANCELED",
-                message: "사전 확인 중 취소했습니다. 대상은 바뀌지 않았습니다.",
+                message: "사전 확인 중 중지했습니다. 대상은 바뀌지 않았습니다.",
             },
         };
         let outcome: itfRunOutcome | null = null;

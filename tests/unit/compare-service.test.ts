@@ -55,6 +55,9 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -537,10 +540,10 @@ describe("clsCompareService 실패 판정", () => {
     it("probe 오류는 측 접두사를 붙여 전달", async () => {
         const h = f_Harness();
         h.deps.pathService.probe = async () => {
-            throw new clsAppError("RCLONE_FAILED", "remote가 응답하지 않았습니다.");
+            throw new clsAppError("RCLONE_FAILED", "리모트가 응답하지 않았습니다.");
         };
         const err = await f_Err(new clsCompareService(h.deps).run(JOB_ID));
-        expect(err.message).toBe("원본: remote가 응답하지 않았습니다.");
+        expect(err.message).toBe("원본: 리모트가 응답하지 않았습니다.");
     });
 
     it("CASE_COLLISION 문구", async () => {

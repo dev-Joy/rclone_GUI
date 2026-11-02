@@ -140,7 +140,7 @@ export function hintForRcloneError(stderr: string, remoteName: string | null): s
         return `인증이 만료되었습니다. PowerShell에서 rclone config reconnect ${target} 를 실행하세요.`;
     }
     if (text.includes("didn't find section in config file")) {
-        return "설정 파일에 그 remote가 없습니다. remote 이름과 rclone.conf를 확인하세요.";
+        return "설정 파일에 그 리모트가 없습니다. 리모트 이름과 rclone.conf를 확인하세요.";
     }
     if (text.includes("unable to decrypt configuration") || text.includes("password")) {
         return "암호화된 설정입니다. RCLONE_CONFIG_PASS 환경 변수를 확인하세요.";

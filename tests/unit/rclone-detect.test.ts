@@ -390,7 +390,7 @@ describe("require / resolveConfigFor / listRemotes", () => {
         });
         await expect(env.listRemotes()).rejects.toMatchObject({
             code: "RCLONE_FAILED",
-            message: "remote 목록이 너무 커서 읽지 못했습니다.",
+            message: "리모트 목록이 너무 커서 읽지 못했습니다.",
         });
     });
 

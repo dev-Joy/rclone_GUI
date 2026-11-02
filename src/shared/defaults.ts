@@ -5,7 +5,7 @@
  */
 
 // ========== Internal imports ==========
-import type { typJobDraft } from "@/shared/schemas/job";
+import { DEFAULT_TIME_OF_DAY, WEEKDAYS_WEEKDAYS, type typJobDraft } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 
 export const DEFAULT_EXCLUDES: readonly string[] = [
@@ -63,6 +63,13 @@ export function createJobDraft(settings: typSettings): typJobDraft {
         excludePatternIds: [],
         options: { ...options },
         configPathOverride: null,
-        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
+        autoSync: {
+            enabled: false,
+            intervalMinutes: 60,
+            allowDeletes: false,
+            kind: "interval",
+            timeOfDay: DEFAULT_TIME_OF_DAY,
+            weekdays: WEEKDAYS_WEEKDAYS,
+        },
     };
 }

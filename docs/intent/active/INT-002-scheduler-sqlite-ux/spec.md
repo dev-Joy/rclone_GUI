@@ -99,14 +99,14 @@ P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), �
 
 ### T-06 스케줄
 - **FR-22** 스케줄 종류는 `interval`(분, 1~10080), `daily`(HH:MM), `weekly`(요일 비트 + HH:MM)다. 로컬 시간대로 계산하고 UTC ISO로 저장한다. cron은 받지 않는다.
-- **FR-23** 자동 실행 작업이 하나라도 켜져 있을 때 트레이 "종료"를 누르면 "다음 예약: <작업> <시각> — 종료하면 실행되지 않습니다"라는 확인을 띄운다.
+- **FR-23** 자동 실행 작업이 하나라도 켜져 있을 때 트레이 "종료"를 누르면 "다음 예약: <작업> <시각> — 종료하면 실행되지 않습니다"라는 확인을 띄운다. 일시정지 중이거나 실행 중(실행 중 확인 창이 따로 뜸)이면 띄우지 않고, 창 X·before-quit 종료에서도 띄우지 않는다(설치 스모크·drive-app이 대화상자에서 멈추지 않도록, 2026-11-02 구현).
 - **FR-24** `ui.launchAtLogin`이 꺼져 있는 상태에서 자동 실행 작업을 저장하면, 로그인 시 시작을 켜라는 안내를 한 번 띄운다.
-- **FR-25** `/mnt/x/...`는 실행할 때 기존 경로 변환으로 `X:\...`가 되는지 테스트로 확인한다.
+- **FR-25** `/mnt/x/...`는 **입력할 때** WSL 도우미(`mntPathToWindows`)가 `X:\...`로 바꾼다. 실행 시점에는 바꾸지 않는다: `/mnt/x/...`를 그대로 넣으면 `parsePath`가 PATH_INVALID로 거부하고, `\\wsl.localhost\<배포판>\mnt\x\...`는 같은 위치로 보고 경고만 한 채 UNC 그대로 rclone에 넘긴다. 이 동작을 단위 테스트로 고정한다(2026-11-02 정정).
 
 ### T-08 실행 화면
 - **FR-26** 작업 화면을 ① 비교·미리보기 → ② 실행 → ③ 결과·이력 순서로 묶는다. 중지는 실행·비교 중에 나타나는 공통 컨트롤 하나로 한다.
 - **FR-27** 화면 문구를 전부 검토해 "일어날 일" 표현으로 바꾼다(AGENTS.md 4.1).
-- **FR-28** sync에서 오류 무시를 고르면 "백업 폴더를 지정하면 오류를 무시하고 진행할 수 있습니다"라고 안내하고 백업 필드로 옮겨 준다.
+- **FR-28** sync에서 오류 무시를 고르면 백업 폴더가 필요하지만 앱이 아직 백업 폴더를 지정할 수 없다는 것과, 옵션을 끄거나 복사 모드를 쓰라는 안내를 편집기 경고·옵션 주의·실행 차단 문구에 같은 문장(`SYNC_IGNORE_ERRORS_TEXT`)으로 보인다. 차단 동작은 그대로다. 백업 필드(`--backup-dir`)는 MVP_SPEC 금지 목록·계획·게이트 재설계가 필요하므로 별도 태스크(T-07과 함께)로 미룬다(2026-11-02 기본안 A).
 
 ### T-10·T-11·T-12
 - **FR-29** 테스트 conf 경로를 환경 변수로 받는다. remote나 버킷 경로가 `rclonegui-test-`로 시작하지 않으면 테스트를 거부한다. 실행마다 고유 하위 경로를 쓰고 끝나면 정리한다. copy·sync·삭제·취소를 확인한다.
@@ -140,7 +140,7 @@ P3로 미룬 것: Windows 작업 스케줄러·헤드리스 `--run-job`(T-13), �
 
 ### 6.3 스키마 v2 이후 (초안)
 - **v2 (T-03):** `job_exclude_patterns(job_id TEXT REFERENCES jobs(id) ON DELETE CASCADE, pattern_id TEXT REFERENCES exclude_patterns(id) ON DELETE RESTRICT, PRIMARY KEY(job_id, pattern_id)) STRICT`. 패턴 삭제는 RESTRICT로 막고, 앱이 확인한 뒤 연결부터 지운다. `exclude_patterns.pattern` CHECK에 `substr(pattern,1,1) NOT IN ('#',';')`를 더한다. 기존 데이터에 `#`·`;` 패턴이 있을 수 있으므로 v2 전에 검사하고, 있으면 작업 전용 패턴으로 남긴 채 알린다.
-- **v3 (T-06):** `jobs.data.autoSync`를 `schedules`로 옮긴다. 이후 `schedules`가 단일 진실 공급원이 된다.
+- **v3 (T-06): 하지 않는다(Q8).** `autoSync`의 종류·시각·요일은 `jobs.data` JSON에 둔다. 예전 행은 zod 읽기 기본값(interval·09:00·평일)으로 읽고 다음 저장 때 새 필드가 기록된다. v1의 `schedules` 테이블은 쓰지 않은 채 둔다.
 - 작업 범위(`scope`)는 `jobs.data` JSON 필드로 넣고 zod 기본값을 `files`로 둔다. DDL 변경은 없다.
 
 ### 6.4 작업 스키마 (초안, `src/shared/schemas/job.ts`)
@@ -149,11 +149,11 @@ zJobDraft.extend({
     scope: z.enum(["all", "files"]).default("files"),        // T-05
     excludePatternIds: z.array(z.uuid()).max(500).default([]), // T-03 (DB에서는 연결 테이블)
     // excludes(작업 전용 한 줄 입력)는 유지
-    autoSync: zAutoSyncInput.extend({                         // T-06
-        kind: z.enum(["interval", "daily", "weekly"]).default("interval"),
-        timeOfDay: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
-        weekdays: z.number().int().min(0).max(127),            // bit0 = 일요일
-    }),
+    autoSync: zAutoSyncInput.extend({                         // T-06 (저장 입력은 기본값 없이 필수)
+        kind: z.enum(["interval", "daily", "weekly"]),         // 읽기(zAutoSync)만 default("interval")
+        timeOfDay: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), // non-null, 읽기 default("09:00")
+        weekdays: z.number().int().min(0).max(127),            // bit0 = 일요일, 읽기 default(평일 62)
+    }),                                                        // weekly는 요일 1개 이상(zJobDraft superRefine)
 })
 ```
 

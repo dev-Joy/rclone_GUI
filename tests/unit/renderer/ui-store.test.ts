@@ -41,3 +41,11 @@ describe("ui-store 설정 화면 떠나기 확인", () => {
         expect(f_Ui().pendingLeave).toBeNull();
     });
 });
+
+describe("ui-store 로그인 시 시작 안내 (INT-002 T-06)", () => {
+    it("처음에는 보이지 않은 상태이고, 한 번 표시하면 세션 동안 유지한다", () => {
+        expect(f_Ui().loginHintShown).toBe(false);
+        f_Ui().markLoginHintShown();
+        expect(f_Ui().loginHintShown).toBe(true);
+    });
+});

@@ -1,5 +1,5 @@
 /**
- * 한 줄 입력 (text / number). 값은 문자열로 주고받는다(숫자 변환은 쓰는 쪽에서).
+ * 한 줄 입력 (text / number / time). 값은 문자열로 주고받는다(숫자 변환은 쓰는 쪽에서).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -14,7 +14,7 @@ export interface itfZBCInputProps {
     name?: string;
     value: string;
     onChange: (value: string) => void;
-    type?: "text" | "number";
+    type?: "text" | "number" | "time";
     min?: number;
     max?: number;
     step?: number;

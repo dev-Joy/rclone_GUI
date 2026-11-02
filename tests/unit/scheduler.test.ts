@@ -1,3 +1,6 @@
+// daily·weekly 예약 계산을 서울 시간대(UTC+9)로 고정한다. 이 파일은 별도 worker에서 돈다.
+process.env.TZ = "Asia/Seoul";
+
 // ========== External imports ==========
 import { describe, expect, it } from "vitest";
 
@@ -42,6 +45,9 @@ function f_Job(
             enabled: true,
             intervalMinutes: 10,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt,
             lastAutoRunAt: null,
             ...over,
@@ -298,6 +304,71 @@ describe("clsScheduler tick", () => {
     });
 });
 
+/** 2026년 서울 로컬 시각 → ISO */
+function f_Kst(mo: number, d: number, h: number, mi = 0): string {
+    return new Date(2026, mo - 1, d, h, mi, 0, 0).toISOString();
+}
+
+describe("clsScheduler daily·weekly (INT-002 T-06)", () => {
+    // T0 = 2026-10-29(목) 19:00 KST
+    it("시간대 고정 확인", () => {
+        expect(new Date(2026, 0, 1).getTimezoneOffset()).toBe(-540);
+    });
+
+    it("daily: 시작하자마자 내일 정시를 기록하고, 끝나도 끝난 뒤 다음 정시", async () => {
+        const h = f_Harness([f_Job(1, iso(-MIN), { kind: "daily", timeOfDay: "09:00" })]);
+        await h.sched.tick();
+        expect(h.started).toHaveLength(1);
+        expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(10, 30, 9));
+        h.advance(5 * MIN);
+        h.started[0]!.resolve({ status: "success", stats: null });
+        await h.flush();
+        expect(h.job(1).autoSync).toMatchObject({
+            nextRunAt: f_Kst(10, 30, 9),
+            lastAutoRunAt: iso(5 * MIN),
+        });
+        // 같은 날 다시 tick해도 시작하지 않는다
+        await h.sched.tick();
+        expect(h.started).toHaveLength(1);
+    });
+
+    it("weekly 월·수: 목요일 실행 뒤 다음 월요일 09:00", async () => {
+        const h = f_Harness([
+            f_Job(1, iso(-MIN), {
+                kind: "weekly",
+                timeOfDay: "09:00",
+                weekdays: (1 << 1) | (1 << 3),
+            }),
+        ]);
+        await h.sched.tick();
+        expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(11, 2, 9));
+    });
+
+    it("시작 실패(BUSY 아님)는 다음 정시로 미룬다", async () => {
+        const h = f_Harness([f_Job(1, iso(-MIN), { kind: "daily", timeOfDay: "21:00" })], {
+            startError: new clsAppError("NOT_FOUND"),
+        });
+        await h.sched.tick();
+        expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(10, 29, 21));
+    });
+
+    it("재시작: 놓친 daily 예약은 60초 뒤 한 번, 먼 미래의 틀린 값은 다음 정시로 맞춘다", async () => {
+        const h = f_Harness([
+            f_Job(1, iso(-3 * 24 * 60 * MIN), { kind: "daily", timeOfDay: "09:00" }),
+            f_Job(2, f_Kst(10, 30, 10), { kind: "daily", timeOfDay: "09:00" }),
+            f_Job(3, f_Kst(10, 30, 9), { kind: "daily", timeOfDay: "09:00" }),
+        ]);
+        await h.sched.start();
+        expect(h.job(1).autoSync.nextRunAt).toBe(iso(MIN));
+        expect(h.job(2).autoSync.nextRunAt).toBe(f_Kst(10, 30, 9));
+        expect(h.job(3).autoSync.nextRunAt).toBe(f_Kst(10, 30, 9));
+        h.advance(MIN);
+        await h.sched.tick();
+        expect(h.started.map((x) => x.jobId)).toEqual([f_Id(1)]);
+        expect(h.job(1).autoSync.nextRunAt).toBe(f_Kst(10, 30, 9));
+    });
+});
+
 describe("clsScheduler 알림", () => {
     it("noop은 알리지 않고 blocked·failed·success·canceled는 알린다(작업 이름·수만)", async () => {
         const h = f_Harness([f_Job(1, iso(-MIN))]);
@@ -385,7 +456,7 @@ describe("clsScheduler 알림", () => {
         const canceled = autoOutcomeNotice(base);
         expect(canceled).toEqual({
             level: "warning",
-            message: `‘n’ 자동 실행을 취소했습니다. ${PARTIAL_LEFT_NOTICE_SHORT}`,
+            message: `‘n’ 자동 실행을 중지했습니다. ${PARTIAL_LEFT_NOTICE_SHORT}`,
         });
         const failed = autoOutcomeNotice({
             ...base,

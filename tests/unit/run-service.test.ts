@@ -54,6 +54,9 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -245,7 +248,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 if (ac === "hang") {
                     return new Promise((_resolve, reject) => {
                         signal.addEventListener("abort", () =>
-                            reject(new clsAppError("CANCELED", "비교를 취소했습니다.")),
+                            reject(new clsAppError("CANCELED", "비교를 중지했습니다.")),
                         );
                     });
                 }
@@ -899,7 +902,7 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
         const rec = await f_Done(h);
         expect(h.procs).toHaveLength(1);
         expect(rec.status).toBe("canceled");
-        expect(rec.error?.message).toContain("사전 확인 중 취소");
+        expect(rec.error?.message).toContain("사전 확인 중 중지");
         expect(rec.transferStarted).toBe(false);
         expect(mayLeavePartial(rec)).toBe(false);
         expect(h.invalidated).toEqual([JOB_ID]);
@@ -950,6 +953,9 @@ function f_AutoJob(
             enabled: true,
             intervalMinutes: 1,
             allowDeletes: over.allowDeletes ?? false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
         },
     });
 }
@@ -1074,7 +1080,7 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
                 options: { ...f_AutoJob().options, ignoreErrors: true },
             },
             compare: f_SyncCompare(),
-            text: "--ignore-errors",
+            text: "오류가 나도 계속",
         },
     ];
     for (const b of BLOCKS) {
@@ -1159,7 +1165,7 @@ describe("clsRunService 자동 실행 (Phase 8)", () => {
         h.svc.cancel(runId);
         const o = await done;
         expect(o.status).toBe("canceled");
-        expect(o.error?.message).toContain("비교 중에 취소");
+        expect(o.error?.message).toContain("비교 중에 중지");
         expect(o.transferStarted).toBe(false);
         expect(h.begun[0]).toMatchObject({ status: "canceled" });
         expect(h.procs).toEqual([]);

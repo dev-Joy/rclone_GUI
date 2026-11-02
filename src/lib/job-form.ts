@@ -19,6 +19,7 @@ import {
 import { PATH_MAX_INPUT } from "@/shared/option-limits";
 import { checkPathPair } from "@/shared/path-utils";
 import { driveLetterRemoteWarning, looksLikeDriveLetterRemotePath } from "@/shared/remote-name";
+import { SYNC_IGNORE_ERRORS_TEXT } from "@/shared/run-gates";
 import type { typAppErrorPayload } from "@/shared/schemas/common";
 import { zJobDraft, type typJob, type typJobDraft } from "@/shared/schemas/job";
 
@@ -34,7 +35,9 @@ export type typJobFormField =
     | "options.checkers"
     | "options.transfers"
     | "options.modtimeToleranceMs"
-    | "autoSync.intervalMinutes";
+    | "autoSync.intervalMinutes"
+    | "autoSync.timeOfDay"
+    | "autoSync.weekdays";
 
 export interface itfJobFormCheck {
     /** 필드별 첫 오류 문구 */
@@ -61,8 +64,7 @@ type typNumberField = keyof typeof JOB_NUMBER_RANGES;
 const PAIR_FIELD = { "원본: ": "source", "대상: ": "destination" } as const;
 const PAIR_ERROR_HIGHLIGHT = "원본과 대상 경로를 확인하세요.";
 
-const WARN_SYNC_IGNORE_ERRORS =
-    "동기화 모드에서는 ‘오류 무시’로 실행할 수 없습니다(백업 폴더 미지원). 끄거나 복사 모드를 쓰세요.";
+const WARN_SYNC_IGNORE_ERRORS = SYNC_IGNORE_ERRORS_TEXT;
 const WARN_SYNC_NO_PREFLIGHT =
     "실행 직전 사전 확인을 끄면 비교 뒤 바뀐 삭제는 삭제 한도(--max-delete)로만 막습니다.";
 const WARN_COPY_ALLOW_DELETES =
@@ -132,6 +134,12 @@ function f_MapIssue(
             text: excludesIssueText(issue, sub === undefined ? [] : [sub, ...rest]),
         };
     }
+    if (head === "autoSync" && sub === "timeOfDay") {
+        return { field: "autoSync.timeOfDay", text: "시각은 00:00~23:59로 입력하세요." };
+    }
+    if (head === "autoSync" && sub === "weekdays") {
+        return { field: "autoSync.weekdays", text: "요일을 하나 이상 고르세요." };
+    }
     if (head === "options" || head === "autoSync") {
         const key = `${head}.${String(sub)}`;
         if (!(key in JOB_NUMBER_RANGES)) return null; // 불리언 필드는 화면에서 잘못될 수 없다
@@ -172,6 +180,9 @@ export function jobToDraft(job: typJob): typJobDraft {
             enabled: job.autoSync.enabled,
             intervalMinutes: job.autoSync.intervalMinutes,
             allowDeletes: job.autoSync.allowDeletes,
+            kind: job.autoSync.kind,
+            timeOfDay: job.autoSync.timeOfDay,
+            weekdays: job.autoSync.weekdays,
         },
     };
 }
@@ -275,4 +286,38 @@ export function nextSelectionAfterRemove(
     const i = sorted.findIndex((j) => j.id === removedId);
     if (i < 0) return sorted[0]?.id ?? null;
     return sorted[i + 1]?.id ?? sorted[i - 1]?.id ?? null;
+}
+
+/** 자동 실행 간격 입력 단위 */
+export type typIntervalUnit = "minute" | "hour";
+
+/** 저장된 분 값에 맞는 입력 단위: 60의 배수면 시간 */
+export function intervalUnitOf(minutes: number): typIntervalUnit {
+    return Number.isInteger(minutes) && minutes > 0 && minutes % 60 === 0 ? "hour" : "minute";
+}
+
+/** 분 값을 입력 단위로 보여 줄 숫자 */
+export function intervalDisplay(minutes: number, unit: typIntervalUnit): number {
+    return unit === "hour" ? minutes / 60 : minutes;
+}
+
+/** 입력 단위의 숫자를 분으로(NaN은 그대로 두어 검증이 잡게 한다) */
+export function intervalMinutesFrom(value: number, unit: typIntervalUnit): number {
+    return unit === "hour" ? value * 60 : value;
+}
+
+/** 단위를 바꿀 때 분 값. 분 → 시간은 가장 가까운 시간(최소 1시간)으로 맞춘다 */
+export function convertIntervalUnit(minutes: number, to: typIntervalUnit): number {
+    if (to === "minute" || Number.isNaN(minutes)) return minutes;
+    return Math.max(1, Math.round(minutes / 60)) * 60;
+}
+
+/** 자동 실행을 새로 켜고 저장했는데 로그인 시 시작이 꺼져 있으면 한 번 안내한다 */
+export function shouldShowLoginHint(i: {
+    wasAuto: boolean;
+    nowAuto: boolean;
+    launchAtLogin: boolean;
+    shown: boolean;
+}): boolean {
+    return i.nowAuto && !i.wasAuto && !i.launchAtLogin && !i.shown;
 }

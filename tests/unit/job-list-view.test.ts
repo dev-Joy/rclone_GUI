@@ -37,16 +37,42 @@ describe("scheduleSummary (INT-002 T-04)", () => {
                 enabled: true,
                 intervalMinutes: 60,
                 allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
                 nextRunAt: AT,
                 lastAutoRunAt: null,
             },
         });
         expect(scheduleSummary(job)).toBe(
-            `60분마다 · 다음 ${formatLocalDateTime(AT).slice(5, 16)}`,
+            `1시간마다 · 다음 ${formatLocalDateTime(AT).slice(5, 16)}`,
         );
         expect(scheduleSummary({ autoSync: { ...job.autoSync, nextRunAt: null } })).toBe(
-            "60분마다",
+            "1시간마다",
         );
+        expect(
+            scheduleSummary({
+                autoSync: { ...job.autoSync, intervalMinutes: 30, nextRunAt: null },
+            }),
+        ).toBe("30분마다");
+    });
+
+    it("매일·요일 예약 표시 (INT-002 T-06)", () => {
+        const base = f_Job().autoSync;
+        const on = { ...base, enabled: true, nextRunAt: null };
+        expect(scheduleSummary({ autoSync: { ...on, kind: "daily", timeOfDay: "07:30" } })).toBe(
+            "매일 07:30",
+        );
+        expect(
+            scheduleSummary({
+                autoSync: {
+                    ...on,
+                    kind: "weekly",
+                    timeOfDay: "09:00",
+                    weekdays: (1 << 1) | (1 << 3),
+                },
+            }),
+        ).toBe("매주 월·수 09:00");
     });
 });
 

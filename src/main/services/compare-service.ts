@@ -153,7 +153,7 @@ export class clsCompareService {
             return result;
         } catch (e) {
             this.cache.delete(jobId);
-            const err = active.canceled ? new clsAppError("CANCELED", "비교를 취소했습니다.") : e;
+            const err = active.canceled ? new clsAppError("CANCELED", "비교를 중지했습니다.") : e;
             if (err instanceof clsAppError && err.code === "CANCELED") end = "canceled";
             const code = err instanceof clsAppError ? err.code : "INTERNAL";
             this.deps.logger.warn(
@@ -187,7 +187,7 @@ export class clsCompareService {
             );
             return result;
         } catch (e) {
-            const err = active.canceled ? new clsAppError("CANCELED", "비교를 취소했습니다.") : e;
+            const err = active.canceled ? new clsAppError("CANCELED", "비교를 중지했습니다.") : e;
             const code = err instanceof clsAppError ? err.code : "INTERNAL";
             this.deps.logger.warn(`자동 비교 실패: job=${jobId} code=${code}`);
             throw err;
@@ -529,7 +529,7 @@ export class clsCompareService {
                 }),
             ),
         );
-        if (active.canceled) throw new clsAppError("CANCELED", "비교를 취소했습니다.");
+        if (active.canceled) throw new clsAppError("CANCELED", "비교를 중지했습니다.");
         if (firstError !== null) throw firstError;
         active.sourceFiles = sides[0]?.parser.count ?? 0;
         active.destFiles = sides[1]?.parser.count ?? 0;
@@ -586,7 +586,7 @@ export class clsCompareService {
             throw e;
         }
         if (lineError) throw new clsAppError("RCLONE_PARSE_ERROR");
-        if (r.canceled) throw new clsAppError("CANCELED", "비교를 취소했습니다.");
+        if (r.canceled) throw new clsAppError("CANCELED", "비교를 중지했습니다.");
         if (r.timedOut) {
             throw new clsAppError(
                 "RCLONE_FAILED",
@@ -617,7 +617,7 @@ export class clsCompareService {
     }
 
     private throwIfCanceled(active: itfActiveCompare): void {
-        if (active.canceled) throw new clsAppError("CANCELED", "비교를 취소했습니다.");
+        if (active.canceled) throw new clsAppError("CANCELED", "비교를 중지했습니다.");
     }
 
     private setPhase(active: itfActiveCompare, phase: typComparePhase): void {

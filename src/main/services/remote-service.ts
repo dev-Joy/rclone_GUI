@@ -90,7 +90,7 @@ export class clsRemoteService {
         if (!parsed.ok) throw new clsAppError(parsed.issue.code, parsed.issue.message);
         const p = parsed.path;
         if (p.kind !== "remote") {
-            throw new clsAppError("PATH_INVALID", "remote 경로만 폴더를 탐색할 수 있습니다.");
+            throw new clsAppError("PATH_INVALID", "리모트 경로만 폴더를 탐색할 수 있습니다.");
         }
         const remoteName = p.root.slice(0, -1);
         return this.deps.remoteOps.run([remoteName], async () => {
@@ -99,7 +99,7 @@ export class clsRemoteService {
             if (configPath === null) {
                 throw new clsAppError(
                     "CONFIG_REQUIRED",
-                    "remote 폴더를 탐색하려면 rclone 설정 파일이 필요합니다.",
+                    "리모트 폴더를 탐색하려면 rclone 설정 파일이 필요합니다.",
                 );
             }
             let r;
@@ -120,7 +120,7 @@ export class clsRemoteService {
             if (r.timedOut) {
                 throw new clsAppError(
                     "RCLONE_FAILED",
-                    `remote가 ${RCLONE_TIMEOUTS.listDir / 1000}초 안에 응답하지 않았습니다.`,
+                    `리모트가 ${RCLONE_TIMEOUTS.listDir / 1000}초 안에 응답하지 않았습니다.`,
                 );
             }
             if (r.exitCode === 3) {
@@ -169,14 +169,14 @@ export class clsRemoteService {
         if (configPath === null) {
             throw new clsAppError(
                 "CONFIG_REQUIRED",
-                "remote 북마크를 쓰려면 rclone 설정 파일이 필요합니다.",
+                "리모트 북마크를 쓰려면 rclone 설정 파일이 필요합니다.",
             );
         }
         const names = await this.deps.rcloneEnv.listRemotes(null);
         if (!names.includes(remoteName)) {
             throw new clsAppError(
                 "VALIDATION",
-                `rclone.conf에 ‘${remoteName}:’ remote가 없습니다. remote 이름을 확인하세요.`,
+                `rclone.conf에 ‘${remoteName}:’ 리모트가 없습니다. 리모트 이름을 확인하세요.`,
             );
         }
     }

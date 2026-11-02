@@ -17,7 +17,7 @@ function f_Base(name: string, raw: string): string {
 }
 
 describe("normalizeRemoteBasePath", () => {
-    it("빈 값은 remote 루트, 끝 / 와 중복 구분자를 정리한다", () => {
+    it("빈 값은 리모트 루트, 끝 / 와 중복 구분자를 정리한다", () => {
         expect(f_Base("test-remote", "")).toBe("");
         expect(f_Base("test-remote", "   ")).toBe("");
         expect(f_Base("test-remote", "base")).toBe("base");
@@ -28,7 +28,7 @@ describe("normalizeRemoteBasePath", () => {
         expect(f_Base("test-remote", "한글 폴더")).toBe("한글 폴더");
     });
 
-    it(".·..·제어문자·잘못된 remote 이름은 거부한다", () => {
+    it(".·..·제어문자·잘못된 리모트 이름은 거부한다", () => {
         for (const raw of [".", "..", "a/../b", "a\nb", "a\u0000b"]) {
             expect(normalizeRemoteBasePath("test-remote", raw).ok).toBe(false);
         }

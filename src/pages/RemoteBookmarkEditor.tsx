@@ -75,7 +75,7 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
             ? { value: r, label: `${label} (사용 불가 — 드라이브 문자)`, disabled: true }
             : { value: r, label };
     });
-    const title = bookmark ? "remote 북마크 수정" : "remote 북마크 추가";
+    const title = bookmark ? "리모트 북마크 수정" : "리모트 북마크 추가";
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Alias = (v: string) => {
@@ -106,10 +106,10 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                 else if (field === "basePath" && !next.base) next.base = issue.message;
             }
         }
-        if (remote === "") next.remote = "remote를 고르세요.";
+        if (remote === "") next.remote = "리모트를 고르세요.";
         else if (isDriveLetterRemoteName(remote)) {
             next.remote =
-                "영문 한 글자 remote는 Windows에서 드라이브 문자로 해석되어 쓸 수 없습니다.";
+                "영문 한 글자 리모트는 Windows에서 드라이브 문자로 해석되어 쓸 수 없습니다.";
         }
 
         let input: typRemoteCreateInput | null = null;
@@ -127,7 +127,7 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                 };
             }
         }
-        if (/[\\/]/.test(remote)) next.remote = "remote 이름에는 경로를 넣을 수 없습니다.";
+        if (/[\\/]/.test(remote)) next.remote = "리모트 이름에는 경로를 넣을 수 없습니다.";
 
         setErrors(next);
         if (!input || next.alias || next.remote || next.base) return;
@@ -194,7 +194,7 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                     label="remote"
                     htmlFor="remote-bookmark-remote"
                     error={errors.remote}
-                    hint="rclone.conf에 있는 remote만 고를 수 있습니다."
+                    hint="rclone.conf에 있는 리모트만 고를 수 있습니다."
                     required
                 >
                     <ZBCSelect
@@ -202,7 +202,7 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                         name="remoteBookmarkRemote"
                         value={remote}
                         options={options}
-                        placeholder="remote 고르기"
+                        placeholder="리모트 고르기"
                         onChange={h_Remote}
                         disabled={busy}
                         describedBy="remote-bookmark-remote-desc"
@@ -212,14 +212,14 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                     label="기준 경로"
                     htmlFor="remote-bookmark-base"
                     error={errors.base}
-                    hint="remote 안의 폴더입니다. 비워 두면 remote 루트부터 탐색합니다. 선두 / 는 그대로 둡니다."
+                    hint="리모트 안의 폴더입니다. 비워 두면 리모트 루트부터 탐색합니다. 선두 / 는 그대로 둡니다."
                 >
                     <ZBCInput
                         id="remote-bookmark-base"
                         name="remoteBookmarkBase"
                         value={base}
                         onChange={h_Base}
-                        placeholder="예: base/a (없으면 remote 루트)"
+                        placeholder="예: base/a (없으면 리모트 루트)"
                         invalid={Boolean(errors.base)}
                         describedBy="remote-bookmark-base-desc"
                         mono
@@ -227,7 +227,7 @@ function RemoteBookmarkEditorBody(props: itfRemoteBookmarkEditorProps) {
                     />
                 </ZBCField>
                 <p className={styles.note}>
-                    북마크는 기본 rclone.conf에서 remote 이름을 확인합니다. 작업에 다른 설정 파일을
+                    북마크는 기본 rclone.conf에서 리모트 이름을 확인합니다. 작업에 다른 설정 파일을
                     지정해도 북마크 목록은 그대로 보입니다.
                 </p>
             </div>

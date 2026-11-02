@@ -46,7 +46,7 @@ export const HISTORY_STATUS_OPTIONS: ReadonlyArray<{
     { value: "success", label: "완료" },
     { value: "failed", label: "실패·일부 실패·중단됨" },
     { value: "blocked", label: "차단됨" },
-    { value: "canceled", label: "취소됨" },
+    { value: "canceled", label: "중지됨" },
 ];
 
 const STATUS_GROUP: Record<typRunStatus, typHistoryStatusFilter | null> = {

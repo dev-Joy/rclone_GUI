@@ -24,7 +24,7 @@ export function findDriveLetterRemotes(remotes: readonly string[]): string[] {
 export function driveLetterRemoteWarning(names: readonly string[]): string | null {
     if (names.length === 0) return null;
     const list = names.map((n) => `‘${n}:’`).join(", ");
-    return `${list} remote는 Windows에서 드라이브 문자로 해석되어 사용할 수 없습니다. rclone config에서 두 글자 이상 이름으로 바꾸세요.`;
+    return `${list} 리모트는 Windows에서 드라이브 문자로 해석되어 사용할 수 없습니다. rclone config에서 두 글자 이상 이름으로 바꾸세요.`;
 }
 
 /**

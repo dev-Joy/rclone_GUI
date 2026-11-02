@@ -114,7 +114,7 @@ describe("clsRemoteService 북마크", () => {
         ).rejects.toMatchObject({ code: "CONFIG_REQUIRED" });
     });
 
-    it("rclone.conf에 없는 remote는 VALIDATION", async () => {
+    it("rclone.conf에 없는 리모트는 VALIDATION", async () => {
         const { service } = f_Make({ remotes: ["other"] });
         await expect(
             service.create({ alias: "a", remoteName: "test-remote", basePath: "" }),
@@ -176,7 +176,7 @@ describe("clsRemoteService.probePath", () => {
         expect(probes.map((p) => p.path)).toEqual(["C:\\tmp\\src", "\\\\server\\share\\a"]);
     });
 
-    it("remote는 이름으로 탐색 큐를 잡는다", async () => {
+    it("리모트는 이름으로 탐색 큐를 잡는다", async () => {
         const { service, opsCalls } = f_Make();
         await service.probePath({ path: "r:a/b", configPath: null });
         expect(opsCalls).toEqual([["r"]]);
@@ -191,7 +191,7 @@ describe("clsRemoteService.probePath", () => {
 });
 
 describe("clsRemoteService.listDir", () => {
-    it("remote 경로가 아니면 PATH_INVALID", async () => {
+    it("리모트 경로가 아니면 PATH_INVALID", async () => {
         const { service } = f_Make();
         await expect(service.listDir({ path: "C:\\tmp", configPath: null })).rejects.toMatchObject({
             code: "PATH_INVALID",

@@ -72,6 +72,9 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -199,7 +202,7 @@ describe.skipIf(!HAS_RCLONE)("비교 서비스 (실제 rclone, 임시 폴더)", 
         expect(r.summary.hashComparedFiles).toBeGreaterThan(0);
     });
 
-    it("대상을 alias remote 경로로 지정해도 로컬 비교와 같은 결과", async () => {
+    it("대상을 alias 리모트 경로로 지정해도 로컬 비교와 같은 결과", async () => {
         const local = await f_Service().run(JOB_ID);
         const remote = await f_Service({ job: { destination: `it-cmp:c${caseNo}/dst` } }).run(
             JOB_ID,

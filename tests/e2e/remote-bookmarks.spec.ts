@@ -27,7 +27,7 @@ async function f_DismissToasts(page: Page): Promise<void> {
 }
 
 test("설정에서 북마크를 추가하고 작업 편집기에서 폴더를 찾아 고른다", async () => {
-    test.skip(!HAS_RCLONE, "실제 rclone이 없어 remote 북마크 E2E를 건너뜁니다.");
+    test.skip(!HAS_RCLONE, "실제 rclone이 없어 리모트 북마크 E2E를 건너뜁니다.");
     const paths = preparePaths();
     mkdirSync(join(paths.root, "data", "base", "a", "b"), { recursive: true });
     // 테스트 준비용 설정 파일. 앱 코드는 이 파일을 읽지 않고 경로만 --config로 넘긴다
@@ -64,7 +64,7 @@ test("설정에서 북마크를 추가하고 작업 편집기에서 폴더를 �
         await nav.getByRole("button", { name: "작업" }).click();
         const sidebar = page.locator('nav[aria-labelledby="jobs-title"]');
         await sidebar.getByRole("button", { name: "새 작업", exact: true }).click();
-        await page.locator("#job-name").fill("remote 북마크 E2E");
+        await page.locator("#job-name").fill("리모트 북마크 E2E");
         await page.locator("#job-destination").fill(join(paths.root, "dst"));
         await page
             .locator("#job-source-remote-bookmark")

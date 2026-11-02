@@ -20,6 +20,9 @@ function f_Job(id: string, source: string, destination: string): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -86,7 +89,7 @@ describe("clsRemoteOps", () => {
         expect(activity.browseRemotes()).toBeNull();
     });
 
-    it("같은 remote를 비교·실행 중이면 BUSY, 다른 remote는 허용", async () => {
+    it("같은 리모트를 비교·실행 중이면 BUSY, 다른 리모트는 허용", async () => {
         const { ops, activity } = f_Make();
         const release = activity.acquire(
             { kind: "compare", jobId: "j-remote", startedAt: AT },
@@ -98,7 +101,7 @@ describe("clsRemoteOps", () => {
         await expect(ops.run(["gdrive"], () => 3)).resolves.toBe(3);
     });
 
-    it("탐색 중인 remote를 비교·실행이 쓰려 하면 assertNoBrowse가 막는다", async () => {
+    it("탐색 중인 리모트를 비교·실행이 쓰려 하면 assertNoBrowse가 막는다", async () => {
         const { ops, activity } = f_Make();
         let started: (() => void) | null = null;
         let release: (() => void) | null = null;

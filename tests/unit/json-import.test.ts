@@ -83,12 +83,14 @@ describe("importLegacyJson", () => {
         }
 
         const jobs = new clsJobStore({ db, caseInsensitive: () => true });
-        // 예전 JSON에는 공용 제외 패턴 연결과 범위가 없으므로 []·files (INT-002 T-03·T-05)
+        // 예전 JSON에는 공용 제외 패턴 연결·범위·예약 종류가 없으므로 []·files·interval 09:00 평일
+        // (INT-002 T-03·T-05·T-06)
         expect(await jobs.load()).toEqual(
             f_Fixture<typJobsFile>("jobs.json").jobs.map((j) => ({
                 ...j,
                 excludePatternIds: [],
                 scope: "files",
+                autoSync: { ...j.autoSync, kind: "interval", timeOfDay: "09:00", weekdays: 62 },
             })),
         );
         const history = new clsHistoryStore(db, () => 500);

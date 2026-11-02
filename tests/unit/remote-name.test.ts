@@ -9,7 +9,7 @@ import {
     looksLikeDriveLetterRemotePath,
 } from "@/shared/remote-name";
 
-describe("한 글자 remote 이름", () => {
+describe("한 글자 리모트 이름", () => {
     it.each([
         ["a", true],
         ["Z", true],
@@ -30,7 +30,7 @@ describe("한 글자 remote 이름", () => {
         const one = driveLetterRemoteWarning(["x"]);
         expect(one).toContain("‘x:’");
         expect(one).toContain("두 글자 이상");
-        expect(driveLetterRemoteWarning(["a", "b"])).toContain("‘a:’, ‘b:’ remote는");
+        expect(driveLetterRemoteWarning(["a", "b"])).toContain("‘a:’, ‘b:’ 리모트는");
     });
 
     it.each([

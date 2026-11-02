@@ -71,7 +71,7 @@ describe("browserChild", () => {
         expect(browserChild(b, "rr:base", "a\n")).toBeNull();
     });
 
-    it("기준 경로 밖이거나 다른 remote면 null", () => {
+    it("기준 경로 밖이거나 다른 리모트면 null", () => {
         expect(browserChild(b, "rr:other", "a")).toBeNull();
         expect(browserChild(b, "x:base", "a")).toBeNull();
         expect(browserChild(b, "C:\\tmp", "a")).toBeNull();
@@ -85,7 +85,7 @@ describe("browserChild", () => {
 });
 
 describe("isBrowserRoot", () => {
-    it("remote 루트만 true", () => {
+    it("리모트 루트만 true", () => {
         expect(isBrowserRoot("rr:")).toBe(true);
         expect(isBrowserRoot("rr:base")).toBe(false);
         expect(isBrowserRoot("C:\\tmp")).toBe(false);

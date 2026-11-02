@@ -151,6 +151,19 @@
 - 설계와 다름: (1) R2 불일치로 makeDir 파서·사전 확인 폴더 생성 비교는 넣지 않음 (2) **로그 파서 `set directory modification time`을 `dirTime`으로 분리** — 전체 범위에서 기존 폴더 줄에 size 0이 붙어 touch로 세져 사전 확인이 매번 PLAN_DRIFT가 되던 문제(rclone-notes #26) (3) diff 폴더 충돌은 폴더 자신뿐 아니라 조상 경로도 다른 쪽 파일과 겹치는지 본다 (4) 같은 쪽 폴더 키가 같은 쪽 파일 키와 겹쳐도 CASE_COLLISION (5) `ZBCButton`에 optional `aria-describedby` (6) `job-list-view.test.ts`는 node 테스트라 `tsconfig.node.json` include에 `job-list-view.ts`를 더하고 작업 생성 도우미를 파일 안에 둠 (7) scheduleSummary 다음 실행은 "MM-DD HH:mm"
 - 남은 것: GCS 버킷의 빈 폴더 동작은 T-10에서 확인(E-6). `COMPONENTS.md` 갱신 권고(`/z_skill_code_asset_indexer`)
 
+[TASK_017] : (2026-11-02) INT-002 Phase 5 — T-06 앱 스케줄러 → T-08 실행 화면 재구성 (관련 Intent: INT-002, T-06·T-08)
+- 스케줄: `schemas/job` autoSync에 `kind`(interval/daily/weekly)·`timeOfDay`(HH:MM)·`weekdays`(bit0=일) — 저장 입력은 필수(기본값 없음), 읽기(zAutoSync)는 interval·09:00·평일 기본값으로 예전 데이터 호환, weekly 요일 0개는 zJobDraft superRefine으로 거부. DB 스키마 변경 없음(Q8, jobs.data JSON)
+- `src/shared/schedule.ts`: parseTimeOfDay·nextLocalTimeOfDay(로컬 생성자, DST 안전)·nextOccurrence(항상 기준 시각보다 뒤, 계산 불가 시 +24h)·isSameSchedule·weekdaysText·scheduleText·quitScheduleWarning, nextRunAfterEdit(스케줄 변경 판정)·reconcileNextRun(daily·weekly 미래 예약 재정렬)·nextAfterFinish(spec) 시그니처 변경
+- `scheduler.ts`: 시작 직후·시작 실패·종료 후 예약을 nextOccurrence로(게이트·startAuto·pickDue 불변)
+- 종료 경고: `main/index.ts` 트레이 ‘종료’에서만(실행 중 아님·일시정지 아님·예약 있음) "다음 예약" 확인 창, f_AskQuit에 schedule 종류. 로그인 안내: `ui-store.loginHintShown`, `job-form.shouldShowLoginHint`, 편집기 저장 토스트 1회 + 고정 안내
+- 편집 UI: `JobEditor` 예약 방식 라디오·간격 분/시간(`job-form` 단위 도우미)·시각(`ZBCInput` type time)·요일 체크박스·"저장하면 다음 실행" 미리보기. 목록·배지 `scheduleText`("1시간마다", "매일 09:00", "매주 월·수 09:00")
+- 화면 재구성: 탭 "비교·미리보기 → 실행 → 결과·이력 → 작업 설정", 헤더 1단계/2단계 묶음, 미리보기 결과는 1단계 탭(RunView kind preview/real), 탭별 취소 버튼 제거 → 공통 중지 막대 `JobActivityBar`(+css, `run-view.activityStop`)
+- 용어(`ui-terms.md`): 진행 중 활동 멈춤은 "중지"(상태·토스트·오류·종료 확인), remote → 리모트(화면·오류 문구), noop "바꿀 것 없음", FR-28 기본안 A로 동기화+오류 무시 안내 통일(`run-gates.SYNC_IGNORE_ERRORS_TEXT`, 차단 그대로)
+- 테스트: `schedule.test.ts`(Asia/Seoul 고정, AC-12, 불변식 400×7), `schedule-dst.test.ts`(America/New_York 봄·가을), `scheduler.test.ts` daily·weekly 5건, `schemas`·`job-form`·`job-list-view`·`run-view`(activityStop)·`ui-store`·`path-utils`(/mnt/x FR-25) 추가, E2E `schedule.spec.ts`, drive-app 탭 셀렉터·API 목록(remotes) 갱신
+- 검증: `pnpm run check`(unit 65파일 974), `format:check`, `test:int` 47(+1 skip), `test:e2e` 10, `build:win`, drive-app(빌드본) 102 PASS
+- 설계와 다름: (1) 미리보기 시각은 렌더 중 Date를 읽지 않도록 스케줄을 바꾼 시각(previewAt) 기준이고, 바꾸기 전에는 미리보기 문구를 숨김 (2) 단계 묶음은 role=group 대신 `<fieldset>`(jsx-a11y) (3) drive-app API 목록 실패(Phase 3에서 remotes 추가 후 남아 있던 것)도 함께 수정 (4) 종료 확인 문구도 "중지"로 통일 (5) 리모트 용어를 main 서비스·저장소 오류 문구까지 적용
+- 남은 것: 트레이 ‘종료’ 경고 창은 E2E에 트레이가 없고 drive-app도 트레이 메뉴를 누를 수 없어 수동 확인 필요(`pnpm run dev` → 자동 작업 1개 → 트레이 ‘종료’). `COMPONENTS.md` 갱신 권고
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

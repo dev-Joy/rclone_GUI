@@ -16,6 +16,13 @@ import type { typJob } from "@/shared/schemas/job";
 import type { typRunPlan } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
 
+/**
+ * 동기화 + ‘오류가 나도 계속’ 안내(편집기 경고·옵션 주의·실행 차단 공통, INT-002 FR-28).
+ * 백업 폴더(--backup-dir)는 아직 지정할 수 없으므로 차단은 그대로 두고 안내만 한다.
+ */
+export const SYNC_IGNORE_ERRORS_TEXT =
+    "동기화에서 ‘오류가 나도 계속’을 쓰려면 지워질 파일을 옮겨 둘 백업 폴더가 필요하지만, 이 앱은 아직 백업 폴더를 지정할 수 없습니다. 이 옵션을 끄거나, 오류 난 파일만 건너뛰고 계속하려면 복사 모드를 쓰세요.";
+
 /** 게이트에 걸린 이유 (IPC 오류로 그대로 쓴다) */
 export interface itfGateBlock {
     code: typErrorCode;
@@ -67,8 +74,7 @@ export function checkPlanSafety(plan: typRunPlan, job: typGateJob): itfGateBlock
     if (job.mode === "sync" && job.options.ignoreErrors) {
         return {
             code: "SAFETY_BLOCKED",
-            message:
-                "동기화는 ‘오류가 나도 계속(--ignore-errors)’ 옵션으로 실행할 수 없습니다(읽기 오류에도 대상 파일을 지움). 작업 설정에서 끄세요.",
+            message: SYNC_IGNORE_ERRORS_TEXT,
         };
     }
     return null;

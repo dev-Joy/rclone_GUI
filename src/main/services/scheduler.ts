@@ -4,8 +4,9 @@
  * - 20초마다 tick: 일시정지면 무시, 자기 자동 실행이 진행 중이거나 이전 tick이 끝나지 않았으면 무시(겹침 방지).
  *   예약이 지난 작업 중 가장 이른 1건만 실행 서비스 startAuto로 시작한다.
  * - 전역 락이 차 있으면(BUSY) 예약을 그대로 두고 다음 tick에 다시 본다(로그는 한 번만).
- * - 중복 방지: 시작하자마자 nextRunAt = 시작 시각 + 주기를 먼저 기록하고, 끝나면 끝난 시각 + 주기와
- *   lastAutoRunAt을 기록한다(재시작해도 같은 예약으로 다시 돌지 않는다).
+ * - 중복 방지: 시작하자마자 nextRunAt = 시작 시각 기준 다음 예약을 먼저 기록하고, 끝나면 끝난 시각 기준
+ *   다음 예약과 lastAutoRunAt을 기록한다(재시작해도 같은 예약으로 다시 돌지 않는다).
+ *   다음 예약은 종류(간격·매일·요일)에 따라 nextOccurrence가 정하고, 항상 기준 시각보다 뒤다.
  * - 앱 시작: 켜진 작업의 예약이 없거나 지났으면 now + 60초(몰아서 따라잡지 않음). 절전 재개도 같다.
  *   일시정지를 풀면 지난 예약만 now + 30초.
  * - 알림: blocked·failed·partial·canceled·success만(noop은 알리지 않음). 문구에는 작업 이름과 수만 쓴다(경로 없음).
@@ -23,9 +24,9 @@ import type { clsJobStore, itfJobBookkeeping } from "@/main/store/job-store";
 import { ERROR_MESSAGES } from "@/shared/errors";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE_SHORT } from "@/shared/partial-files";
 import {
-    addMinutes,
     nextAfterFinish,
     nextAutoRun,
+    nextOccurrence,
     pickDue,
     reconcileNextRun,
     rescheduleOnUnpause,
@@ -112,7 +113,7 @@ export function autoOutcomeNotice(o: itfAutoOutcome): itfAppNotify | null {
         case "canceled":
             return {
                 level: partial ? "warning" : "info",
-                message: `${name} 자동 실행을 취소했습니다.${partial}`,
+                message: `${name} 자동 실행을 중지했습니다.${partial}`,
             };
         default:
             return null;
@@ -179,9 +180,9 @@ export class clsScheduler {
                 }
                 const code = e instanceof clsAppError ? e.code : "INTERNAL";
                 this.deps.logger.warn(`자동 실행을 시작하지 못함: job=${job.id} code=${code}`);
-                // 같은 오류로 tick마다 반복하지 않도록 다음 주기로 미룬다
+                // 같은 오류로 tick마다 반복하지 않도록 다음 예약으로 미룬다
                 await this.book(job.id, {
-                    nextRunAt: addMinutes(now, job.autoSync.intervalMinutes),
+                    nextRunAt: nextOccurrence(job.autoSync, now),
                 });
                 return;
             }
@@ -189,7 +190,7 @@ export class clsScheduler {
             this.current = { jobId: job.id, runId: started.runId };
             // 중복 방지: 시작하자마자 다음 예약을 먼저 기록한다
             await this.book(job.id, {
-                nextRunAt: addMinutes(now, job.autoSync.intervalMinutes),
+                nextRunAt: nextOccurrence(job.autoSync, now),
             });
             this.emitState();
             void started.done.then((o) => this.onFinished(o));
@@ -237,7 +238,7 @@ export class clsScheduler {
             if (job) {
                 await this.book(o.jobId, {
                     nextRunAt: job.autoSync.enabled
-                        ? nextAfterFinish(o.finishedAt, job.autoSync.intervalMinutes)
+                        ? nextAfterFinish(o.finishedAt, job.autoSync)
                         : null,
                     lastAutoRunAt: o.finishedAt,
                 });

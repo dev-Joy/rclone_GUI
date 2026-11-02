@@ -69,6 +69,9 @@ function f_Job(source: string, destination: string): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -113,7 +116,7 @@ afterAll(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-describe.skipIf(!HAS_RCLONE)("remote 북마크·폴더 탐색 (실제 rclone, 임시 설정)", () => {
+describe.skipIf(!HAS_RCLONE)("리모트 북마크·폴더 탐색 (실제 rclone, 임시 설정)", () => {
     it("북마크를 만들고 기준 경로를 probe로 확인한다", async () => {
         const b = await service.create({
             alias: "통합",
@@ -159,7 +162,7 @@ describe.skipIf(!HAS_RCLONE)("remote 북마크·폴더 탐색 (실제 rclone, �
         expect(dir!.at(-2)).toBe("--");
     });
 
-    it("같은 remote를 비교 중이면 BUSY, 끝나면 다시 탐색한다", async () => {
+    it("같은 리모트를 비교 중이면 BUSY, 끝나면 다시 탐색한다", async () => {
         const release = activity.acquire(
             { kind: "compare", jobId: "00000000-0000-4000-8000-0000000000e1", startedAt: AT },
             () => "비교 중",

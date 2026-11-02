@@ -54,6 +54,21 @@
             flex: 1 1 auto;
         }
 
+        /* 단계 묶음(1단계 비교·미리보기 → 2단계 실행) */
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            margin: 0;
+            padding: 0;
+            border: 0;
+        }
+
+        .arrow {
+            color: var(--muted);
+        }
+
         .reason {
             display: block;
             margin: 0;
@@ -63,6 +78,9 @@
         }
 
         .panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
             min-width: 0;
         }
     }

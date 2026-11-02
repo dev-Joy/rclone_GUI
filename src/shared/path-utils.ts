@@ -113,13 +113,13 @@ function f_ParseRemote(display: string, colon: number): typParseResult {
     if (!REMOTE_NAME.test(name)) {
         return f_Issue(
             "PATH_INVALID",
-            "rclone remote 이름 형식이 올바르지 않습니다. 예: remote:폴더",
+            "rclone 리모트 이름 형식이 올바르지 않습니다. 예: remote:폴더",
         );
     }
     const rest = display.slice(colon + 1);
     const parts = rest.split(/[\\/]+/).filter((p) => p !== "");
     if (parts.some((p) => p === "." || p === "..")) {
-        return f_Issue("VALIDATION", "remote 경로에는 . 또는 .. 를 쓸 수 없습니다.");
+        return f_Issue("VALIDATION", "리모트 경로에는 . 또는 .. 를 쓸 수 없습니다.");
     }
     const root = `${name}:`;
     // sftp·ftp·smb 등에서 "name:/abs"(절대)와 "name:rel"(홈 기준)은 다른 위치라 맨 앞 / 를 보존한다
@@ -251,7 +251,7 @@ export function checkPathPair(
         if (c.keys.length === 0) {
             errors.push({
                 code: "SAFETY_BLOCKED",
-                message: `${label}: 드라이브·공유·remote 루트 전체는 지정할 수 없습니다. 하위 폴더를 고르세요.`,
+                message: `${label}: 드라이브·공유·리모트 루트 전체는 지정할 수 없습니다. 하위 폴더를 고르세요.`,
             });
         }
         if (c.wslMntAlias) {
@@ -306,7 +306,7 @@ export function checkRunPaths(
         const fixed = `${letter}:\\${shown.slice(2)}`;
         driveErrors.push({
             code: "PATH_INVALID",
-            message: `${label}: ‘${shown}’는 Windows에서 ${letter} 드라이브의 현재 폴더 기준 경로로 해석되어 위치가 정해지지 않습니다. ${fixed}처럼 ‘:’ 뒤에 \\를 넣으세요. rclone remote라면 이름을 두 글자 이상으로 바꾸세요.`,
+            message: `${label}: ‘${shown}’는 Windows에서 ${letter} 드라이브의 현재 폴더 기준 경로로 해석되어 위치가 정해지지 않습니다. ${fixed}처럼 ‘:’ 뒤에 \\를 넣으세요. rclone 리모트라면 이름을 두 글자 이상으로 바꾸세요.`,
         });
     }
     return { errors: [...driveErrors, ...pair.errors], warnings: pair.warnings };

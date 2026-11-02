@@ -84,7 +84,7 @@ export default function RemoteBookmarksPanel() {
             });
             pushToast(
                 "success",
-                isUpdate ? "remote 북마크를 수정했습니다." : "remote 북마크를 추가했습니다.",
+                isUpdate ? "리모트 북마크를 수정했습니다." : "리모트 북마크를 추가했습니다.",
             );
         }
         return r;
@@ -117,7 +117,7 @@ export default function RemoteBookmarksPanel() {
             delete next[deleteTarget.id];
             return next;
         });
-        pushToast("success", "remote 북마크를 지웠습니다.");
+        pushToast("success", "리모트 북마크를 지웠습니다.");
     };
     const h_Delete = () => void f_Delete();
 
@@ -151,7 +151,7 @@ export default function RemoteBookmarksPanel() {
         <section className={styles.RemoteBookmarksPanel} aria-labelledby="remote-bookmarks-title">
             <div className={styles.header}>
                 <h2 id="remote-bookmarks-title" className={styles.title}>
-                    remote 북마크
+                    리모트 북마크
                 </h2>
                 <ZBCButton
                     id="remote-bookmark-add"
@@ -160,22 +160,22 @@ export default function RemoteBookmarksPanel() {
                     disabled={!canAdd}
                     title={canAdd ? undefined : "rclone 설정을 먼저 확인하세요."}
                 >
-                    remote 북마크 추가
+                    리모트 북마크 추가
                 </ZBCButton>
             </div>
             <p className={styles.hint}>
-                rclone.conf의 remote와 그 안의 폴더를 별칭으로 저장합니다. 작업 편집기의 경로
+                rclone.conf의 리모트와 그 안의 폴더를 별칭으로 저장합니다. 작업 편집기의 경로
                 입력에서 북마크를 고르거나 폴더를 찾아볼 수 있습니다. 북마크는 기본 rclone.conf에서
-                remote 이름을 확인합니다.
+                리모트 이름을 확인합니다.
             </p>
             {loadError && (
                 <p className={styles.error} role="alert">
-                    remote 북마크를 불러오지 못했습니다: {loadError}
+                    리모트 북마크를 불러오지 못했습니다: {loadError}
                 </p>
             )}
-            {!loaded && loading && <p className={styles.hint}>remote 북마크를 불러오는 중…</p>}
+            {!loaded && loading && <p className={styles.hint}>리모트 북마크를 불러오는 중…</p>}
             {loaded && items.length === 0 && (
-                <p className={styles.hint}>아직 저장한 remote 북마크가 없습니다.</p>
+                <p className={styles.hint}>아직 저장한 리모트 북마크가 없습니다.</p>
             )}
             {items.length > 0 && (
                 <ul className={styles.list}>
@@ -232,7 +232,7 @@ export default function RemoteBookmarksPanel() {
             />
             <ZBCModal
                 open={deleteTarget !== null}
-                title="remote 북마크 삭제"
+                title="리모트 북마크 삭제"
                 onClose={h_CloseDelete}
                 footer={
                     <>

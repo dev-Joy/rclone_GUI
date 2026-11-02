@@ -24,15 +24,15 @@ function f_Fail(message: string): typRemoteBasePathResult {
  */
 export function normalizeRemoteBasePath(remoteName: string, raw: string): typRemoteBasePathResult {
     const name = remoteName.trim();
-    if (name === "") return f_Fail("remote 이름을 입력하세요.");
+    if (name === "") return f_Fail("리모트 이름을 입력하세요.");
     const text = `${name}:${raw.trim()}`;
     if (text.length > PATH_MAX_INPUT) {
         return f_Fail(`경로는 ${PATH_MAX_INPUT}자 이내로 입력하세요.`);
     }
     const parsed = parsePath(text);
     if (!parsed.ok) return f_Fail(parsed.issue.message);
-    if (parsed.path.kind !== "remote") return f_Fail("remote 경로가 아닙니다.");
-    if (parsed.path.root !== `${name}:`) return f_Fail("remote 이름과 경로가 맞지 않습니다.");
+    if (parsed.path.kind !== "remote") return f_Fail("리모트 경로가 아닙니다.");
+    if (parsed.path.root !== `${name}:`) return f_Fail("리모트 이름과 경로가 맞지 않습니다.");
     return { ok: true, basePath: parsed.path.normalized.slice(parsed.path.root.length) };
 }
 

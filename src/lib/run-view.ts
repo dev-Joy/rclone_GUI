@@ -16,7 +16,12 @@ import type { typRunMode, typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
 import type { typRunStats } from "@/shared/schemas/run";
 import type { itfCompareActive, itfCompareResult, itfCompareSummary } from "@/shared/types/compare";
-import { RUN_TAIL_LINES, type itfDryRunSummary, type itfRunLogLine } from "@/shared/types/run";
+import {
+    RUN_TAIL_LINES,
+    type itfDryRunSummary,
+    type itfRunLogLine,
+    type itfRunSnapshot,
+} from "@/shared/types/run";
 
 export type typCheck = { ok: true } | { ok: false; reason: string };
 
@@ -161,7 +166,7 @@ const MODE_VERB: Record<typRunMode, string> = { copy: "복사", sync: "동기화
 /** 실제 실행 버튼·확인 창 제목 */
 export const RUN_LABEL: Record<typRunMode, string> = { copy: "복사 실행", sync: "동기화 실행" };
 
-/** 상태 문구. 예: 미리보기 완료, 복사 완료, 복사 취소됨 */
+/** 상태 문구. 예: 미리보기 완료, 복사 완료, 복사 중지됨 */
 export function runStatusText(status: typRunStatus, dryRun: boolean, mode: typRunMode): string {
     const what = dryRun ? "미리보기" : MODE_VERB[mode];
     switch (status) {
@@ -174,11 +179,11 @@ export function runStatusText(status: typRunStatus, dryRun: boolean, mode: typRu
         case "failed":
             return `${what} 실패`;
         case "canceled":
-            return `${what} 취소됨`;
+            return `${what} 중지됨`;
         case "blocked":
             return `${what} 차단됨`;
         case "noop":
-            return "바꿀 파일 없음";
+            return "바꿀 것 없음";
         case "interrupted":
             return `${what} 중단됨(앱 종료)`;
     }
@@ -207,4 +212,56 @@ export function realRunConfirmText(s: itfCompareSummary, mode: typRunMode): stri
     if (mode === "sync" && s.deleteDirs > 0) parts.push(`폴더 ${s.deleteDirs}개 삭제`);
     if (parts.length === 0) return "바뀌는 파일이 없습니다.";
     return `${parts.join(", ")} (총 ${formatBytes(s.transferBytes)})`;
+}
+
+/** 작업 화면의 공통 중지 컨트롤(INT-002 T-08). 이 작업의 비교·미리보기·실행 중 하나만 멈춘다 */
+export interface itfActivityStop {
+    target: "compare" | "run";
+    /** 진행 문구 */
+    text: string;
+    /** 버튼 이름 */
+    label: string;
+    /** 버튼 설명 */
+    title: string;
+    disabled: boolean;
+}
+
+const STOP_REAL_TITLE = "이미 복사·삭제된 파일은 되돌리지 않습니다.";
+
+/** 이 작업에 진행 중인 활동의 중지 버튼 정보. 없으면 null(실행이 비교보다 우선) */
+export function activityStop(i: {
+    jobId: string;
+    compare: { jobId: string } | null;
+    run: Pick<itfRunSnapshot, "jobId" | "dryRun" | "mode" | "phase" | "cancelRequested"> | null;
+}): itfActivityStop | null {
+    const r = i.run;
+    if (r && r.jobId === i.jobId) {
+        let text: string;
+        let label: string;
+        let title = "파일은 바꾸지 않습니다.";
+        if (r.dryRun) {
+            text = "미리보기 중(파일은 바꾸지 않음)";
+            label = "미리보기 중지";
+        } else if (r.phase === "comparing") {
+            text = "자동 실행: 비교 중(파일은 바꾸지 않음)";
+            label = "자동 실행 중지";
+        } else {
+            text = r.mode === "sync" ? "동기화 중(삭제 포함)" : "복사 중";
+            label = r.mode === "sync" ? "동기화 중지" : "복사 중지";
+            title = STOP_REAL_TITLE;
+        }
+        if (r.cancelRequested)
+            return { target: "run", text, label: "중지하는 중…", title, disabled: true };
+        return { target: "run", text, label, title, disabled: false };
+    }
+    if (i.compare && i.compare.jobId === i.jobId) {
+        return {
+            target: "compare",
+            text: "비교 중(파일은 바꾸지 않음)",
+            label: "비교 중지",
+            title: "목록 읽기를 멈춥니다. 파일은 바꾸지 않습니다.",
+            disabled: false,
+        };
+    }
+    return null;
 }

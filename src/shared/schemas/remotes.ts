@@ -31,7 +31,7 @@ export const zRemoteAlias = z
 export const zRemoteName = z
     .string()
     .trim()
-    .min(1, "remote를 고르세요.")
+    .min(1, "리모트를 고르세요.")
     .pipe(zNoControlChars(REMOTE_NAME_MAX));
 
 /** remote 기준 경로. 빈 값은 remote 루트 */

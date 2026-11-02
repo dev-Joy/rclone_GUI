@@ -175,7 +175,7 @@ export default function DeleteConfirmModal(props: itfDeleteConfirmModalProps) {
                     {job.scope === "all"
                         ? "폴더는 비어 있을 때만 지워지고 삭제 한도에 세지 않습니다."
                         : "대상에만 있는 빈 폴더와, 파일을 지운 뒤 비게 된 폴더도 지워집니다(폴더는 삭제 한도에 세지 않음)."}{" "}
-                    취소해도 이미 복사·삭제된 파일은 되돌리지 않습니다.
+                    중지해도 이미 복사·삭제된 파일은 되돌리지 않습니다.
                 </p>
                 {preflightOn ? (
                     <p className={styles.note}>

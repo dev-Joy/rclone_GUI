@@ -281,7 +281,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
                             id="settings-case-insensitive"
                             checked={draft.compare.caseInsensitivePaths}
                             onChange={h_CaseInsensitive}
-                            label="remote 경로의 대소문자를 무시하고 비교"
+                            label="리모트 경로의 대소문자를 무시하고 비교"
                             description="로컬·UNC 경로는 항상 대소문자를 무시합니다. 바꾸면 기존 작업은 다음에 저장할 때 다시 검사됩니다."
                         />
                     </div>

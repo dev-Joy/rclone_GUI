@@ -13,6 +13,7 @@ import ZBCCheckbox from "@/components/ZBCCheckbox";
 import ZBCField from "@/components/ZBCField";
 import ZBCInput from "@/components/ZBCInput";
 import { numberText, toNumber } from "@/lib/form-utils";
+import { SYNC_IGNORE_ERRORS_TEXT } from "@/shared/run-gates";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { typJobRunOptions } from "@/shared/schemas/job";
 import styles from "./JobOptionsFields.module.css";
@@ -143,7 +144,7 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
                         checked={value.fastList}
                         onChange={h_Bool("fastList")}
                         label="목록을 한 번에 읽기 (--fast-list)"
-                        description="remote 호출 수를 줄입니다. 메모리를 더 씁니다."
+                        description="리모트 호출 수를 줄입니다. 메모리를 더 씁니다."
                     />
                     <ZBCCheckbox
                         id={id("skipLinks")}
@@ -191,10 +192,7 @@ export default function JobOptionsFields(props: itfJobOptionsFieldsProps) {
                         description="읽기 오류가 있어도 대상에서 파일을 지울 수 있습니다."
                     />
                     {mode === "sync" && value.ignoreErrors && (
-                        <p className={styles.warning}>
-                            주의: 동기화 모드에서는 이 옵션으로 실행할 수 없습니다(백업 폴더
-                            미지원).
-                        </p>
+                        <p className={styles.warning}>주의: {SYNC_IGNORE_ERRORS_TEXT}</p>
                     )}
                 </div>
             </details>

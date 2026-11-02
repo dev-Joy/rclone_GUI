@@ -267,7 +267,7 @@ export class clsPathService {
         if (r.timedOut) {
             throw new clsAppError(
                 "RCLONE_FAILED",
-                `remote가 ${RCLONE_TIMEOUTS.probe / 1000}초 안에 응답하지 않았습니다.`,
+                `리모트가 ${RCLONE_TIMEOUTS.probe / 1000}초 안에 응답하지 않았습니다.`,
             );
         }
         // exit 3: 폴더 없음(부모 또는 루트가 가리키는 폴더)
@@ -276,7 +276,7 @@ export class clsPathService {
             const hint = hintForRcloneError(r.stderrTail, remoteName);
             throw new clsAppError(
                 "RCLONE_FAILED",
-                `remote 경로를 확인하지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
+                `리모트 경로를 확인하지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
                 summarizeStderr(r.stderrTail),
             );
         }

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    activityStop,
     appendTail,
     canStartRun,
     deleteConfirmInfo,
@@ -41,6 +42,9 @@ function f_Job(over: Partial<typJob> = {}): typJob {
             enabled: false,
             intervalMinutes: 60,
             allowDeletes: false,
+            kind: "interval",
+            timeOfDay: "09:00",
+            weekdays: 62,
             nextRunAt: null,
             lastAutoRunAt: null,
         },
@@ -168,7 +172,7 @@ describe("canStartRun", () => {
         expect(canStartRun(f_Input({ dryRun: true, job: f_Job({ mode: "sync" }) })).ok).toBe(true);
     });
 
-    it("실제 실행 차단: 비교 없음/다른 작업 → 낡음·rev 변경 → 충돌 → 바꿀 파일 없음", () => {
+    it("실제 실행 차단: 비교 없음/다른 작업 → 낡음·rev 변경 → 충돌 → 바꿀 것 없음", () => {
         expect(f_Reason(f_Input({ compare: null }))).toBe("먼저 비교하세요.");
         expect(f_Reason(f_Input({ compare: f_Result({ jobId: "x" }) }))).toBe("먼저 비교하세요.");
         expect(f_Reason(f_Input({ nowMs: T0 + 11 * 60_000 }))).toContain("11분");
@@ -212,7 +216,7 @@ describe("canStartRun", () => {
                     compare: f_SyncResult(),
                 }),
             ),
-        ).toContain("--ignore-errors");
+        ).toContain("오류가 나도 계속");
         expect(
             f_Reason(
                 f_Input({
@@ -323,7 +327,7 @@ describe("문구", () => {
     it("runStatusText: 미리보기·복사·동기화와 상태", () => {
         expect(runStatusText("success", true, "sync")).toBe("미리보기 완료");
         expect(runStatusText("success", false, "copy")).toBe("복사 완료");
-        expect(runStatusText("canceled", false, "copy")).toBe("복사 취소됨");
+        expect(runStatusText("canceled", false, "copy")).toBe("복사 중지됨");
         expect(runStatusText("partial", false, "sync")).toBe("동기화 일부 실패");
         expect(runStatusText("interrupted", true, "copy")).toContain("중단됨");
     });
@@ -363,5 +367,56 @@ describe("문구", () => {
         expect(realRunConfirmText(s, "sync")).toContain("빈 폴더 2개 생성, 폴더 3개 삭제");
         expect(realRunConfirmText(s, "copy")).toContain("빈 폴더 2개 생성");
         expect(realRunConfirmText(s, "copy")).not.toContain("폴더 3개 삭제");
+    });
+});
+
+function f_RunSnap(over: Record<string, unknown> = {}) {
+    return {
+        jobId: "a",
+        dryRun: false,
+        mode: "copy" as const,
+        phase: "transferring" as const,
+        cancelRequested: false,
+        ...over,
+    };
+}
+
+describe("activityStop (INT-002 T-08 공통 중지)", () => {
+    it.each([
+        ["비교 중", { compare: { jobId: "a" }, run: null }, "compare", "비교 중지"],
+        ["미리보기", { compare: null, run: f_RunSnap({ dryRun: true }) }, "run", "미리보기 중지"],
+        [
+            "자동 실행 비교 단계",
+            { compare: null, run: f_RunSnap({ phase: "comparing" }) },
+            "run",
+            "자동 실행 중지",
+        ],
+        ["복사", { compare: null, run: f_RunSnap() }, "run", "복사 중지"],
+        ["동기화", { compare: null, run: f_RunSnap({ mode: "sync" }) }, "run", "동기화 중지"],
+    ] as const)("%s → %s·%s", (_n, input, target, label) => {
+        const s = activityStop({ jobId: "a", ...input });
+        expect(s).toMatchObject({ target, label, disabled: false });
+    });
+
+    it("실제 실행은 되돌리지 않는다고 알리고, 중지 요청 뒤에는 비활성", () => {
+        expect(activityStop({ jobId: "a", compare: null, run: f_RunSnap() })?.title).toBe(
+            "이미 복사·삭제된 파일은 되돌리지 않습니다.",
+        );
+        expect(
+            activityStop({ jobId: "a", compare: null, run: f_RunSnap({ cancelRequested: true }) }),
+        ).toMatchObject({ label: "중지하는 중…", disabled: true });
+    });
+
+    it("다른 작업의 활동이거나 아무것도 없으면 null", () => {
+        expect(activityStop({ jobId: "a", compare: null, run: null })).toBeNull();
+        expect(
+            activityStop({ jobId: "a", compare: { jobId: "b" }, run: f_RunSnap({ jobId: "b" }) }),
+        ).toBeNull();
+    });
+
+    it("실행이 비교보다 우선한다", () => {
+        expect(
+            activityStop({ jobId: "a", compare: { jobId: "a" }, run: f_RunSnap() })?.target,
+        ).toBe("run");
     });
 });

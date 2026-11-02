@@ -54,7 +54,7 @@ afterAll(() => {
 });
 
 describe.skipIf(!HAS_RCLONE)("rclone 환경 감지 (실제 rclone, 임시 설정)", () => {
-    it("버전 ≥ 1.65.0, 수동 설정 파일, alias remote 목록", async () => {
+    it("버전 ≥ 1.65.0, 수동 설정 파일, alias 리모트 목록", async () => {
         const r = await f_Env({ configPath: conf }).detect();
         expect(r.problem).toBeNull();
         expect(compareVersions(r.version ?? "", MIN_RCLONE_VERSION)).toBeGreaterThanOrEqual(0);

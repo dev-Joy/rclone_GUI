@@ -60,7 +60,7 @@ export const ERROR_MESSAGES: Record<typErrorCode, string> = {
     SAFETY_BLOCKED: "안전 규칙으로 실행이 차단되었습니다.",
     EMPTY_SOURCE_BLOCKED: "원본이 비어 있어 대상 삭제를 막았습니다.",
     MAX_DELETE_EXCEEDED: "삭제 안전 한도를 넘어 중단했습니다.",
-    CANCELED: "취소되었습니다.",
+    CANCELED: "중지했습니다.",
     STORE_ERROR: "설정 저장에 실패했습니다.",
     STORE_VERSION_UNSUPPORTED: "지원하지 않는 저장 파일 버전입니다.",
     FORBIDDEN_SENDER: "허용되지 않은 요청입니다.",

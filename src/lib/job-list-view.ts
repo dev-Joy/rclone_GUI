@@ -9,6 +9,7 @@
 // ========== Internal imports ==========
 import { shortenPath } from "@/lib/path-display";
 import { formatLocalDateTime } from "@/shared/format";
+import { scheduleText } from "@/shared/schedule";
 import type { typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
 
@@ -18,9 +19,9 @@ export const STATUS_LABEL: Record<typRunStatus, string> = {
     success: "성공",
     partial: "일부 실패",
     failed: "실패",
-    canceled: "취소됨",
+    canceled: "중지됨",
     blocked: "차단됨",
-    noop: "변경 없음",
+    noop: "바꿀 것 없음",
     interrupted: "중단됨",
 };
 
@@ -38,13 +39,13 @@ export interface itfJobListItem {
 }
 
 /**
- * 자동 실행 요약. 꺼져 있으면 null, 켜져 있으면 "60분마다 · 다음 11-02 10:30".
- * Phase 5의 매일·요일 스케줄이 이 함수를 넓힌다.
+ * 자동 실행 요약. 꺼져 있으면 null, 켜져 있으면 "30분마다 · 다음 11-02 10:30",
+ * "매일 09:00 · 다음 …", "매주 월·수 09:00 · 다음 …".
  */
 export function scheduleSummary(job: Pick<typJob, "autoSync">): string | null {
     const a = job.autoSync;
     if (!a.enabled) return null;
-    const every = `${a.intervalMinutes}분마다`;
+    const every = scheduleText(a);
     const next = formatLocalDateTime(a.nextRunAt);
     return next === "-" ? every : `${every} · 다음 ${next.slice(5, 16)}`;
 }

@@ -86,6 +86,14 @@
             }
         }
 
+        /* 간격 숫자+단위, 요일 체크박스처럼 한 줄에 놓는 묶음 */
+        .inline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 12px;
+        }
+
         .configChoice {
             display: flex;
             flex-direction: column;

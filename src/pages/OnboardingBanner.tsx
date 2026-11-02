@@ -18,7 +18,7 @@ const PROBLEM_TITLE: Partial<Record<typErrorCode, string>> = {
     RCLONE_NOT_FOUND: "rclone을 찾지 못해 비교·동기화를 할 수 없습니다.",
     RCLONE_NOT_EXECUTABLE: "rclone을 실행하지 못해 비교·동기화를 할 수 없습니다.",
     RCLONE_VERSION_UNSUPPORTED: "이 rclone 버전으로는 비교·동기화를 할 수 없습니다.",
-    CONFIG_NOT_FOUND: "지정한 rclone.conf가 없어 remote 경로를 쓸 수 없습니다.",
+    CONFIG_NOT_FOUND: "지정한 rclone.conf가 없어 리모트 경로를 쓸 수 없습니다.",
 };
 
 export default function OnboardingBanner() {

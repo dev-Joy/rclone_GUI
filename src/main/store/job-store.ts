@@ -4,7 +4,7 @@
  * - 사용자 수정(create/update)은 rev +1, updatedAt 갱신, 경로 안전 규칙(S1~S4a) 검사.
  * - 실행 기록·스케줄 같은 관리 필드(lastRun, autoSync.nextRunAt/lastAutoRunAt)는
  *   setBookkeeping으로만 바꾸고 rev/updatedAt을 건드리지 않는다(비교 계획 토큰 보호).
- *   단, 자동 실행을 켜고 끄거나 주기를 바꾸면 nextRunAt을 다시 정한다(nextRunAfterEdit, MVP_SPEC §10.2).
+ *   단, 자동 실행을 켜고 끄거나 스케줄(종류·주기·시각·요일)을 바꾸면 nextRunAt을 다시 정한다(nextRunAfterEdit, MVP_SPEC §10.2).
  * - 목록은 메모리 캐시로 동기 조회한다. 쓰기는 행 단위 SQL이고, 커밋에 성공한 뒤에만
  *   캐시를 바꾸고 onChange를 부른다. 읽을 수 없는 행은 건너뛰되 지우지 않는다.
  * - 공용 제외 패턴 연결(excludePatternIds)은 job_exclude_patterns가 원본이다(INT-002 T-03).
@@ -105,6 +105,9 @@ function f_DraftOf(job: typJob): typJobDraft {
             enabled: job.autoSync.enabled,
             intervalMinutes: job.autoSync.intervalMinutes,
             allowDeletes: job.autoSync.allowDeletes,
+            kind: job.autoSync.kind,
+            timeOfDay: job.autoSync.timeOfDay,
+            weekdays: job.autoSync.weekdays,
         },
     };
 }

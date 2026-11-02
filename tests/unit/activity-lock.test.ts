@@ -44,7 +44,7 @@ describe("clsActivityLock", () => {
 });
 
 describe("clsActivityLock 탐색 락 (INT-002 T-02)", () => {
-    it("탐색은 한 번에 하나만, 같은 remote라도 겹치면 BUSY", () => {
+    it("탐색은 한 번에 하나만, 같은 리모트라도 겹치면 BUSY", () => {
         const lock = new clsActivityLock();
         expect(lock.browseRemotes()).toBeNull();
         const release = lock.beginBrowse(["gdrive"]);
@@ -65,13 +65,13 @@ describe("clsActivityLock 탐색 락 (INT-002 T-02)", () => {
         expect(lock.browseRemotes()).toBeNull();
     });
 
-    it("assertNoBrowse: 같은 remote(대소문자 무시)만 BUSY, 다른 remote는 통과", () => {
+    it("assertNoBrowse: 같은 remote(대소문자 무시)만 BUSY, 다른 리모트는 통과", () => {
         const lock = new clsActivityLock();
         const release = lock.beginBrowse(["GDrive"]);
         expect(() => lock.assertNoBrowse(["gdrive"])).toThrow(
             expect.objectContaining({
                 code: "BUSY",
-                message: "‘GDrive:’ remote를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.",
+                message: "‘GDrive:’ 리모트를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.",
             }),
         );
         expect(() => lock.assertNoBrowse(["s3"])).not.toThrow();

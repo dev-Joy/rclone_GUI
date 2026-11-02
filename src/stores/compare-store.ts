@@ -108,7 +108,7 @@ export const useCompareStore = create<itfCompareState>((set, get) => ({
             return;
         }
         if (isCurrent) set({ result: null, error: r.error });
-        if (r.error.code === "CANCELED") toast("info", "비교를 취소했습니다.");
+        if (r.error.code === "CANCELED") toast("info", "비교를 중지했습니다.");
         else toast("error", r.error.message);
     },
     cancel: async () => {

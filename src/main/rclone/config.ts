@@ -146,18 +146,18 @@ export async function listRemotes(
         throw e;
     }
     if (r.timedOut) {
-        throw new clsAppError("RCLONE_FAILED", "remote 목록 조회가 시간 안에 끝나지 않았습니다.");
+        throw new clsAppError("RCLONE_FAILED", "리모트 목록 조회가 시간 안에 끝나지 않았습니다.");
     }
     if (r.exitCode !== 0) {
         const hint = hintForRcloneError(r.stderrTail, null);
         throw new clsAppError(
             "RCLONE_FAILED",
-            `remote 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
+            `리모트 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
             summarizeStderr(r.stderrTail),
         );
     }
     if (r.stdoutTruncated) {
-        throw new clsAppError("RCLONE_FAILED", "remote 목록이 너무 커서 읽지 못했습니다.");
+        throw new clsAppError("RCLONE_FAILED", "리모트 목록이 너무 커서 읽지 못했습니다.");
     }
     return parseListRemotes(r.stdout);
 }
@@ -182,18 +182,18 @@ export async function listRemotesLong(
         throw e;
     }
     if (r.timedOut) {
-        throw new clsAppError("RCLONE_FAILED", "remote 목록 조회가 시간 안에 끝나지 않았습니다.");
+        throw new clsAppError("RCLONE_FAILED", "리모트 목록 조회가 시간 안에 끝나지 않았습니다.");
     }
     if (r.exitCode !== 0) {
         const hint = hintForRcloneError(r.stderrTail, null);
         throw new clsAppError(
             "RCLONE_FAILED",
-            `remote 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
+            `리모트 목록을 읽지 못했습니다(exit ${r.exitCode}).${hint ? ` ${hint}` : ""}`,
             summarizeStderr(r.stderrTail),
         );
     }
     if (r.stdoutTruncated) {
-        throw new clsAppError("RCLONE_FAILED", "remote 목록이 너무 커서 읽지 못했습니다.");
+        throw new clsAppError("RCLONE_FAILED", "리모트 목록이 너무 커서 읽지 못했습니다.");
     }
     return parseListRemotesLong(r.stdout);
 }

@@ -6,6 +6,8 @@
  * - 종료(창 닫기·트레이 종료·before-quit)는 한 흐름(f_RequestQuit)을 쓴다: 실행 중이면 확인 창 →
  *   취소 후 최대 10초 대기 → 안 끝나면 다시 묻는다. 비교(자동 실행의 비교 단계 포함)만 진행 중이면 묻지 않고 취소.
  *   로그오프·PC 종료(session-end)는 묻지 않고 취소한다.
+ *   트레이 ‘종료’에서만, 실행 중이 아니고 자동 실행 예약이 있으면 "다음 예약" 경고를 먼저 띄운다(INT-002 T-06).
+ *   창 X·before-quit은 경고하지 않는다(설치 스모크·drive-app이 대화상자에서 멈추지 않도록).
  * - `--hidden`(로그인 시 시작)이면 창을 보이지 않고 트레이로 시작한다. 로그인 항목은 설치본에서만 바꾼다.
  * - 저장소(SQLite, INT-002 T-01)는 창을 띄우기 전에 한 번 연다(무결성 검사·복구·마이그레이션·JSON 이전·일일 백업).
  *   will-quit에서 닫는다. 열지 못하면 오류 창을 보이고 끝낸다.
@@ -57,7 +59,9 @@ import { clsSettingsStore } from "@/main/store/settings-store";
 import type { clsSqliteDb } from "@/main/store/sqlite-db";
 import { createTray, type itfAppTray } from "@/main/tray";
 import { createMainWindow, isAppUrl } from "@/main/window";
+import { formatLocalDateTime } from "@/shared/format";
 import { IPC_EVENTS, type itfAppNotice } from "@/shared/ipc-contract";
+import { quitScheduleWarning } from "@/shared/schedule";
 import type { typSettings } from "@/shared/schemas/settings";
 import type { itfAppNotify, itfSchedulerState } from "@/shared/types/scheduler";
 
@@ -210,7 +214,7 @@ function f_OpenWindow(hidden: boolean): void {
             }
             return;
         }
-        f_RequestQuit();
+        f_RequestQuit("window");
     });
     // 로그오프·PC 종료: 묻지 않고 진행 중인 작업을 취소한다
     win.on("session-end", () => f_SessionEnd());
@@ -236,43 +240,69 @@ function f_FinalQuit(): void {
     app.quit();
 }
 
-async function f_AskQuit(kind: "running" | "stuck", jobName: string): Promise<"quit" | "keep"> {
+type typQuitSource = "tray" | "window" | "app";
+
+/**
+ * 종료 확인 창. running·stuck의 text는 작업 이름, schedule의 text는 경고 문구(detail은 scheduleDetail).
+ */
+async function f_AskQuit(
+    kind: "running" | "stuck" | "schedule",
+    text: string,
+    scheduleDetail = "",
+): Promise<"quit" | "keep"> {
     const dev = f_DevQuitChoice();
     if (dev) return dev;
-    const opts: MessageBoxOptions =
-        kind === "running"
-            ? {
-                  type: "warning",
-                  title: "rcloneGUI 종료",
-                  message: `‘${jobName}’ 작업을 실행하는 중입니다.`,
-                  detail: "종료하면 실행을 취소합니다. 이미 복사·삭제된 파일은 되돌리지 않습니다.",
-                  buttons: ["실행 중인 작업을 취소하고 종료", "앱 유지"],
-                  defaultId: 1,
-                  cancelId: 1,
-                  noLink: true,
-              }
-            : {
-                  type: "warning",
-                  title: "rcloneGUI 종료",
-                  message: `실행이 ${QUIT_WAIT_MS / 1000}초 안에 끝나지 않았습니다.`,
-                  detail: "그래도 종료하면 남은 rclone 프로세스는 다음에 앱을 시작할 때 정리합니다.",
-                  buttons: ["그래도 종료(다음 시작 때 정리)", "앱 유지"],
-                  defaultId: 1,
-                  cancelId: 1,
-                  noLink: true,
-              };
+    const base = {
+        type: "warning",
+        title: "rcloneGUI 종료",
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true,
+    } as const;
+    let opts: MessageBoxOptions;
+    if (kind === "running") {
+        opts = {
+            ...base,
+            message: `‘${text}’ 작업을 실행하는 중입니다.`,
+            detail: "종료하면 실행을 중지합니다. 이미 복사·삭제된 파일은 되돌리지 않습니다.",
+            buttons: ["실행 중인 작업을 중지하고 종료", "앱 유지"],
+        };
+    } else if (kind === "stuck") {
+        opts = {
+            ...base,
+            message: `실행이 ${QUIT_WAIT_MS / 1000}초 안에 끝나지 않았습니다.`,
+            detail: "그래도 종료하면 남은 rclone 프로세스는 다음에 앱을 시작할 때 정리합니다.",
+            buttons: ["그래도 종료(다음 시작 때 정리)", "앱 유지"],
+        };
+    } else {
+        opts = {
+            ...base,
+            message: text,
+            detail: scheduleDetail,
+            buttons: ["종료(자동 실행 멈춤)", "앱 유지"],
+        };
+    }
     const w = f_VisibleWindow();
     const r = w ? await dialog.showMessageBox(w, opts) : await dialog.showMessageBox(opts);
     return r.response === 0 ? "quit" : "keep";
 }
 
 /** 종료 흐름(창 닫기·트레이 종료·before-quit 공통) */
-async function f_QuitFlow(): Promise<void> {
+async function f_QuitFlow(source: typQuitSource): Promise<void> {
     if (!svc) {
         f_FinalQuit();
         return;
     }
-    const { compare, runs } = svc;
+    const { compare, runs, scheduler } = svc;
+    // 트레이 종료: 실행 중이 아니면 다음 예약을 알린다(실행 중이면 아래 확인 창 하나만)
+    if (source === "tray" && !runs.getActive()) {
+        const state = scheduler.getState();
+        const warn = quitScheduleWarning(state.paused, state.next, formatLocalDateTime);
+        if (warn && (await f_AskQuit("schedule", warn.message, warn.detail)) === "keep") {
+            logger.info("종료 취소(앱 유지): 자동 실행 예약 있음");
+            return;
+        }
+    }
     const cmp = compare.getActive();
     if (cmp) compare.cancel(cmp.jobId);
     const run = runs.getActive();
@@ -293,14 +323,14 @@ async function f_QuitFlow(): Promise<void> {
     f_FinalQuit();
 }
 
-function f_RequestQuit(): void {
+function f_RequestQuit(source: typQuitSource = "app"): void {
     if (allowQuit) {
         app.quit();
         return;
     }
     if (quitPending) return;
     quitPending = true;
-    f_QuitFlow()
+    f_QuitFlow(source)
         .catch((e: unknown) => logger.error("종료 처리 실패", e))
         .finally(() => {
             quitPending = false;
@@ -550,7 +580,7 @@ async function f_Start(): Promise<void> {
                         logger.warn("일시정지 변경 실패", e);
                     });
                 },
-                onQuit: f_RequestQuit,
+                onQuit: () => f_RequestQuit("tray"),
             });
         } catch (e) {
             logger.error("트레이 아이콘을 만들지 못함", e);

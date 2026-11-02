@@ -51,7 +51,7 @@ export class clsActivityLock {
         if (this.browsing.size > 0) {
             throw new clsAppError(
                 "BUSY",
-                "다른 remote를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.",
+                "다른 리모트를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.",
             );
         }
         for (const [key, name] of names) this.browsing.set(key, name);
@@ -72,7 +72,7 @@ export class clsActivityLock {
             if (name === undefined) continue;
             throw new clsAppError(
                 "BUSY",
-                `‘${name}:’ remote를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.`,
+                `‘${name}:’ 리모트를 탐색하는 중입니다. 탐색이 끝난 뒤 다시 시도하세요.`,
             );
         }
     }

@@ -425,7 +425,7 @@ try {
     f_Check(
         "window.rclonegui API",
         keys ===
-            "app,settings,jobs,excludes,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
+            "app,settings,jobs,excludes,remotes,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -437,7 +437,7 @@ try {
     f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
     const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy", scope: "files",
         excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null,
-        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false },
+        autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62 },
         options: { checkers: 8, transfers: 4, fastList: true, skipLinks: true, ignoreErrors: false,
             checkHashes: false, modtimeToleranceMs: 2000, preflightBeforeDestructive: true } } })`;
     const created = await a.evaluate(`window.rclonegui.jobs.create(${draft})`);
@@ -557,7 +557,11 @@ try {
                 `document.querySelector("nav [aria-current=true]")?.textContent.includes("UI 작업")`,
             )),
     );
-    const compareDisabled = await ui.disabled("비교");
+    // 버튼 "비교"와 단계 탭 "비교·미리보기" (INT-002 T-08)
+    const compareDisabled = [
+        ...(await ui.disabled("비교")),
+        ...(await ui.disabled("비교·미리보기")),
+    ];
     f_Check(
         "저장 후 비교(버튼·탭)·미리보기 활성, 복사 실행은 비교 전 비활성",
         compareDisabled.length === 2 &&
@@ -610,11 +614,11 @@ try {
         `[...document.querySelectorAll("#job-source-remote option")].map((o) => o.value + ":" + o.disabled)`,
     );
     f_Check(
-        "remote 목록: smoke-alias 선택 가능, x 비활성",
+        "리모트 목록: smoke-alias 선택 가능, x 비활성",
         remoteOptions.includes("smoke-alias:false") && remoteOptions.includes("x:true"),
         remoteOptions.join(","),
     );
-    f_Check("한 글자 remote 경고(편집기)", (await ui.text()).includes("드라이브 문자로 해석"));
+    f_Check("한 글자 리모트 경고(편집기)", (await ui.text()).includes("드라이브 문자로 해석"));
     await ui.fill("#job-source-remote", "smoke-alias");
     await f_Sleep(200);
     const sourceAfterPick = await ui.value("input[name=source]");
@@ -622,7 +626,7 @@ try {
         `document.querySelector("input[name=source]")?.closest(".zbcField")?.querySelector(".zbcBadge")?.textContent ?? ""`,
     );
     f_Check(
-        "remote 선택 → 입력값·배지",
+        "리모트 선택 → 입력값·배지",
         sourceAfterPick === "smoke-alias:" && badgeText === "remote",
         `${sourceAfterPick} / ${badgeText}`,
     );
@@ -632,7 +636,7 @@ try {
         (j) => j.name === "스모크",
     );
     f_Check(
-        "remote 루트 저장 차단",
+        "리모트 루트 저장 차단",
         (await ui.text()).includes("루트 전체는 지정할 수 없습니다") && smokeJob?.rev === 0,
     );
     await ui.click("되돌리기");
@@ -672,7 +676,7 @@ try {
     await ui.until(`document.querySelector("select[name=theme]")`);
     const settingsText = await ui.text();
     f_Check(
-        "설정 화면: rclone 설정 + 한 글자 remote 경고",
+        "설정 화면: rclone 설정 + 한 글자 리모트 경고",
         settingsText.includes("rclone 설정") && settingsText.includes("드라이브 문자로 해석"),
     );
     await ui.fill("select[name=theme]", "light");
@@ -1215,7 +1219,7 @@ try {
         mkdirSync(autoCopyDst);
         mkdirSync(autoSyncDst);
         writeFileSync(join(autoSyncDst, "extra.txt"), "extra");
-        const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false }`;
+        const autoOn = `autoSync: { enabled: true, intervalMinutes: 1, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62 }`;
         const autoCopy = await b.evaluate(
             `window.rclonegui.jobs.create({ ...${draft}, name: "자동 copy", source: ${js(smokeSrc)}, destination: ${js(autoCopyDst)}, ${autoOn} })`,
         );

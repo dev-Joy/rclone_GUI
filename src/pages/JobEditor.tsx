@@ -13,17 +13,30 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCCheckbox from "@/components/ZBCCheckbox";
 import ZBCField from "@/components/ZBCField";
 import ZBCInput from "@/components/ZBCInput";
+import ZBCSelect from "@/components/ZBCSelect";
 import ZBCTextarea from "@/components/ZBCTextarea";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import { numberText, toNumber } from "@/lib/form-utils";
-import { serverErrorToCheck, validateJobDraft, type itfJobFormCheck } from "@/lib/job-form";
+import {
+    convertIntervalUnit,
+    intervalDisplay,
+    intervalMinutesFrom,
+    intervalUnitOf,
+    serverErrorToCheck,
+    shouldShowLoginHint,
+    validateJobDraft,
+    type itfJobFormCheck,
+    type typIntervalUnit,
+} from "@/lib/job-form";
 import { formatLocalDateTime } from "@/shared/format";
+import { nextOccurrence } from "@/shared/schedule";
 import type { typRunMode } from "@/shared/schemas/common";
-import type { typSyncScope } from "@/shared/schemas/job";
+import type { typScheduleKind, typSyncScope } from "@/shared/schemas/job";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToastStore } from "@/stores/toast-store";
+import { useUiStore } from "@/stores/ui-store";
 import ExcludeLibraryPicker from "./ExcludeLibraryPicker";
 import ExcludesEditor from "./ExcludesEditor";
 import JobOptionsFields from "./JobOptionsFields";
@@ -57,6 +70,36 @@ const SCOPE_OPTIONS: ReadonlyArray<{ value: typSyncScope; label: string; descrip
 ];
 
 /** 화면 검증과 main 오류를 합친다 (main 오류가 먼저) */
+const AUTO_KIND_OPTIONS: ReadonlyArray<{ value: typScheduleKind; label: string }> = [
+    { value: "interval", label: "일정 간격마다" },
+    { value: "daily", label: "매일 정한 시각" },
+    { value: "weekly", label: "요일과 시각 지정" },
+];
+
+const INTERVAL_UNIT_OPTIONS = [
+    { value: "minute", label: "분" },
+    { value: "hour", label: "시간" },
+] as const;
+
+/** 요일 체크박스(월요일부터). bit는 Date.getDay() */
+const WEEKDAY_OPTIONS: ReadonlyArray<{ bit: number; label: string }> = [
+    { bit: 1, label: "월" },
+    { bit: 2, label: "화" },
+    { bit: 3, label: "수" },
+    { bit: 4, label: "목" },
+    { bit: 5, label: "금" },
+    { bit: 6, label: "토" },
+    { bit: 0, label: "일" },
+];
+
+const LOGIN_HINT =
+    "로그인할 때 rcloneGUI가 켜지지 않으면 PC를 다시 켠 뒤 자동 실행이 돌지 않습니다. 설정에서 ‘로그인 시 시작’을 켜세요.";
+
+/** 지금 시각(ms). 이벤트 핸들러에서만 부른다 */
+function f_NowMs(): number {
+    return Date.now();
+}
+
 function f_Merge(local: itfJobFormCheck, server: itfJobFormCheck | null): itfJobFormCheck {
     if (!server) return local;
     return {
@@ -84,17 +127,27 @@ export default function JobEditor() {
     const baseline = useJobEditorStore((s) => s.baseline);
     /** "이 작업만 다른 파일"을 골랐지만 아직 파일을 고르지 않은 상태 */
     const [wantOverride, setWantOverride] = useState(false);
+    /** 스케줄을 마지막으로 바꾼 시각(미리보기 기준). 바꾸기 전에는 미리보기를 보이지 않는다 */
+    const [previewAt, setPreviewAt] = useState<number | null>(null);
+    /** 자동 실행 간격 입력 단위(화면 상태, 저장은 항상 분) */
+    const [intervalUnit, setIntervalUnit] = useState<typIntervalUnit>(() =>
+        intervalUnitOf(baseline?.autoSync.intervalMinutes ?? 60),
+    );
     const [prevBaseline, setPrevBaseline] = useState(baseline);
     // 다른 작업을 열거나 저장하면(baseline 교체) 선택 상태를 저장값 기준으로 되돌린다
     if (baseline !== prevBaseline) {
         setPrevBaseline(baseline);
         setWantOverride(false);
+        setIntervalUnit(intervalUnitOf(baseline?.autoSync.intervalMinutes ?? 60));
+        setPreviewAt(null);
     }
     const job = useJobsStore((s) =>
         jobId === null ? null : (s.jobs.find((j) => j.id === jobId) ?? null),
     );
     const settings = useSettingsStore((s) => s.settings);
     const pushToast = useToastStore((s) => s.push);
+    const loginHintShown = useUiStore((s) => s.loginHintShown);
+    const markLoginHintShown = useUiStore((s) => s.markLoginHintShown);
 
     // ========== 내부 변수 (_V) ==========
     const caseInsensitive = settings?.compare.caseInsensitivePaths ?? true;
@@ -118,6 +171,17 @@ export default function JobEditor() {
     const canSave = !saving && (jobId === null || dirty || serverError !== null);
     const override = draft.configPathOverride;
     const otherConfig = override !== null || wantOverride;
+    const auto = draft.autoSync;
+    const launchAtLogin = settings?.ui.launchAtLogin ?? false;
+    const autoScheduleOk =
+        !check.fieldErrors["autoSync.intervalMinutes"] &&
+        !check.fieldErrors["autoSync.timeOfDay"] &&
+        !check.fieldErrors["autoSync.weekdays"];
+    // 미리보기는 스케줄을 바꾼 시각 기준으로 계산한다(렌더 중에는 지금 시각을 읽지 않는다)
+    const previewNext =
+        auto.enabled && autoScheduleOk && previewAt !== null
+            ? formatLocalDateTime(nextOccurrence(auto, new Date(previewAt)))
+            : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Name = (v: string) => setField("name", v);
@@ -130,8 +194,26 @@ export default function JobEditor() {
     const h_Excludes = (v: string[]) => setField("excludes", v);
     const h_ExcludeIds = (v: string[]) => setField("excludePatternIds", v);
     const h_Notes = (v: string) => setField("notes", v);
-    const h_AutoEnabled = (v: boolean) => setAutoSync({ enabled: v });
-    const h_AutoInterval = (t: string) => setAutoSync({ intervalMinutes: toNumber(t) });
+    /** 스케줄 값을 바꾸고 미리보기 기준 시각을 지금으로 */
+    const f_SetSchedule = (patch: Parameters<typeof setAutoSync>[0]) => {
+        setAutoSync(patch);
+        setPreviewAt(f_NowMs());
+    };
+    const h_AutoEnabled = (v: boolean) => f_SetSchedule({ enabled: v });
+    const h_AutoInterval = (t: string) =>
+        f_SetSchedule({ intervalMinutes: intervalMinutesFrom(toNumber(t), intervalUnit) });
+    const h_AutoIntervalUnit = (v: string) => {
+        const unit: typIntervalUnit = v === "hour" ? "hour" : "minute";
+        setIntervalUnit(unit);
+        f_SetSchedule({ intervalMinutes: convertIntervalUnit(auto.intervalMinutes, unit) });
+    };
+    const h_AutoKind = (e: ChangeEvent<HTMLInputElement>) =>
+        f_SetSchedule({ kind: e.target.value as typScheduleKind });
+    const h_AutoTime = (v: string) => f_SetSchedule({ timeOfDay: v });
+    const h_AutoWeekday = (bit: number, checked: boolean) =>
+        f_SetSchedule({
+            weekdays: checked ? auto.weekdays | (1 << bit) : auto.weekdays & ~(1 << bit),
+        });
     const h_AutoDeletes = (v: boolean) => setAutoSync({ allowDeletes: v });
 
     const f_PickConfig = async () => {
@@ -155,8 +237,15 @@ export default function JobEditor() {
     const h_PickConfig = () => void f_PickConfig();
 
     const h_Save = async () => {
+        const wasAuto = jobId !== null && (baseline?.autoSync.enabled ?? false);
+        const nowAuto = auto.enabled;
         const ok = await save(caseInsensitive);
-        if (ok) pushToast("success", "작업을 저장했습니다.");
+        if (!ok) return;
+        pushToast("success", "작업을 저장했습니다.");
+        if (shouldShowLoginHint({ wasAuto, nowAuto, launchAtLogin, shown: loginHintShown })) {
+            pushToast("info", LOGIN_HINT);
+            markLoginHintShown();
+        }
     };
     const h_SaveClick = () => void h_Save();
 
@@ -358,38 +447,120 @@ export default function JobEditor() {
                     <ZBCCheckbox
                         id="job-auto-enabled"
                         name="autoEnabled"
-                        checked={draft.autoSync.enabled}
+                        checked={auto.enabled}
                         onChange={h_AutoEnabled}
-                        label="주기적으로 자동 실행"
-                        description="앱이 켜져 있는 동안(트레이 포함) 주기마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
+                        label="예약에 따라 자동 실행"
+                        description="앱이 켜져 있는 동안(트레이 포함) 예약 시각마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
                     />
-                    <ZBCField
-                        label="실행 간격(분)"
-                        htmlFor="job-auto-interval"
-                        hint="1~10080 (최대 7일)"
-                        error={err("autoSync.intervalMinutes")}
-                    >
-                        <ZBCInput
-                            id="job-auto-interval"
-                            name="autoInterval"
-                            type="number"
-                            min={1}
-                            max={10080}
-                            step={1}
-                            value={numberText(draft.autoSync.intervalMinutes)}
-                            onChange={h_AutoInterval}
-                            invalid={Boolean(err("autoSync.intervalMinutes"))}
-                            describedBy="job-auto-interval-desc"
-                        />
-                    </ZBCField>
+                    {auto.enabled && !launchAtLogin && (
+                        <p className={styles.muted}>
+                            ‘로그인 시 시작’이 꺼져 있습니다. PC를 다시 켠 뒤 앱을 직접 열기 전에는
+                            자동 실행이 돌지 않습니다.
+                        </p>
+                    )}
+                    <fieldset className={styles.modes}>
+                        <legend className={styles.legend}>예약 방식</legend>
+                        {AUTO_KIND_OPTIONS.map((k) => (
+                            <label
+                                key={k.value}
+                                className={styles.mode}
+                                data-checked={auto.kind === k.value ? "" : undefined}
+                            >
+                                <input
+                                    type="radio"
+                                    name="autoKind"
+                                    value={k.value}
+                                    checked={auto.kind === k.value}
+                                    onChange={h_AutoKind}
+                                />
+                                <span>{k.label}</span>
+                            </label>
+                        ))}
+                    </fieldset>
+                    {auto.kind === "interval" && (
+                        <ZBCField
+                            label="실행 간격"
+                            htmlFor="job-auto-interval"
+                            hint="최대 7일(10080분·168시간)"
+                            error={err("autoSync.intervalMinutes")}
+                        >
+                            <div className={styles.inline}>
+                                <ZBCInput
+                                    id="job-auto-interval"
+                                    name="autoInterval"
+                                    type="number"
+                                    min={1}
+                                    max={intervalUnit === "hour" ? 168 : 10080}
+                                    step={1}
+                                    value={numberText(
+                                        intervalDisplay(auto.intervalMinutes, intervalUnit),
+                                    )}
+                                    onChange={h_AutoInterval}
+                                    invalid={Boolean(err("autoSync.intervalMinutes"))}
+                                    describedBy="job-auto-interval-desc"
+                                />
+                                <ZBCSelect
+                                    id="job-auto-interval-unit"
+                                    name="autoIntervalUnit"
+                                    value={intervalUnit}
+                                    options={INTERVAL_UNIT_OPTIONS}
+                                    onChange={h_AutoIntervalUnit}
+                                />
+                            </div>
+                        </ZBCField>
+                    )}
+                    {auto.kind === "weekly" && (
+                        <fieldset id="job-auto-weekdays" className={styles.modes}>
+                            <legend className={styles.legend}>요일</legend>
+                            <div className={styles.inline}>
+                                {WEEKDAY_OPTIONS.map((d) => (
+                                    <ZBCCheckbox
+                                        key={d.bit}
+                                        id={`job-auto-weekday-${d.bit}`}
+                                        name={`autoWeekday${d.bit}`}
+                                        checked={(auto.weekdays & (1 << d.bit)) !== 0}
+                                        onChange={(v) => h_AutoWeekday(d.bit, v)}
+                                        label={d.label}
+                                    />
+                                ))}
+                            </div>
+                            {err("autoSync.weekdays") && (
+                                <p className={styles.fieldError} role="alert">
+                                    {err("autoSync.weekdays")}
+                                </p>
+                            )}
+                        </fieldset>
+                    )}
+                    {auto.kind !== "interval" && (
+                        <ZBCField
+                            label="실행 시각"
+                            htmlFor="job-auto-time"
+                            hint="이 PC의 시각 기준"
+                            error={err("autoSync.timeOfDay")}
+                        >
+                            <ZBCInput
+                                id="job-auto-time"
+                                name="autoTime"
+                                type="time"
+                                value={auto.timeOfDay}
+                                onChange={h_AutoTime}
+                                invalid={Boolean(err("autoSync.timeOfDay"))}
+                            />
+                        </ZBCField>
+                    )}
                     <ZBCCheckbox
                         id="job-auto-deletes"
                         name="autoDeletes"
-                        checked={draft.autoSync.allowDeletes}
+                        checked={auto.allowDeletes}
                         onChange={h_AutoDeletes}
                         label="자동 실행 때 대상 파일 삭제 허용 (동기화 모드)"
                         description="삭제가 필요하면 이 옵션이 켜져 있고, 삭제 수가 설정의 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전 확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다."
                     />
+                    {previewNext !== null && (
+                        <p className={styles.muted} id="job-auto-preview">
+                            저장하면 다음 실행: {previewNext}
+                        </p>
+                    )}
                     <p className={styles.muted}>
                         다음 실행: {formatLocalDateTime(job?.autoSync.nextRunAt ?? null)} · 마지막
                         자동 실행: {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
