@@ -172,6 +172,13 @@
 - 검증: `pnpm run check`(unit 65파일 977), `format:check`, `test:int` 51(+7 skip), `test:e2e` 10, `build:win`, `smoke:installer` 통과
 - 설계와 다름: (1) 정리 후 남은 파일 확인과 조건 분기 단언은 lint(`no-standalone-expect`·`no-conditional-expect`) 때문에 throw·`toContainEqual`(허용 결과 목록)로 표현 (2) 건너뛸 때도 describe 본문이 수집되므로 GCS 임시 폴더는 beforeAll에서 만듦 (3) `electron-builder.yml` 주석은 바꾸지 않음
 
+[TASK_019] : (2026-11-02) INT-003 Phase 1 — T-04 GCS 실측 중 S1-1 (관련 Intent: INT-003, T-04)
+- S1-1 probe: `scripts/probes/rclone-probes.mjs`에 `features` 묶음(로컬·`:memory:`·alias로 감싼 로컬·없는 remote의 `backend features`), fixture `tests/fixtures/rclone/features-*` 12개, rclone-notes #27
+- S1-1 GCS: `gcs-acceptance.test.ts`에 `f_CanHaveEmptyDirs`(값만 반환, 출력 원문은 버킷 이름 때문에 남기지 않음)와 케이스 "backend features: directory_markers 꺼짐·켜짐" 추가, 전체 범위 copy 출력에 CanHaveEmptyDirectories 함께 기록
+- S1-2 보류: GCS 테스트 환경 변수 3개가 없어 실측·CHANGELOG 기록 안 함(T-04 미체크). Phase 4(T-05)는 GCS 값을 보고 판정 방법을 확정해야 함(spec R-4)
+- 검증: `pnpm run check`(unit 977), `format:check`, `test:int` 51(+8 skip: GCS 7·기존 1) 통과
+- 설계와 다름: FR-2의 "같은 conf 안 두 번째 remote" 대신 연결 문자열(`<remote>,directory_markers=true:<bucket>`)로 비교 — 테스트 conf를 바꿀 필요 없음
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

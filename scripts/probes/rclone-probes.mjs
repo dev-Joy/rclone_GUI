@@ -7,7 +7,7 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
- *       묶음 이름(copy-cancel-large, excl, scope)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       묶음 이름(copy-cancel-large, excl, scope, features)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -533,6 +533,27 @@ try {
         f_MakeScopeDest(false);
         f_Run("scope-sync-all-dirsonly-maxdelete0", "sync", [cesd, "--max-delete", "0"]);
         f_After("dirsonly-maxdelete0");
+    }
+    // INT-003 T-04: backend features의 CanHaveEmptyDirectories(로컬·메모리·alias로 감싼 로컬·없는 remote)
+    if (f_Selected("features")) {
+        const g = "features";
+        const fDir = join(work, "features-local");
+        mkdirSync(fDir, { recursive: true });
+        const f_Features = (name, target) => {
+            const r = f_Probe(name, ["backend", "features", ask, ...common, target], g);
+            if (!r) return;
+            let value = "해석 실패";
+            try {
+                value = String(JSON.parse(r.stdout).Features.CanHaveEmptyDirectories);
+            } catch {
+                // 실패 출력은 fixture로만 남긴다
+            }
+            console.log(`  CanHaveEmptyDirectories: ${value}`);
+        };
+        f_Features("features-local", fDir);
+        f_Features("features-memory", ":memory:");
+        f_Features("features-alias-local", `:alias,remote='${fDir}':`);
+        f_Features("features-missing-remote", "rclonegui-probe-missing:");
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

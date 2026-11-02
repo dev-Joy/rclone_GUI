@@ -6,6 +6,7 @@
  * 셋 중 하나라도 없으면 이유를 출력하고 건너뛴다. 접두사·conf 위치가 틀리면 rclone을 부르기 전에 실패한다.
  * 실행마다 버킷 아래 고유 경로(rclonegui-it-<시각>-<난수>)만 쓰고 끝나면 지운다. 버킷 루트는 지우지 않는다.
  * 출력·테스트 이름에는 remote·버킷·conf 경로를 남기지 않는다(<GCS>로 쓴다).
+ * INT-003 T-04: `backend features`의 CanHaveEmptyDirectories를 directory_markers 꺼짐(기본)·켜짐(연결 문자열)으로 비교해 출력한다.
  *
  * @author dev-Joy 2026-11-02
  */
@@ -163,6 +164,20 @@ function f_RemoteDirs(conf: string, path: string): string[] {
     return (JSON.parse(r.stdout) as Array<{ Path: string }>).map((i) => i.Path).toSorted();
 }
 
+/** `backend features`의 CanHaveEmptyDirectories. 출력에 버킷 이름이 들어가므로 값만 돌려준다 */
+function f_CanHaveEmptyDirs(conf: string, target: string): boolean {
+    const r = spawnSync(
+        RCLONE,
+        ["backend", "features", "--ask-password=false", "--config", conf, target],
+        { shell: false, windowsHide: true, encoding: "utf8" },
+    );
+    if (r.status !== 0) throw new Error(`backend features 실패(exit ${r.status})`);
+    const v: unknown = (JSON.parse(r.stdout) as { Features?: Record<string, unknown> }).Features
+        ?.CanHaveEmptyDirectories;
+    if (typeof v !== "boolean") throw new Error("CanHaveEmptyDirectories 값이 없습니다");
+    return v;
+}
+
 /** 로컬 폴더 아래 파일 목록(상대 경로·크기, 정렬) — 원격 목록과 비교용 */
 function f_LocalFiles(files: Record<string, string>): string[] {
     return Object.entries(files)
@@ -234,6 +249,19 @@ describe.skipIf(TARGET.kind === "skip" || !HAS_RCLONE)("GCS 수용 (<GCS>)", () 
         } finally {
             if (local) rmSync(local, { recursive: true, force: true });
         }
+    });
+
+    it("backend features: directory_markers 꺼짐·켜짐의 CanHaveEmptyDirectories를 기록한다", () => {
+        const plain = f_CanHaveEmptyDirs(conf, `${ok!.remote}:${ok!.bucket}`);
+        const markers = f_CanHaveEmptyDirs(
+            conf,
+            `${ok!.remote},directory_markers=true:${ok!.bucket}`,
+        );
+        console.info(
+            `[test:int] GCS backend features CanHaveEmptyDirectories: 기본 ${plain}, directory_markers=true ${markers}`,
+        );
+        expect(typeof plain).toBe("boolean");
+        expect(typeof markers).toBe("boolean");
     });
 
     /** 시나리오 하나의 로컬 원본·userData 폴더와 원격 대상 */
@@ -405,8 +433,9 @@ describe.skipIf(TARGET.kind === "skip" || !HAS_RCLONE)("GCS 수용 (<GCS>)", () 
             expect(f_RemoteFiles(conf, c.dst)).toEqual(["a.txt:5"]);
             const dirs = f_RemoteDirs(conf, c.dst);
             const again = await env.compare.run(env.job.id);
+            const canEmpty = f_CanHaveEmptyDirs(conf, `${ok!.remote}:${ok!.bucket}`);
             console.info(
-                `[test:int] GCS 빈 폴더: 원격 폴더 ${dirs.length}개, 다시 비교 createDirs ${again.summary.createDirs}개`,
+                `[test:int] GCS 빈 폴더: 원격 폴더 ${dirs.length}개, 다시 비교 createDirs ${again.summary.createDirs}개, CanHaveEmptyDirectories ${canEmpty}`,
             );
             // directory_markers 꺼짐(기본): 폴더가 생기지 않고 차이가 남는다. 켜짐: 폴더가 생기고 차이가 없다
             expect([

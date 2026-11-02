@@ -157,3 +157,10 @@
 - 명령: 위 `sync --create-empty-src-dirs --dry-run`(파일 삭제 없음, fixture `scope-sync-all-dirsonly-dryrun`)
 - 결과: 새로 만들 폴더의 줄은 `objectType:"string"`이고 size가 없지만, 양쪽에 있는 폴더(`both-empty`, `keep`)의 줄은 `objectType:"*local.Directory"`, `size:0`이다. #6의 "폴더 줄에는 size가 없다"가 이 옵션에서는 맞지 않는다.
 - 영향: 로그 파서가 `set directory modification time`을 파일 수정시간(`touch`)과 다른 종류(`dirTime`)로 나눈다. 나누지 않으면 사전 확인이 폴더를 "시간만 맞춤 파일"로 세어 전체 범위 sync가 매번 PLAN_DRIFT로 막힌다.
+
+## 2026-11-02 · rclone v1.75.1 · Windows 11 x64 (INT-003 T-04: backend features)
+
+### 27. `backend features`의 `Features.CanHaveEmptyDirectories` — 로컬 true, 메모리 false, alias는 감싼 대상 값
+- 명령: `backend features --ask-password=false --config <빈 conf> <대상>` — 대상: 로컬 임시 폴더, `:memory:`, `:alias,remote='<로컬 임시 폴더>':`, conf에 없는 remote (fixture `features-local`·`features-memory`·`features-alias-local`·`features-missing-remote`)
+- 결과: 로컬 `true`(exit 0), `:memory:` `false`(`Name: ":memory"`, `Root: ""`), alias는 `Name: "local"`로 감싼 로컬의 기능을 그대로 보여 `true`. 없는 remote는 stdout 없이 stderr `NOTICE: Failed to backend: didn't find section in config file (...)`, exit 1. 출력 `Root`·`String`에 대상 경로가 들어간다.
+- 영향: T-05(FR-30)는 stdout JSON의 `Features.CanHaveEmptyDirectories`만 읽고, 실패(0이 아닌 exit·해석 실패)는 null로 둔다. alias·union은 결과를 그대로 믿는다(spec E-13). `:memory:`를 "빈 폴더를 만들 수 없는 대상"의 로컬 대용으로 테스트에 쓸 수 있다. 출력에 경로·버킷 이름이 있으므로 로그·이력에 원문을 남기지 않는다. GCS 값(`directory_markers` 꺼짐·켜짐)은 GCS 수용 테스트로 확인한다(키 제공 후).

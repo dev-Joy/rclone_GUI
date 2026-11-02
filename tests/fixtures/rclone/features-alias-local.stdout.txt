@@ -1,0 +1,122 @@
+{
+	"Name": "local",
+	"Root": "<TMP>/features-local",
+	"String": "Local file system at <TMP>/features-local",
+	"Precision": 100,
+	"Hashes": [
+		"md5",
+		"sha1",
+		"whirlpool",
+		"crc32",
+		"sha256",
+		"sha512",
+		"blake3",
+		"xxh3",
+		"xxh128",
+		"dropbox",
+		"hidrive",
+		"mailru",
+		"quickxor"
+	],
+	"Features": {
+		"About": true,
+		"BucketBased": false,
+		"BucketBasedRootOK": false,
+		"CanHaveEmptyDirectories": true,
+		"CaseInsensitive": true,
+		"ChangeNotify": false,
+		"ChunkWriterDoesntSeek": false,
+		"CleanUp": false,
+		"Command": true,
+		"Copy": false,
+		"DirCacheFlush": false,
+		"DirModTimeUpdatesOnWrite": true,
+		"DirMove": true,
+		"DirSetModTime": true,
+		"Disconnect": false,
+		"DoubleSlash": false,
+		"DuplicateFiles": false,
+		"FilterAware": true,
+		"GetTier": false,
+		"IsLocal": true,
+		"ListP": false,
+		"ListR": false,
+		"MergeDirs": false,
+		"MkdirMetadata": true,
+		"Move": true,
+		"NoMultiThreading": false,
+		"OpenChunkWriter": false,
+		"OpenWriterAt": true,
+		"Overlay": false,
+		"PartialUploads": true,
+		"PublicLink": false,
+		"Purge": false,
+		"PutStream": true,
+		"PutUnchecked": false,
+		"ReadDirMetadata": true,
+		"ReadMetadata": true,
+		"ReadMimeType": false,
+		"ServerSideAcrossConfigs": false,
+		"SetTier": false,
+		"SetWrapper": false,
+		"Shutdown": false,
+		"SlowHash": true,
+		"SlowModTime": false,
+		"UnWrap": false,
+		"UserDirMetadata": false,
+		"UserInfo": false,
+		"UserMetadata": false,
+		"WrapFs": false,
+		"WriteDirMetadata": true,
+		"WriteDirSetModTime": true,
+		"WriteMetadata": true,
+		"WriteMimeType": false
+	},
+	"MetadataInfo": {
+		"System": {
+			"atime": {
+				"Help": "Time of last access",
+				"Type": "RFC 3339",
+				"Example": "2006-01-02T15:04:05.999999999Z07:00",
+				"ReadOnly": false
+			},
+			"btime": {
+				"Help": "Time of file birth (creation)",
+				"Type": "RFC 3339",
+				"Example": "2006-01-02T15:04:05.999999999Z07:00",
+				"ReadOnly": false
+			},
+			"gid": {
+				"Help": "Group ID of owner",
+				"Type": "decimal number",
+				"Example": "500",
+				"ReadOnly": false
+			},
+			"mode": {
+				"Help": "File type and mode",
+				"Type": "octal, unix style",
+				"Example": "0100664",
+				"ReadOnly": false
+			},
+			"mtime": {
+				"Help": "Time of last modification",
+				"Type": "RFC 3339",
+				"Example": "2006-01-02T15:04:05.999999999Z07:00",
+				"ReadOnly": false
+			},
+			"rdev": {
+				"Help": "Device ID (if special file)",
+				"Type": "hexadecimal",
+				"Example": "1abc",
+				"ReadOnly": false
+			},
+			"uid": {
+				"Help": "User ID of owner",
+				"Type": "decimal number",
+				"Example": "500",
+				"ReadOnly": false
+			}
+		},
+		"Help": "Depending on which OS is in use the local backend may return only some\nof the system metadata. Setting system metadata is supported on all\nOSes but setting user metadata is only supported on linux, freebsd,\nnetbsd, macOS and Solaris. It is **not** supported on Windows yet\n([see pkg/attrs#47](https://github.com/pkg/xattr/issues/47)).\n\nUser metadata is stored as extended attributes (which may not be\nsupported by all file systems) under the \"user.*\" prefix.\n\nMetadata is supported on files and directories.\n\nWhen restoring metadata with `--metadata` rclone applies the\n\"mode\", \"uid\" and \"gid\" from the source. These come from the source\nremote which may not be trusted, so restoring metadata as root from an\nuntrusted source can change file ownership and is not recommended. The\nsetuid, setgid and sticky bits are not restored by default - see the\n`--local-metadata-restore-special-bits` flag.\n"
+	}
+}
