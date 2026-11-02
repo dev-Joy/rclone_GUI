@@ -2,7 +2,7 @@
 
 - Intent: [INT-003](intent.md) | Tier: 3 | 작성일: 2026-11-02
 
-> spec: [spec.md](spec.md). 진행 순서는 intent를 따른다: T-04 → T-01 → T-03 → T-05.
+> spec: [spec.md](spec.md). 진행 순서는 intent를 따른다: T-01 → T-03 → T-05 → T-08 (T-04는 T-08로 대체).
 > Phase마다 검증을 통과하면 커밋한다(한 커밋에 한 가지 변경).
 
 ## 1. Tier 산정
@@ -16,7 +16,7 @@
 
 ## 2. 실행 순서 (Steps)
 
-### Phase 1 — T-04 GCS 실측 (선행: 테스트 버킷·키 제공)
+### Phase 1 — T-04 GCS 실측 (선행: 테스트 버킷·키 제공) — S1-1 완료, S1-2 취소(T-08로 대체, 2026-11-02)
 
 **S1-1 `backend features`·빈 폴더 probe**
 - 목표: `CanHaveEmptyDirectories` 값과 `directory_markers` 반영 여부, `전체` 범위 후 `createDirs` 잔존을 기록한다.
@@ -119,14 +119,42 @@
 **S4-3 문서**
 - 변경: MVP_SPEC "구현 반영 (INT-003 Phase 4)" 표(MVP_SPEC에는 E-6이 없다 — INT-002 spec E-6 해소를 이 표에 적는다, 결정 D-1), CHANGELOG, rclone-notes(필요 시).
 
+### Phase 6 — T-08 Google Drive 수용 테스트 (T-04 대체)
+
+**S6-0 문서(intent)**
+- 목표: T-04 취소·T-08 추가, spec FR-37~41·AC-20~21·R-4 갱신·R-7·R-8, INDEX 재작성, INT-003을 `active/`로 이동.
+- 변경: `intent.md`·`spec.md`·`plan.md`, `docs/intent/INDEX.md`, `docs/specs/MVP_SPEC.md`(intent 경로).
+- 검증: INDEX가 폴더 스캔과 같음, `[ ]`/`[-]` 형식, T-08 번호 중복 없음.
+
+**S6-1 도우미**
+- 목표: 외부 remote 수용 테스트 공용 도우미(실행별 경로 생성·정리 가드·원격 목록·backend features·계획 실행).
+- 변경: `tests/integration/remote-acceptance.ts`(신규). `gcs-acceptance.test.ts`는 바꾸지 않는다.
+- 검증: `pnpm run typecheck`·lint.
+
+**S6-2 Drive 테스트**
+- 목표: FR-37~FR-40, AC-21.
+- 변경: `tests/integration/drive-acceptance.test.ts`(신규, 대상 검사 describe + 수용 describe 9개 시나리오).
+- 검증: `pnpm run check`, `pnpm run format:check`, 환경 변수 없이 `pnpm run test:int` → 대상 검사 통과·Drive skip 이유 출력·GCS skip 그대로. 새 파일에 실제 remote 이름이 없는지 grep.
+
+**S6-3 AGENTS.md**
+- 변경: 2장 명령(Drive 환경 변수), 3장 구조(새 파일), 4.8 Drive 예외.
+- 검증: 문서에 실제 remote 이름이 없는지 grep.
+
+**S6-4 실측·기록**
+- 목표: AC-20, FR-41.
+- 변경: 실행 명령에서만 `RCLONEGUI_TEST_DRIVE_REMOTE`를 주고 `drive-acceptance.test.ts` 실행, `docs/knowhow/rclone-notes.md`·`docs/CHANGELOG.md`·`docs/works/` 기록(remote 이름·경로 미기재), intent T-08 완료·INDEX 재작성.
+- 검증: Drive 수용 describe skip 0 통과, 실행 폴더 정리 확인. 기대값 불일치(예: Move false)는 실측 결과이므로 설계로 회귀해 기대값·앱 영향을 다시 판단한다.
+- 롤백: 문서만.
+
 ## 3. Intent 태스크 매핑
 
 | plan 단계 | intent 태스크 | 비고 |
 | :--- | :--- | :--- |
-| S1-1, S1-2 | T-04 | 키가 없으면 S1-2 보류 |
+| S1-1, S1-2 | T-04 | S1-1 완료, S1-2 취소(T-08로 대체) |
 | S2-1 ~ S2-7 | T-01 | |
 | S3-1 ~ S3-4 | T-03 | |
 | S4-1 ~ S4-3 | T-05 | S1-1 결과 필요 |
+| S6-0 ~ S6-4 | T-08 | Google Drive 수용 테스트 |
 | (없음) | T-02·T-06·T-07 | 취소(intent 결정 2026-11-02) |
 
 ## 4. 검증 계획 (DoD)
@@ -134,7 +162,7 @@
 Tier 3 기준(AGENTS.md 6장):
 - [ ] `pnpm run check` 통과(typecheck + oxlint + eslint + 단위)
 - [ ] `pnpm run format:check` 통과
-- [ ] 빌더·파서·안전 로직 변경에 단위 테스트 추가, `pnpm run test:int` 통과(GCS는 환경 변수 있을 때 skip 0)
+- [ ] 빌더·파서·안전 로직 변경에 단위 테스트 추가, `pnpm run test:int` 통과(GCS는 환경 변수 있을 때 skip 0, Drive는 RCLONEGUI_TEST_DRIVE_REMOTE 있을 때 skip 0·없을 때 skip)
 - [ ] 화면·패키징 변경에 `pnpm run test:e2e` 통과(콘솔 오류 0), `pnpm run build:win` 성공
 - [ ] `pnpm run smoke:installer`로 OS 예약 등록·`--run-job` 실행·제거 정리 확인
 - [ ] 차단 목록 테스트(`tests/unit/command-builder.test.ts`)에서 백업 없는 sync `--ignore-errors`가 여전히 차단됨
@@ -154,6 +182,8 @@ Tier 3 기준(AGENTS.md 6장):
 | 의존성 | 없음. `electronFuses`는 electron-builder 26.18.0 기본 기능(`@electron/fuses`는 기존 전이 의존성) | — |
 | 백업 폴더 삭제 수 | `--backup-dir`이 dry-run 문구를 바꾸면 사전 확인 삭제 수가 0이나 과다로 읽혀 게이트가 늘 막거나 잘못 판단한다(spec FR-35) | S3-1 probe·fixture를 먼저 하고 파서 테스트로 고정 |
 | 헤드리스 수명 | 대기열·재시도·제한 시간 때문에 헤드리스가 오래 살 수 있다 | 최대 대기 60분·제한 시간 12시간·`ExecutionTimeLimit=PT13H` 백스톱, 가짜 시계 단위 테스트 |
+| R-7 Drive 토큰 갱신 (T-08) | Drive OAuth 토큰이 갱신되면 rclone이 기본 conf에 새 토큰을 기록한다. 같은 conf를 쓰는 다른 rclone과 경합 | 실측 중 rcloneGUI·다른 rclone을 같은 conf로 돌리지 않는다. 토큰 만료면 `rclone config reconnect` |
+| R-8 Drive 휴지통 (T-08) | 삭제·정리가 휴지통으로 가서 실행마다 약 3MB가 쌓인다(30일 뒤 자동 삭제) | 기록만. Drive 기본(휴지통) 정리 유지 |
 | 롤백 기준 | Phase 검증 실패가 3회 피드백 루프 안에 해결되지 않으면 그 Phase 커밋 전 상태로 두고 보고 | — |
 
 ## 6. 실행 흐름

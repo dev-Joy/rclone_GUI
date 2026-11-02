@@ -1,9 +1,9 @@
 # Spec: OS 예약·헤드리스 실행·sync 오류 무시/백업 폴더·GCS 실측 후속
 
-- Intent: [INT-003](intent.md) | Status: planned | 작성일: 2026-11-02
+- Intent: [INT-003](intent.md) | Status: active | 작성일: 2026-11-02
 
 > 이 spec은 intent를 구현할 수 있는 수준으로 풀어 쓴 문서다. 내용이 서로 다르면 intent가 우선한다.
-> 심볼과 경로는 커밋 `928f9b4` 기준이다. 범위는 남은 태스크 T-01·T-03·T-04·T-05다. T-02·T-06·T-07은 취소했다(intent "결정 (2026-11-02)").
+> 심볼과 경로는 커밋 `928f9b4` 기준이다. 범위는 남은 태스크 T-01·T-03·T-05·T-08이다. T-02·T-06·T-07·T-04(T-08로 대체)는 취소했다(intent "결정 (2026-11-02)").
 
 ## 1. 개요
 
@@ -11,16 +11,18 @@
 | :--- | :--- | :--- |
 | 예약 실행 | 앱 안 스케줄러(`clsScheduler`, 20초 tick)만 있다. 앱을 끄면 예약이 돌지 않는다 | 작업마다 **앱 안** 또는 **Windows 작업 스케줄러**를 고른다. OS 예약은 `rcloneGUI.exe --run-job <id>`로 창 없이 실행되고, 같은 자동 실행 게이트(`startAuto`)를 거쳐 이력에 남는다 |
 | sync + 오류 무시 | `checkPlanSafety`가 sync + `ignoreErrors`를 항상 막는다(`SYNC_IGNORE_ERRORS_TEXT`). 백업 폴더 필드가 없다 | 작업에 백업 폴더를 지정할 수 있다. 실행마다 `<백업폴더>/YYYY-MM-DD_HHmmss/`로 `--backup-dir`을 주고, 백업 폴더가 있으면 sync + 오류 무시를 수동·자동 실행 모두에서 허용한다. 백업 없는 오류 무시는 계속 막는다 |
-| GCS 수용 | `tests/integration/gcs-acceptance.test.ts`는 있지만 키가 없어 skip | 전용 버킷으로 skip 없이 통과시키고 결과를 기록한다 |
+| GCS 수용 | `tests/integration/gcs-acceptance.test.ts`는 있지만 키가 없어 skip | 전용 버킷으로 skip 없이 통과시키고 결과를 기록한다 (취소 → Drive 수용 테스트로 대체, T-08) |
+| Drive 수용 | 없음 | `RCLONEGUI_TEST_DRIVE_REMOTE`를 줄 때만 실제 Drive에서 copy·sync·삭제·중지·빈 폴더·백업 폴더를 확인하고 결과를 기록한다 |
 | 빈 폴더 없는 저장소 | `전체` 범위면 버킷형 remote에 `createDirs` 차이가 매번 남을 것으로 예상(MVP_SPEC E-6) | `rclone backend features`의 `CanHaveEmptyDirectories`로 판정해, false면 편집기에서 경고하고 비교 화면에서 빈 폴더 차이를 따로 표시한다. 자동 실행은 이 차이만으로 실행하지 않는다 |
 
 ## 2. 범위 (In-scope / Out-of-scope)
 
 ### 2.1 In-scope
-- T-04 GCS 수용 테스트 실측과 `CanHaveEmptyDirectories` 확인(probe)
+- T-04 GCS 수용 테스트 실측과 `CanHaveEmptyDirectories` 확인(probe) — 취소(2026-11-02, T-08로 대체)
 - T-01 Windows 작업 스케줄러 등록·해제·정리, 헤드리스 `--run-job`, second-instance 전달, 설치 제거 시 정리, Electron fuses
 - T-03 작업 옵션 백업 폴더(`--backup-dir`), 위치 검사, 실행별 하위 폴더, 계획 토큰·게이트 변경
 - T-05 빈 폴더를 만들 수 없는 대상 판정·편집기 경고·비교 화면 구분 표시·자동 실행 판정 보정
+- T-08 Google Drive 수용 테스트
 
 ### 2.2 Out-of-scope
 - 백업 없는 sync `--ignore-errors`(T-02 취소). 안전 규칙 3과 `BLOCKED_FLAGS`는 바꾸지 않는다.
@@ -52,12 +54,14 @@
 | `scripts/dev/installer-smoke.mjs` | 설치·실행·제거, `--login-item` | `--run-job` 실행·종료 코드·이력 기록, 제거 시 예약 작업 삭제 확인 |
 | `scripts/probes/rclone-probes.mjs` | rclone 동작 실험 | `backend features`·`--backup-dir` probe 추가 |
 | `tests/integration/gcs-acceptance.test.ts` | 6개 수용 테스트, 환경 변수 없으면 skip | 실측 실행. `CanHaveEmptyDirectories` 확인 추가 |
+| 새 파일 `tests/integration/drive-acceptance.test.ts` | 없음 | Google Drive 수용 테스트(T-08). `RCLONEGUI_TEST_DRIVE_REMOTE`가 없으면 skip |
+| 새 파일 `tests/integration/remote-acceptance.ts` | 없음 | 외부 remote 수용 테스트 도우미(실행별 경로 생성·정리 가드·원격 목록·backend features·계획 실행). Drive 테스트만 쓴다 |
 | DB(`src/main/store/db-schema.ts`) | 작업 전체는 `jobs.data` JSON(`job-store.ts:73`). `schedules` 테이블(V1 `:71`)은 만들어져 있지만 main 코드에서 쓰지 않는다 | 새 필드는 `jobs.data` JSON에 넣는다. **DDL 마이그레이션 없음** |
-| 문서 | AGENTS.md 안전 규칙 2·3, MVP_SPEC, README, CHANGELOG, rclone-notes | 규칙 2에 OS 예약 경로 한 줄, MVP_SPEC 금지 목록·FR-28·E-6 반영, README에 OS 예약·제거 동작 |
+| 문서 | AGENTS.md 안전 규칙 2·3, MVP_SPEC, README, CHANGELOG, rclone-notes | 규칙 2에 OS 예약 경로 한 줄, MVP_SPEC 금지 목록·FR-28·E-6 반영, README에 OS 예약·제거 동작, AGENTS 4.8에 Drive 수용 테스트 예외(T-08) |
 
 ## 4. 기능 요구사항 (FR-n)
 
-### 4.1 T-04 GCS 실측
+### 4.1 T-04 GCS 실측 (취소 2026-11-02 — T-08로 대체)
 - **FR-1** 세 환경 변수(`RCLONEGUI_TEST_GCS_CONFIG`·`_REMOTE`·`_BUCKET`)를 주고 `pnpm run test:int`를 돌리면 `gcs-acceptance.test.ts`가 skip 없이 모두 통과한다.
 - **FR-2** probe가 GCS 대상의 `rclone backend features <remote>:` 결과에서 `CanHaveEmptyDirectories`를 기록한다. `directory_markers`를 켠 테스트 remote와 끈 remote 두 경우를 비교한다(두 번째 remote는 같은 버킷, 테스트 conf 안에서만).
 - **FR-3** `전체` 범위로 copy·sync한 뒤 다시 비교했을 때 `createDirs`가 남는지 기록한다.
@@ -100,6 +104,13 @@
 - **FR-31** 비교 결과에 `destCanHaveEmptyDirs: boolean | null`을 싣는다. false이고 `createDirs > 0`이면 비교 화면 요약에서 빈 폴더 생성 수를 일반 변경과 분리해 "이 저장소는 빈 폴더를 만들 수 없음(N개)"으로 보이고, 변경 목록에서도 같은 표시를 단다. (구현 2026-11-02, 결정 D-2: 폴더 변화는 표에 행이 없으므로 `폴더:` 줄에서 생성 수를 빼고 안내 줄을 따로 두는 것으로 목록 표시를 대신한다)
 - **FR-32** 편집기에서 범위 `전체` + 대상 remote의 값이 false이면 경고한다(저장은 막지 않는다). 값은 편집기에서 대상 remote를 고를 때 조회한다.
 - **FR-33** 자동 실행(앱·OS 예약)의 "바꿀 것 없음(noop)" 판정에서, 대상이 false면 `createDirs`를 변경으로 세지 않는다. 그래야 빈 폴더 차이만으로 매번 rclone을 돌리지 않는다. (구현 2026-11-02, 결정 D-5: 화면의 실행 버튼 판정도 같은 함수로 "바꿀 것 없음"을 보인다. main 수동 게이트·삭제 판정은 그대로)
+
+### 4.5 T-08 Google Drive 수용 테스트
+- **FR-37** `RCLONEGUI_TEST_DRIVE_REMOTE`가 없으면 이유를 출력하고 skip, 있으면 `drive-acceptance.test.ts`가 skip 없이 통과한다. `RCLONEGUI_TEST_DRIVE_CONFIG`는 선택(절대 경로·저장소 밖·존재), 없으면 `rclone config file`의 경로.
+- **FR-38** rclone 쓰기 전에 `listremotes --long`으로 type `drive`를 확인하고, 아니면 실패한다. 테스트 폴더가 이미 있으면 실패한다.
+- **FR-39** 쓰기는 `<remote>:rclonegui-test-it/rclonegui-it-<14자리 시각>-<8자리 16진수>/` 아래만, 정리는 그 정규식과 정확히 맞는 경로만 `purge`한다.
+- **FR-40** `backend features`의 허용 목록 값과 휴지통 동작을 기록한다(휴지통은 단언하지 않음).
+- **FR-41** 결과는 rclone-notes(9장 형식)·CHANGELOG에 남기고 remote 이름·폴더 경로·conf 경로/내용은 쓰지 않는다.
 
 ## 5. 비기능 요구사항 (NFR-n)
 - **NFR-1** 안전 규칙: `schtasks`·`powershell`도 `execFile` + `shell:false` + 고정 인자 배열. 사용자 입력(작업 이름·경로)은 예약 이름·인자에 들어가지 않는다. 경로는 XML 본문(exe 경로)에만 들어가고 이스케이프한다.
@@ -165,7 +176,7 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - 응답은 기존 `{ ok, data } | { ok: false, error }` envelope.
 
 ### 6.4 외부 형식 (확인 필요)
-- `rclone backend features remote:` 출력 JSON의 `Features.CanHaveEmptyDirectories`(T-04 probe로 확정).
+- `rclone backend features remote:` 출력 JSON의 `Features.CanHaveEmptyDirectories`(로컬 probe로 확정, rclone-notes 27).
 - 작업 스케줄러 XML 스키마 `http://schemas.microsoft.com/windows/2004/02/mit/task`. 등록 파일은 UTF-16 LE BOM으로 쓴다(결정). `/Query /XML` stdout 인코딩은 T-01 probe로 기록한다.
 - `--backup-dir` 사용 시 dry-run·실제 실행 JSON 로그의 `skipped`·`msg` 문구(T-03 probe로 확정, FR-35).
 
@@ -188,7 +199,7 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **E-16** 두 OS 예약이 같은 시각에 실행됨 → 두 번째는 FR-14로 넘겨져 대기열에서 첫 실행이 끝나기를 기다린 뒤 실행된다(FR-16).
 
 ## 8. 수용 기준 (AC-n)
-- **AC-1** Given GCS 테스트 환경 변수 3개, When `pnpm run test:int`, Then GCS 수용 테스트가 skip 없이 통과하고 rclone-notes에 `CanHaveEmptyDirectories` 결과가 기록된다.
+- **AC-1** Given GCS 테스트 환경 변수 3개, When `pnpm run test:int`, Then GCS 수용 테스트가 skip 없이 통과하고 rclone-notes에 `CanHaveEmptyDirectories` 결과가 기록된다. (취소 — AC-20으로 대체)
 - **AC-2** Given 설치본, When 작업을 OS 예약(5분 간격)으로 저장, Then `schtasks /Query /TN \rcloneGUI\<jobId> /XML` 결과에 jobId·`--run-job`·`StartWhenAvailable=true`·배터리 조건 false·`IgnoreNew`가 있다.
 - **AC-3** Given OS 예약 작업, When 앱을 완전히 끈 상태에서 예약이 실행, Then 창 없이 실행되고 이력에 trigger `os-scheduler`인 기록이 남고 프로세스가 끝난다.
 - **AC-4** Given 앱이 켜져 있음, When OS 예약이 실행, Then 두 번째 프로세스는 바로 끝나고 기존 앱에서 실행되어 이력이 남는다.
@@ -207,6 +218,8 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **AC-17** Given 백업 폴더가 대상과 다른 로컬 드라이브, When 저장, Then 저장이 거부되고 이유가 필드에 보인다.
 - **AC-18** Given Move를 지원하지 않는(또는 조회에 실패한) remote 대상 + 백업 폴더, When 실행(수동·자동), Then rclone 전송 없이 SAFETY_BLOCKED(자동은 `blocked` 이력).
 - **AC-19** Given 같은 작업을 1초 안에 두 번 실행, Then 두 실행의 백업 하위 폴더가 다르다.
+- **AC-20** Given `RCLONEGUI_TEST_DRIVE_REMOTE`(drive remote), When `drive-acceptance.test.ts` 실행, Then 9개 시나리오가 통과(CanHaveEmptyDirectories·Move true, 백업 폴더 sync success)하고 실행 폴더가 지워지며 rclone-notes에 features·휴지통 결과가 기록된다.
+- **AC-21** Given 환경 변수 없음, When `pnpm run test:int`, Then Drive에 접근하지 않고 skip 이유가 출력된다.
 
 ## 9. 가정과 리스크
 - **A-1** (확인 2026-11-02) electron-builder 26.18.0은 `electronFuses` 설정을 지원한다(`app-builder-lib/out/configuration.d.ts:260` `electronFuses?: FuseOptionsV1`). `@electron/fuses@1.8.0`은 app-builder-lib의 기존 의존성이라 새 의존성·THIRD_PARTY_NOTICES 추가가 없다. FR-21은 `electron-builder.yml`의 `electronFuses`로 한다.
@@ -214,9 +227,11 @@ buildBackupSubdir(now: Date, jobId: string): string   // 순수, "YYYY-MM-DD_HHm
 - **R-1** 헤드리스 모드가 `f_Start`의 순서(DB → 복구 → 서비스 → 창)를 갈라야 해서 `index.ts` 변경이 크다. 창·트레이·스케줄러 생성을 함수로 분리해 GUI 전환(FR-15)에서 재사용한다.
 - **R-2** fuses의 `OnlyLoadAppFromAsar`·asar 무결성 검사가 설치본 실행을 막을 수 있다 → `smoke:installer`로 확인하고, 문제가 있으면 해당 fuse만 끈다.
 - **R-3** 작업 스케줄러 그룹 정책·회사 PC에서 등록이 막힐 수 있다 → FR-6 오류 표시, 앱 안 예약으로 되돌릴 수 있다.
-- **R-4** `CanHaveEmptyDirectories`가 `directory_markers`를 반영하지 않으면 FR-30 판정이 틀린다 → T-04 결과에 따라 판정 방법을 다시 정한다(T-05는 T-04 뒤). **GCS 실측 대기**(2026-11-02, 키 없음 — `CanHaveEmptyDirectories`를 그대로 믿고 실패는 null. 키가 생기면 `gcs-acceptance.test.ts`의 AC-13 케이스가 판정을 검증한다)
+- **R-4** `CanHaveEmptyDirectories`가 `directory_markers`를 반영하지 않으면 FR-30 판정이 틀린다 → T-04 결과에 따라 판정 방법을 다시 정한다(T-05는 T-04 뒤). **GCS 실측 대기**(2026-11-02, 키 없음 — `CanHaveEmptyDirectories`를 그대로 믿고 실패는 null. 키가 생기면 `gcs-acceptance.test.ts`의 AC-13 케이스가 판정을 검증한다) → (2026-11-02) T-04 취소: GCS 실측은 Drive로 대체했고 Drive에는 directory_markers가 없어 R-4는 미검증으로 남긴다. 현행 판정(CanHaveEmptyDirectories 그대로 신뢰, 조회 실패는 null) 유지. 판정이 틀려도 안전 영향은 없다 — false 오판이면 빈 폴더만 안 만들고 자동 실행이 빈 폴더 차이로 돌지 않으며, true 오판이면 빈 폴더 차이가 매번 남아 자동 실행이 빈 실행을 한다(삭제 게이트 무관). GCS 키가 생기면 gcs-acceptance.test.ts의 T-04 케이스로 검증한다.
 - **R-5** (해소) 여러 작업이 같은 백업 폴더를 써도 하위 폴더 이름에 jobId 앞 8자가 들어가 겹치지 않는다(FR-25).
 - **R-6** 백업 폴더가 계속 커진다(자동 정리 없음) → 안내 문구로 알린다.
+- **R-7** (T-08) Drive OAuth 토큰이 갱신되면 rclone이 기본 conf에 새 토큰을 기록한다. 다른 rclone 프로세스가 같은 conf를 동시에 쓰면 경합 → 실측 중 rcloneGUI·다른 rclone을 같은 conf로 돌리지 않는다. 토큰 만료면 사용자가 `rclone config reconnect`로 복구한다.
+- **R-8** (T-08) 삭제·정리가 Drive 휴지통으로 가서 실행마다 약 3MB가 쌓인다(30일 뒤 자동 삭제) → 기록만 한다. 정리는 Drive 기본(휴지통)을 쓴다(2026-11-02 결정).
 
 ## 10. 미해결 질문 (Open questions)
 
