@@ -164,6 +164,14 @@
 - 설계와 다름: (1) 미리보기 시각은 렌더 중 Date를 읽지 않도록 스케줄을 바꾼 시각(previewAt) 기준이고, 바꾸기 전에는 미리보기 문구를 숨김 (2) 단계 묶음은 role=group 대신 `<fieldset>`(jsx-a11y) (3) drive-app API 목록 실패(Phase 3에서 remotes 추가 후 남아 있던 것)도 함께 수정 (4) 종료 확인 문구도 "중지"로 통일 (5) 리모트 용어를 main 서비스·저장소 오류 문구까지 적용
 - 남은 것: 트레이 ‘종료’ 경고 창은 E2E에 트레이가 없고 drive-app도 트레이 메뉴를 누를 수 없어 수동 확인 필요(`pnpm run dev` → 자동 작업 1개 → 트레이 ‘종료’). `COMPONENTS.md` 갱신 권고
 
+[TASK_018] : (2026-11-02) INT-002 Phase 6 — T-10 GCS 수용 → T-11 배포 → T-12 문서 (관련 Intent: INT-002, T-10·T-11·T-12)
+- 6.0 예약 보정: `schedule.ts` `NEAR_SLOT_SKIP_MS`(60분)·`nextAfterFinish(finishedAt, spec, succeeded)` — daily·weekly가 성공(noop 포함)으로 끝나면 1시간 안의 정시를 건너뜀(놓친 예약을 08:59에 실행하면 09:00 중복 실행 방지), 실패·차단·중지는 바로 다음 정시. `scheduler.ts` `onFinished` 연결. 단위 `schedule.test.ts`·`scheduler.test.ts` 추가
+- 6.1 GCS: `run-harness.ts` `waitFinished(runId, timeoutMs)`, 신규 `tests/integration/gcs-acceptance.test.ts` — 환경 변수 `RCLONEGUI_TEST_GCS_CONFIG`·`_REMOTE`·`_BUCKET`, 대상 검사(skip/reject/ok, 항상 실행), copy·sync 갱신·삭제·중지·전체 범위 copy/sync 시나리오, 고유 경로 정규식 확인 후 purge. 이번 실행은 키가 없어 GCS 시나리오 6건 skip(실측·rclone-notes 기록 없음, T-10 미체크)
+- 6.2 배포: `dist/*.exe`는 `rcloneGUI-Setup-0.1.0.exe` 하나(portable 없음), `smoke:installer` 14건·설치본 drive-app 91건 통과(기존 설치 없음)
+- 6.3 문서: README(배포 형태, 첫 실행, 리모트 북마크, 단계 탭·중지, 동기화 범위, 공용 제외 패턴, 자동 실행 예약·놓친 예약·종료 경고, 목록에서 실행, exclude-files, drive-app 명령, E2E 목록, 구조, 5.6 GCS 수용 테스트, 문제 해결, 알려진 제한), AGENTS(test:int 환경 변수, 구조, 4.8 통합·수용 테스트, node:sqlite 경계), MVP_SPEC "구현 반영 (INT-002)" 표·헤더, CHANGELOG(경로 1024→4096 정정, 2줄 추가), spec AC-15 판정 기준·E-6 실측 대기, intent T-03·T-09·T-11·T-12 체크
+- 검증: `pnpm run check`(unit 65파일 977), `format:check`, `test:int` 51(+7 skip), `test:e2e` 10, `build:win`, `smoke:installer` 통과
+- 설계와 다름: (1) 정리 후 남은 파일 확인과 조건 분기 단언은 lint(`no-standalone-expect`·`no-conditional-expect`) 때문에 throw·`toContainEqual`(허용 결과 목록)로 표현 (2) 건너뛸 때도 describe 본문이 수집되므로 GCS 임시 폴더는 beforeAll에서 만듦 (3) `electron-builder.yml` 주석은 바꾸지 않음
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

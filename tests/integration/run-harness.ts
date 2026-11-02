@@ -186,8 +186,9 @@ export async function makeEnv(o: itfEnvOptions) {
     /** 실행이 끝날 때까지 기다리고 finished 이벤트를 돌려준다 */
     const waitFinished = async (
         runId: string,
+        timeoutMs = 60_000,
     ): Promise<{ record: typRunRecord; dryRunSummary: itfDryRunSummary | null }> => {
-        expect(await runs.whenIdle(60_000)).toBe(true);
+        expect(await runs.whenIdle(timeoutMs)).toBe(true);
         const fin = events.filter((e) => e.type === "finished" && e.runId === runId);
         expect(fin).toHaveLength(1);
         const e = fin[0]!;

@@ -50,6 +50,8 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱입니다. 
 - 코드 서명이 없어 **Windows SmartScreen 경고**가 뜰 수 있습니다. 배포처(이 저장소)를 확인한 뒤
   “추가 정보 → 실행”을 선택하세요.
 - 제거해도 `%APPDATA%\rcloneGUI`의 작업·설정·이력·로그는 지우지 않습니다.
+- 배포 형태는 NSIS 설치본 하나입니다. 실행 파일 위치가 바뀌면 로그인 시 시작·예약 경로가 깨지므로
+  portable exe는 만들지 않습니다.
 
 ---
 
@@ -59,7 +61,8 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱입니다. 
 2. rclone을 못 찾거나 버전이 낮으면 배너에서 `rclone.exe 직접 지정` 또는 `rclone 다시 찾기`를 씁니다.
 3. rclone.conf가 없으면 로컬·UNC 경로만 쓸 수 있다는 안내가 뜹니다. remote를 쓰려면
    `rclone.conf 파일 고르기`로 지정하거나 설정 화면에서 경로를 바꿉니다.
-4. 왼쪽 `새 작업`을 눌러 이름·모드·원본·대상·제외 규칙·옵션을 정하고 `저장`합니다.
+4. 왼쪽 `새 작업`을 눌러 이름·모드·동기화 범위·원본·대상·제외 패턴(공용 패턴 선택 + 이 작업에만 쓰는
+   패턴)·옵션·자동 실행 예약을 정하고 `저장`합니다.
 5. 상단 `비교`로 차이를 확인합니다. 파일은 아직 바뀌지 않습니다.
 6. 필요하면 `미리보기`(dry-run)로 rclone이 할 일을 확인한 뒤 `복사 실행` 또는 `동기화 실행`을
    누릅니다. 동기화에 삭제가 있으면 삭제 확인 창에서 체크해야 실행됩니다.
@@ -72,6 +75,11 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱입니다. 
 | WSL UNC | `\\wsl.localhost\Ubuntu\home\<사용자>\work` | WSL 도우미가 `/home/...`을 변환 |
 | WSL `/mnt` | `\\wsl.localhost\Ubuntu\mnt\d\Data` | `D:\Data`와 같은 폴더 |
 | rclone remote | `gdrive:백업/폴더` | `rclone.conf`와 remote 이름 필요 |
+
+remote를 자주 쓰면 설정 화면의 **리모트 북마크**에 rclone.conf의 remote 이름 + 기준 경로 + 별칭을
+저장해 두세요. `연결 테스트`로 폴더가 있는지 읽기만 해서 확인하고(rclone.conf는 고치지 않음), 작업
+편집기의 경로 입력에서 북마크를 고르거나 폴더를 한 단계씩 내려가며 고를 수 있습니다. 탐색·연결 테스트는
+한 번에 하나만 돌고, 같은 리모트를 비교·실행하는 중이면 막힙니다(`BUSY`).
 
 WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 목록은 `wsl.exe -l -q`로 읽고,
 `/mnt/<드라이브>` 경로는 Windows 드라이브 경로로도 안내합니다. WSL이 중지되어 있으면 UNC 접근이
@@ -88,6 +96,34 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
 
 두 모드 모두 원본은 바꾸지 않습니다. 실행 전에 반드시 비교하고, 동기화는 삭제 확인 절차를 거칩니다.
 
+작업 화면은 `비교·미리보기` → `실행` → `결과·이력` 순서의 탭으로 나뉩니다. 비교·미리보기·실행이
+진행 중일 때는 탭 위에 `비교 중지`·`미리보기 중지`·`복사 중지`·`동기화 중지` 버튼 하나만 나타납니다.
+
+### 동기화 범위
+
+| 범위 | 하는 일 |
+| :--- | :--- |
+| **파일만**(기본) | 파일만 비교·복사합니다. 원본의 빈 폴더는 만들지 않습니다 |
+| **전체(빈 폴더 포함)** | 원본의 빈 폴더도 대상에 만듭니다(`--create-empty-src-dirs`). 동기화하면 대상에만 있는 폴더도 지웁니다 |
+
+- 전체 범위의 비교 요약에 `빈 폴더 N개 생성, 폴더 M개 삭제`가 나옵니다. 지울 폴더가 있으면 삭제 확인 창에서
+  폴더 수를 함께 확인하고, 사전 확인에서 폴더 삭제 수도 맞춰 봅니다.
+- `--max-delete`는 rclone 동작상 파일 삭제만 셉니다. 폴더 삭제는 확인 창·계획 토큰·사전 확인으로 막으며,
+  rclone은 빈 폴더만 지웁니다.
+- 파일만 범위의 동기화도 rclone이 대상에만 있는 빈 폴더를 정리할 수 있습니다.
+- 범위를 바꾸면 다시 비교해야 실행할 수 있습니다.
+- GCS·S3 같은 버킷형 리모트는 폴더 개념이 없어 빈 폴더가 남지 않을 수 있습니다.
+
+### 공용 제외 패턴
+
+- 작업 편집기의 `공용 제외 패턴`에 패턴을 한 번만 저장하고 여러 작업이 체크해서 씁니다. 작업 전용 패턴은
+  `이 작업에만 쓰는 제외 패턴`에 씁니다.
+- 공용 패턴을 고치거나 지우면 그 패턴을 쓰는 작업(동기화·자동 실행 작업 강조)을 보여 주고 확인을 받은 뒤
+  모든 작업에 적용하며, 그 작업들의 비교 결과를 버립니다.
+- `#`·`;`로 시작하는 패턴은 공용에 둘 수 없습니다(rclone이 파일 안에서 주석으로 읽음).
+- 패턴이 64개를 넘거나 길면 rclone에 임시 파일(`--exclude-from`)로 넘깁니다.
+- 한 줄 512자, 작업 전용 100개, 공용과 작업 전용을 합쳐 500개까지입니다. 경로는 4096자까지입니다.
+
 ### 안전 동작
 
 - **실제 실행 전 비교 결과 필수**: 수동 실행은 같은 작업의 유효한 비교 결과(계획 토큰)와 확인한
@@ -100,11 +136,19 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
   많이 지우려 하면 실패(exit 7)로 끝납니다.
 - **차단되는 경우**: 원본이 비었거나, 파일·폴더 형식이 충돌하거나, 대소문자만 다른 경로가 겹치거나,
   원본·대상이 같거나 중첩된 경로, 동기화 + `--ignore-errors`는 실행하지 않습니다.
-- **취소·실패**: 이미 복사·삭제된 파일은 되돌리지 않습니다. 전송 중 취소·실패로 rclone 임시 파일
+- **중지·실패**: 이미 복사·삭제된 파일은 되돌리지 않습니다. 전송 중 중지·실패로 rclone 임시 파일
   (`이름.8자리16진수.partial`)이 대상에 남을 수 있으며, 비교 목록·이력에서 안내합니다.
-- **자동 실행**: 작업별로 주기 실행을 켤 수 있습니다. 삭제가 필요하면 `자동 실행 때 삭제 허용`,
-  `자동 실행 최대 삭제 수`(기본 50, 0이면 금지), 대량 삭제 아님, 사전 확인 켜짐을 모두 만족할 때만
-  실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알림·이력(`blocked`)을 남깁니다.
+- **자동 실행**: 작업별로 `일정 간격마다`(분·시간), `매일 정한 시각`, `요일과 시각 지정`(예: 매주 월·수
+  09:00) 예약을 켤 수 있습니다. 시각은 이 PC 기준이며 서머타임에도 하루 한 번 실행합니다. 삭제가 필요하면
+  `자동 실행 때 삭제 허용`, `자동 실행 최대 삭제 수`(기본 50, 0이면 금지, 폴더 삭제 포함), 대량 삭제 아님,
+  사전 확인 켜짐을 모두 만족할 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알림·이력(`blocked`)을
+  남깁니다.
+  - 앱이 켜져 있을 때만 돕니다(트레이 포함). 꺼져 있는 동안 놓친 예약은 시작·절전 재개 60초 뒤 한 번만
+    실행하고(몰아서 따라잡지 않음), 매일·요일 예약은 그 실행이 성공하면 1시간 안의 정시를 건너뜁니다.
+  - 트레이 `종료`를 누르면 다음 예약을 알려 주고 확인을 받습니다(창 X로 끝낼 때는 묻지 않음).
+  - 자동 실행을 처음 켤 때 `로그인 시 시작`이 꺼져 있으면 안내합니다.
+- **목록에서 실행**: 왼쪽 작업 목록에는 원본 → 대상, 예약 요약, 최근 실행, 상태 문구(설정에서 숨김 가능)가
+  보입니다. `지금 실행`도 비교 → 확인 창(삭제가 있으면 삭제 확인 창)을 거칩니다.
 
 > **주의**: sync는 파괴적입니다. 처음에는 임시 폴더나 테스트 remote로 확인한 뒤 실제 폴더에 쓰세요.
 > 실제 업무 데이터를 대상으로 한 자동 테스트는 이 저장소에서 실행하지 않습니다.
@@ -120,6 +164,7 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
 | 실행 로그 | `%APPDATA%\rcloneGUI\logs\run-*.log` |
 | 앱 로그 | `%APPDATA%\rcloneGUI\logs\app.log` |
 | 진행 중 실행 표시 | `%APPDATA%\rcloneGUI\active-run.json` (정상 종료 시 삭제) |
+| 제외 패턴 임시 파일 | `%APPDATA%\rcloneGUI\exclude-files\` (`--exclude-from`용, 실행 뒤·시작 시 정리) |
 
 - 작업·설정·이력은 SQLite 파일 하나에 트랜잭션으로 저장합니다. 시작할 때마다 무결성을 검사하고,
   손상되면 파일을 `rclonegui-store.sqlite.corrupt-<시각>`으로 옮긴 뒤 `db-backups\`의 가장 최근 정상 백업으로
@@ -132,7 +177,7 @@ WSL 도우미를 쓰려면 WSL이 설치되어 있어야 합니다. 배포판 �
 - 실행 로그는 기본 30일, 이력은 500건까지 보관하며 시작할 때와 하루에 한 번 정리합니다.
   설정 화면에서 이력을 비울 수 있습니다(로그 파일 삭제는 선택).
 - 창을 닫으면 기본적으로 트레이로 숨겨 자동 실행을 계속합니다. 완전히 끝내려면 트레이 메뉴의
-  `종료`를 쓰세요. 실행 중에 끝내면 취소 후 최대 10초 기다리고, 끝나지 않으면 다시 확인합니다.
+  `종료`를 쓰세요. 실행 중에 끝내면 중지 후 최대 10초 기다리고, 끝나지 않으면 다시 확인합니다.
 - 비정상 종료로 남은 rclone은 다음 시작 때 이미지 이름과 PID를 확인해 정리합니다. 확인하지 못하면
   PID를 안내합니다.
 
@@ -185,7 +230,7 @@ pnpm install
 | `pnpm start` | 빌드본 미리보기 |
 | `pnpm run check` | typecheck + lint(oxlint, ESLint 2규칙) + 단위 테스트 |
 | `pnpm run test` | 단위 테스트(Vitest) |
-| `pnpm run test:int` | 실제 rclone 통합 테스트(임시 폴더, rclone 없으면 skip) |
+| `pnpm run test:int` | 실제 rclone 통합 테스트(임시 폴더, rclone 없으면 skip). GCS 수용 테스트는 환경 변수가 있을 때만(5.6) |
 | `pnpm run test:e2e` | 빌드 + Playwright Electron E2E(Windows GUI 세션 필요) |
 | `pnpm run format` / `format:check` | oxfmt로 포맷 / 검사만 |
 | `pnpm run build:win` | NSIS x64 설치 파일을 `dist/`에 만든다 |
@@ -193,6 +238,7 @@ pnpm install
 | `pnpm run smoke:installer` | 설치본을 임시 폴더에 설치·실행·제거하고 데이터 보존을 확인 |
 | `node scripts/probes/rclone-probes.mjs` | rclone 동작 실측(임시 폴더만, fixture 갱신) |
 | `node scripts/dev/make-icon.mjs` | `build/icon.ico` 재생성(도형만 그림) |
+| `node scripts/dev/drive-app.mjs [--dev\|--exe <설치본>]` | 빌드본·개발 서버·설치본을 임시 userData로 띄워 조작 확인 |
 
 `pnpm run check`에는 포맷 검사가 포함되지 않습니다. 커밋 전에 `pnpm run format:check`도 실행하세요.
 oxlint는 correctness=error, suspicious=warn과 React 19·Hooks·a11y·Vitest 규칙을 쓰고, ESLint는
@@ -207,6 +253,11 @@ pnpm run test:e2e
 
 - `tests/e2e/smoke.spec.ts`: 창·preload API, 새 작업 저장, 재시작 후 유지
 - `tests/e2e/compare-copy.spec.ts`: 임시 폴더 비교 → 복사 확인 창 → 대상 파일 → 이력
+- `tests/e2e/excludes.spec.ts`: 공용 제외 패턴 추가·선택·수정 확인
+- `tests/e2e/job-list.spec.ts`: 작업 목록 표시, 목록에서 실행(삭제 확인 창), 전체 범위 빈 폴더 복사
+- `tests/e2e/migration.spec.ts`: 예전 JSON 저장소를 SQLite로 이전
+- `tests/e2e/remote-bookmarks.spec.ts`: 리모트 북마크 추가·연결 테스트, 편집기에서 폴더 탐색
+- `tests/e2e/schedule.spec.ts`: 요일·시각 예약 저장과 목록 요약
 - `RCLONEGUI_USER_DATA`를 임시 폴더로, `RCLONEGUI_E2E=1`로 트레이 없이 실행하며,
   `RCLONE_CONFIG`도 빈 임시 파일로 두어 실제 remote 설정을 읽지 않습니다.
 - 콘솔 오류 0건을 확인합니다. rclone이 없으면 비교·복사 테스트만 skip됩니다.
@@ -232,11 +283,13 @@ pnpm run smoke:installer -- --login-item
 - 실제 `%APPDATA%\rcloneGUI`는 존재 여부·수정 시각만 전후 비교
 
 이미 설치된 rcloneGUI가 있거나 실행 중이면 사용자 환경을 건드리지 않도록 중단합니다.
+`dist\`에는 설치본 exe 하나(`rcloneGUI-Setup-<버전>.exe`)만 만들고 portable exe는 만들지 않습니다.
+`.blockmap`·`latest.yml`·`builder-debug.yml`·`win-unpacked\`는 electron-builder 부산물입니다.
 
 ### 5.5 구조
 
 ```text
-src/main          rclone 실행·감지, 파서, 저장소, 서비스, IPC, 트레이
+src/main          rclone 실행·감지, 파서, 저장소(SQLite), 서비스(비교·실행·스케줄러·리모트·제외 패턴), IPC, 트레이
 src/preload       contextBridge API (window.rclonegui)
 src/renderer      화면 진입점
 src/components    공용 컴포넌트 ZBC*와 테마
@@ -249,10 +302,44 @@ tests/integration 실제 rclone(임시 폴더)
 tests/e2e         Playwright Electron
 scripts/probes    rclone 동작 실측
 scripts/dev       빌드본·설치본 확인 도구
+docs              specs(MVP_SPEC)·intent·knowhow(rclone-notes)·works·CHANGELOG
 ```
 
 `@/`는 어느 프로세스에서나 `src`를 가리킵니다. main·preload·shared·renderer 경계와 안전 규칙은
 [`AGENTS.md`](AGENTS.md)를 따릅니다.
+
+### 5.6 GCS 수용 테스트
+
+실제 GCS 버킷에 copy·sync·삭제·중지·빈 폴더를 확인하는 테스트입니다
+(`tests/integration/gcs-acceptance.test.ts`). 아래 환경 변수 3개가 모두 있을 때만 돌고, 없으면 이유를
+출력하고 건너뜁니다.
+
+1. 테스트 전용 버킷 `rclonegui-test-<이름>`을 만들고(균일 버킷 수준 액세스), 그 버킷에만
+   `Storage Object Admin` 권한이 있는 서비스 계정을 만듭니다. 버킷 수명 주기 규칙으로
+   `rclonegui-it-` 접두사 객체를 1일 뒤 지우게 해 두면 정리 실패에 대비할 수 있습니다.
+2. 저장소 **밖**에 테스트 전용 rclone.conf를 만듭니다(키 파일도 저장소 밖).
+
+   ```ini
+   [rclonegui-test-gcs]
+   type = google cloud storage
+   service_account_file = <저장소 밖 키 파일 경로>
+   bucket_policy_only = true
+   no_check_bucket = true
+   ```
+
+3. 환경 변수를 정하고 실행합니다.
+
+   ```powershell
+   $env:RCLONEGUI_TEST_GCS_CONFIG = "<저장소 밖 rclone.conf 절대 경로>"
+   $env:RCLONEGUI_TEST_GCS_REMOTE = "rclonegui-test-gcs"
+   $env:RCLONEGUI_TEST_GCS_BUCKET = "rclonegui-test-<이름>"
+   pnpm run test:int -- tests/integration/gcs-acceptance.test.ts
+   ```
+
+- remote·버킷 이름이 `rclonegui-test-`로 시작하지 않거나, conf가 저장소 안·기본 위치(`%APPDATA%\rclone\rclone.conf`)에
+  있으면 rclone을 부르기 전에 실패합니다.
+- 실행마다 버킷 아래 고유 경로(`rclonegui-it-<시각>-<난수>`)만 쓰고 끝나면 지웁니다. 버킷 루트는 지우지 않습니다.
+- 출력에는 remote·버킷 이름을 쓰지 않지만, 실패 시 오류 문구에 경로가 섞일 수 있으니 공유 전에 확인하세요.
 
 ---
 
@@ -264,12 +351,17 @@ scripts/dev       빌드본·설치본 확인 도구
 | `CONFIG_NOT_FOUND` | 설정 화면의 rclone.conf 경로가 실제 파일인지 확인. remote를 안 쓰면 비워도 됨 |
 | remote 목록이 비어 있음 | `rclone listremotes --config <파일>`로 확인. 한 글자 remote(`x:`)는 Windows 드라이브로 해석되어 선택 불가 |
 | WSL UNC 접근 실패 | WSL 배포판 실행 여부, `\\wsl.localhost\<배포판>\...` 이름, `/mnt/<드라이브>` 표기 확인 |
-| 비교가 오래 걸림 | 30분 제한이 있음. 해시 비교를 끄거나 제외 규칙·`fast-list`를 조정. 취소 가능 |
+| 비교가 오래 걸림 | 30분 제한이 있음. 해시 비교를 끄거나 제외 규칙·`fast-list`를 조정. 중지 가능 |
 | `PLAN_REQUIRED` / `PLAN_DRIFT` | 비교를 다시 실행. 대상이 바뀌었으면 차이를 확인한 뒤 재비교 |
+| `PLAN_STALE` | 비교 뒤 작업·공용 제외 패턴·동기화 범위가 바뀜. 다시 비교 |
+| `BUSY` | 탐색·연결 테스트는 한 번에 하나, 같은 리모트를 비교·실행 중이면 끝난 뒤 다시 시도 |
+| 연결 테스트·탐색이 암호화 설정 안내로 실패 | 암호화된 rclone.conf는 `RCLONE_CONFIG_PASS` 환경 변수가 있어야 함(앱은 비밀번호를 묻지 않음) |
+| 공용 패턴 저장이 거부됨 | `#`·`;`로 시작, 줄바꿈·제어 문자 포함, 이미 있는 패턴인지 확인 |
+| 경로·패턴 길이 오류 | 경로 4096자, 패턴 한 줄 512자, 합계 500개 한도 |
 | 삭제가 차단됨 | 원본 비었는지, 형식 충돌, 대소문자 충돌, `--ignore-errors` 여부 확인 |
 | SmartScreen 경고 | 코드 서명이 없음. 저장소에서 받은 파일인지 확인 후 “추가 정보 → 실행” |
 | 앱이 트레이에서 안 보임 | 알림 영역의 ↑(숨겨진 아이콘) 확인. 설정에서 `창을 닫으면 트레이로 숨기기`를 끌 수 있음 |
-| 실행이 안 끝남 | 실행 탭에서 취소. 앱을 다시 시작하면 `active-run.json`을 확인해 남은 rclone을 정리 |
+| 실행이 안 끝남 | 작업 화면의 중지 버튼(`복사 중지` 등). 앱을 다시 시작하면 `active-run.json`을 확인해 남은 rclone을 정리 |
 | 로그가 너무 큼 | 설정의 로그 보관 일수·이력 보관 수를 줄이고, 이력 비우기(로그 삭제 선택) |
 
 문제를 보고할 때는 앱 버전(`설정 → 앱 정보`), rclone `version` 출력, 재현 순서, `logs\app.log`의
@@ -281,11 +373,15 @@ scripts/dev       빌드본·설치본 확인 도구
 
 - Windows x64만 지원합니다(macOS/Linux 패키징 없음).
 - 코드 서명이 없습니다. 자동 업데이트·telemetry·계정 로그인은 없습니다.
-- 선택한 파일만 복사, 파일 감시(watcher), `rclone bisync`, 예약 실행 중 PC 절전 복구 세부 정책은
-  MVP 범위 밖입니다.
+- 선택한 파일만 복사, 파일 감시(watcher), `rclone bisync`는 범위 밖입니다.
+- Windows 작업 스케줄러·헤드리스 실행은 없습니다. 자동 실행은 앱이 켜져 있어야 돌고, cron 표현은
+  지원하지 않습니다.
 - 비교는 `rclone lsjson` 메타데이터 기반이며, 해시 비교는 작업 옵션으로 켤 때만 합니다.
   Google Drive처럼 수정시간이 정확하지 않은 remote는 허용오차(기본 2초)를 씁니다.
-- 빈 폴더 차이는 비교 표에 표시하지 않습니다.
+- 비교 표에는 파일만 나옵니다. 전체 범위의 빈 폴더 생성·폴더 삭제 수는 비교 요약에 한 줄로 나옵니다.
+  `폴더만` 범위는 없습니다.
+- 동기화 백업 폴더(`--backup-dir`)를 지정할 수 없어 동기화 + `오류가 나도 계속`은 막혀 있습니다.
+- GCS 같은 버킷형 리모트는 빈 폴더를 보존하지 못할 수 있습니다(전체 범위면 차이가 계속 남을 수 있음).
 - 로그 tail은 화면에 최근 줄만 보여 주고, 전체 내용은 로그 파일에 있습니다.
 - 제거 프로그램은 사용자 데이터를 지우지 않습니다. 완전 삭제는 위 4장을 참고하세요.
 

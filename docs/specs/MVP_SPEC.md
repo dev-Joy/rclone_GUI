@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`
+- 연결 Intent: `docs/intent/active/INT-001-rclone-sync-gui/intent.md`, `docs/intent/active/INT-002-scheduler-sqlite-ux/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-10-28 (린트/포맷 도구를 oxlint·oxfmt로 확정)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-02 (INT-002 구현 반영 표 추가)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -88,6 +88,25 @@
 `docs/knowhow/rclone-notes.md`.
 Phase 6의 `matchPlanWithDryRun`(`src/shared/run-plan.ts`)은 "복사 + 시간만 맞춤 == 새 파일 + 변경"으로 맞춰 보며,
 Phase 7 preflight도 이 함수를 쓴다.
+
+### 구현 반영 (INT-002, 2026-11-02)
+
+INT-002(`docs/intent/active/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다. 본문은 고쳐 쓰지 않고 이 표가 우선한다.
+
+| 항목 | 이 문서 | 실제 구현 |
+| :--- | :--- | :--- |
+| 저장소 (§5.6) | JSON 파일 | SQLite `rclonegui-store.sqlite`(`node:sqlite`, `src/main/store/sqlite-db.ts`만 import). v2에서 `exclude_patterns`(CHECK: `#`·`;` 시작 금지)·`job_exclude_patterns`(패턴 RESTRICT, 작업 CASCADE) 추가. v1의 `schedules` 테이블은 쓰지 않고 예약은 `jobs.data.autoSync`에 둔다(spec Q8) |
+| 제외 패턴 (§5.2) | 작업별 `excludes`(최대 100개, 각 512자) | 공용 라이브러리 + 작업 전용. 합계 500개. IPC `excludes:list/create/update/delete`, 수정·삭제는 사용 작업 확인(`CONFIRM_REQUIRED`). 64개 초과 또는 길면 `--exclude-from` 임시 파일(UTF-8 BOM 없음·LF·`wx`, 실행 뒤·시작 시 정리, `%APPDATA%\rcloneGUI\exclude-files\`). 계획 토큰에 패턴 스냅샷 해시 |
+| 길이 한도 | - | 경로 4096자(spec Q1), 패턴 512자, 작업 전용 100개·합계 500개, 실행 전 명령 길이 검사(`WIN_CMDLINE_MAX`) |
+| 리모트 북마크 | - | `remotes` 테이블(remote 이름 + 기준 경로 + 별칭), IPC `remotes:list/create/update/delete/test`·`rclone:listDir`. 탐색 인자 `lsjson --max-depth 1 --dirs-only --ask-password=false`(허용 명령은 늘리지 않음). 탐색·테스트는 전역 1개, 같은 remote를 비교·실행 중이면 `BUSY`. rclone.conf는 쓰지 않음 |
+| 동기화 범위 (§8.1) | 파일만 | 작업 `scope`: `files`(기본, `lsjson --files-only`) / `all`(폴더 포함 목록, copy·sync·dry-run에 `--create-empty-src-dirs`). 비교 결과 `createDirs`·`deleteDirs`·`dirChanges`, 실행 입력 `confirmedDeleteDirs`, 계획 토큰 v3에 scope·폴더 수. `--max-delete`는 파일 삭제 수만(rclone이 폴더를 세지 않음), 폴더 삭제는 확인 수·사전 확인(`remove directory`·`deletedDirs`)으로 맞춤. 자동 실행의 삭제 조건은 파일+폴더 합산 |
+| 스케줄러 (§10) | 균등 interval | `autoSync.kind`: `interval`(분)·`daily`(HH:MM)·`weekly`(요일 마스크 + HH:MM), 로컬 시각·DST(`src/shared/schedule.ts`). 시작 즉시 `nextOccurrence`로 다음 예약 선기록, 끝나면 `nextAfterFinish`(daily·weekly 성공 시 1시간 안 정시 건너뜀). 놓친 예약은 시작·재개 60초 뒤 1회. 게이트·`startAuto`는 그대로 |
+| 종료·로그인 안내 | - | 트레이 `종료`에서만 다음 예약 경고(실행 중이면 기존 확인 창만), 자동 실행을 켤 때 로그인 시 시작이 꺼져 있으면 안내 |
+| 화면 (§13) | 비교·실행·이력 탭 | 탭 `비교·미리보기` → `실행` → `결과·이력` → `작업 설정`, 공통 중지 막대(`JobActivityBar`, 버튼 하나). 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
+| 이력 (§11.1) | `history.json` | SQLite `run_records` |
+| cron (§2.2) | Post-MVP | 매일·요일 예약은 구현, cron 표현은 계속 미지원 |
+| 패키징 (§17) | - | NSIS 설치본 하나, portable exe 없음(실행 파일 위치가 바뀌면 로그인 항목·예약 경로가 깨짐) |
+| 테스트 (§18) | - | GCS 수용 테스트 `tests/integration/gcs-acceptance.test.ts`: `RCLONEGUI_TEST_GCS_CONFIG`·`_REMOTE`·`_BUCKET`이 있을 때만, `rclonegui-test-` 접두사가 아니거나 conf가 저장소 안·기본 위치면 거부, 실행별 고유 경로 정리 |
 
 ---
 

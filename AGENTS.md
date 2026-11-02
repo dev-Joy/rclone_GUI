@@ -27,6 +27,8 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `pnpm run check` — typecheck + lint(oxlint, eslint) + 단위 테스트 (커밋 전 필수, 포맷 검사는 포함 안 됨)
 - `pnpm run format` — oxfmt로 포맷 (`pnpm run format:check`는 검사만)
 - `pnpm run test:int` — 실제 rclone으로 통합 테스트 (rclone이 없으면 이유를 출력하고 건너뜀)
+  - GCS 수용 테스트는 `RCLONEGUI_TEST_GCS_CONFIG`·`RCLONEGUI_TEST_GCS_REMOTE`·`RCLONEGUI_TEST_GCS_BUCKET`이 모두 있을 때만 돈다(없으면 이유 출력 후 skip, 이름이 `rclonegui-test-`로 시작하지 않으면 거부)
+  - `RCLONEGUI_TEST_RCLONE` — 테스트에 쓸 rclone 경로, `RCLONEGUI_TEST_WSL=1` — WSL 경로 테스트 실행
 - `pnpm run test:e2e` — `out/` 빌드 + Playwright Electron E2E. Windows GUI 세션이 필요하고, rclone이 없으면 비교·복사 테스트만 건너뜀
 - `pnpm run build` — `out/`에 빌드, `pnpm start`로 빌드본 실행
 - `pnpm run build:win` — Windows 설치 파일(NSIS x64, 사용자 단위)을 `dist/`에 만든다. 설정은 `electron-builder.yml`
@@ -41,17 +43,18 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ## 3. 구조
 
-- `src/main` — rclone 실행(`rclone/`), 출력 파서(`parsers/`), 저장소(`store/`), IPC 핸들러(`ipc/`)
+- `src/main` — rclone 실행(`rclone/`), 출력 파서(`parsers/`), 저장소(`store/`, SQLite — `node:sqlite`는 `sqlite-db.ts`에서만), 서비스(`services/`: 비교·실행·스케줄러·리모트·제외 패턴), IPC 핸들러(`ipc/`)
 - `src/preload` — contextBridge 브리지 (`window.rclonegui`)
 - `src/renderer` — 화면 진입점 (`index.html`, `main.tsx`, `env.d.ts`)
 - `src/components` — 공용 컴포넌트 `ZBC*`와 `ZBC.css`, `themes/`
 - `src/pages` — 페이지·레이아웃 컴포넌트와 `*.module.css`
 - `src/stores`, `src/lib` — 화면 상태(zustand)와 화면용 도우미
 - `src/shared` — 타입·IPC 계약·zod 스키마 (Node·DOM 의존 금지)
-- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone 출력
+- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone 출력. `tests/integration/gcs-acceptance.test.ts`는 외부 GCS 수용 테스트(4.8)
 - `playwright.config.ts` — Electron E2E 설정(`tests/e2e/**/*.spec.ts`, 임시 userData·`RCLONEGUI_E2E=1`)
 - `docs/guide` — 신규 파일 작성 가이드 (`File.tsx.guide`, `File.module.css.guide`)
 - `docs/knowhow/rclone-notes.md`, `docs/CHANGELOG.md`, `docs/works/`
+- `docs/specs/MVP_SPEC.md` — 설계 기준과 구현 반영 표, `docs/intent/` — intent·spec·plan, `docs/code-asset-index/` — 공통 자산 인덱스
 - `scripts/probes` — rclone 동작 실험, `scripts/dev/drive-app.mjs` — 빌드본·개발 서버·설치본을 임시 프로필로 띄워 조작하는 확인 도구
 - `scripts/dev/installer-smoke.mjs` — 설치본 무인 설치·실행·제거 확인, `scripts/dev/make-icon.mjs` — 앱 아이콘 생성
 - `@/`는 어느 프로세스에서나 `src`를 가리킨다 (`electron.vite.config.mts`, `tsconfig.*.json`, `vitest.config.mts`)
@@ -109,6 +112,12 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - 화면 조작은 역할·이름·id(`#job-name` 등)로 하고, 확인 창은 `getByRole("dialog")`로 범위를 좁힌다.
 - 테스트마다 renderer 콘솔 오류 0건을 확인한다. rclone이 필요한 테스트는 없으면 이유와 함께 skip한다.
 
+### 4.8 통합·수용 테스트 (`tests/integration/`)
+
+- 실행 환경은 `run-harness.ts`(`makeEnv`·`waitFinished`)를 재사용한다.
+- 외부 remote 테스트는 환경 변수로 받은 저장소 밖 테스트 전용 rclone.conf와 `rclonegui-test-`로 시작하는 remote·버킷만 쓴다. 실행마다 고유 하위 경로를 쓰고 afterAll에서 정리하며, 버킷 루트는 지우지 않는다.
+- 출력·테스트 이름·fixture에 remote·버킷 이름과 키·conf 경로를 남기지 않는다.
+
 ## 5. 작업 원칙
 
 - **Surgical Changes**: 요청된 부분만 수정하고 나머지는 그대로 둔다.
@@ -148,4 +157,5 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - Playwright(`playwright.config.ts`): Electron E2E는 `tests/e2e/**/*.spec.ts`만, worker 1, 120초 제한
 - electron-builder(`electron-builder.yml`): NSIS x64 사용자 단위, asar, 언어 팩 ko·en-US, `dist/` 산출
 - 단위 테스트: 차단 목록의 옵션이 생성 결과에 나오지 않는다 (`tests/unit/command-builder.test.ts`)
+- 단위 테스트: `node:sqlite` import는 `src/main/store/sqlite-db.ts` 하나뿐이다 (`tests/unit/shared-boundary.test.ts`)
 - `f_`·`h_` 접두사와 4.3~4.5 규칙은 도구로 강제하지 않으므로 리뷰에서 확인한다.
