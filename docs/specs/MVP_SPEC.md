@@ -1,7 +1,7 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/active/INT-003-os-schedule-backup-gcs-followup/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-11-02 (INT-003 Phase 4 빈 폴더를 만들 수 없는 대상 구현 반영 표 추가)
 - 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), 아래 "구현 반영" 참고**
@@ -110,7 +110,7 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 
 ### 구현 반영 (INT-003 Phase 2 — Windows 작업 스케줄러, 2026-11-02)
 
-INT-003 T-01(`docs/intent/active/INT-003-os-schedule-backup-gcs-followup/` spec §4.2·§5)로 바뀐 항목이다. 본문·위 표보다 이 표가 우선한다.
+INT-003 T-01(`docs/intent/done/INT-003-os-schedule-backup-gcs-followup/` spec §4.2·§5)로 바뀐 항목이다. 본문·위 표보다 이 표가 우선한다.
 
 | 항목 | 이 문서·이전 표 | 실제 구현 |
 | :--- | :--- | :--- |

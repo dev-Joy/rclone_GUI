@@ -1,7 +1,7 @@
 ---
 id: INT-003
 title: OS 예약·헤드리스 실행·sync 오류 무시/백업 폴더·GCS 실측 후속
-status: active
+status: done
 priority: P3
 created: 2026-11-02
 updated: 2026-11-02
@@ -87,6 +87,12 @@ updated: 2026-11-02
 - [x] T-05 [P3] spec E-6 대응: 버킷형 리모트 `전체` 범위 빈 폴더 영구 차이 — 차단 대신 안내 + 비교 화면 구분 표시, `rclone backend features`의 `CanHaveEmptyDirectories` 기반 판정(false면 편집기 경고, 비교 화면에서 빈 폴더 차이를 "이 저장소는 빈 폴더를 만들 수 없음"으로 따로 표시), 테스트 (depends: T-04) — 구현 완료(2026-11-02), `directory_markers` 반영 여부는 T-04 실측에 남김 → T-04 취소로 미검증(spec R-4)
 - [-] T-06 [P3] `폴더만` 동기화 범위 — probe(`--filter "- *"` + `--create-empty-src-dirs`, GCS 포함) 후 채택 시 스키마·diff·명령 빌더·계획 토큰·삭제 확인에 적용, 아니면 취소 사유 기록 (depends: T-04) — 취소: 쓰임새가 좁고 버킷형 remote에서 의미가 없는 데 비해 수정 범위가 커서 채택하지 않음, probe 생략 (2026-11-02)
 - [-] T-07 [P3] WSL cron 예약 검토 — WSL 미기동 시 미실행 문제 재검토, 채택 시 `--run-job` 경로 재사용, 아니면 취소 사유 기록 (depends: T-01) — 취소: WSL이 꺼지면 돌지 않고 T-01이 WSL 경로도 처리해 cron만의 가치가 없음 (2026-11-02)
-- [ ] T-08 [P3] Google Drive 수용 테스트 (T-04 대체) — tests/integration/drive-acceptance.test.ts, RCLONEGUI_TEST_DRIVE_REMOTE 있을 때만 실행(기본 conf 허용·RCLONEGUI_TEST_DRIVE_CONFIG 선택), listremotes --long으로 drive 확인, rclonegui-test-it/rclonegui-it-<시각>-<난수>/ 아래만 쓰고 형식 확인 뒤 purge, copy·sync 갱신/삭제·중지·전체 범위 빈 폴더·백업 폴더(서버 쪽 Move)·backend features 기록·휴지통 기록, AGENTS 4.8 예외, 결과를 rclone-notes·CHANGELOG에 기록(remote 이름·경로 미기재)
+- [x] T-08 [P3] Google Drive 수용 테스트 (T-04 대체) — tests/integration/drive-acceptance.test.ts, RCLONEGUI_TEST_DRIVE_REMOTE 있을 때만 실행(기본 conf 허용·RCLONEGUI_TEST_DRIVE_CONFIG 선택), listremotes --long으로 drive 확인, rclonegui-test-it/rclonegui-it-<시각>-<난수>/ 아래만 쓰고 형식 확인 뒤 purge, copy·sync 갱신/삭제·중지·전체 범위 빈 폴더·백업 폴더(서버 쪽 Move)·backend features 기록·휴지통 기록, AGENTS 4.8 예외, 결과를 rclone-notes·CHANGELOG에 기록(remote 이름·경로 미기재)
 
 > 진행 순서: T-01 → T-03 → T-05 → T-08 (T-04는 T-08로 대체).
+
+## 결과 (Result)
+- Windows 작업 스케줄러 OS 예약과 헤드리스 `--run-job`(T-01), sync 백업 폴더 `--backup-dir`와 백업 있을 때만 오류 무시 허용(T-03), 빈 폴더를 만들 수 없는 대상 안내·비교 구분 표시(T-05), Google Drive 수용 테스트(T-08, T-04 대체)를 구현했다(3ff3861~).
+- 최종 검증: unit 1198·`test:int` 71(+19 skip)·E2E 14·`build:win` 통과, Drive 수용 14/14(skip 0, 실행 폴더 정리 확인, rclone-notes #34~#36).
+- 남은 것: GCS `directory_markers`가 `CanHaveEmptyDirectories`에 반영되는지(R-4)는 미검증. GCS 수용 테스트는 코드만 있다.
+- 완료일: 2026-11-02

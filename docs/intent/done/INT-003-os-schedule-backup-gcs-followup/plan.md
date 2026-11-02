@@ -160,14 +160,14 @@
 ## 4. 검증 계획 (DoD)
 
 Tier 3 기준(AGENTS.md 6장):
-- [ ] `pnpm run check` 통과(typecheck + oxlint + eslint + 단위)
-- [ ] `pnpm run format:check` 통과
-- [ ] 빌더·파서·안전 로직 변경에 단위 테스트 추가, `pnpm run test:int` 통과(GCS는 환경 변수 있을 때 skip 0, Drive는 RCLONEGUI_TEST_DRIVE_REMOTE 있을 때 skip 0·없을 때 skip)
-- [ ] 화면·패키징 변경에 `pnpm run test:e2e` 통과(콘솔 오류 0), `pnpm run build:win` 성공
-- [ ] `pnpm run smoke:installer`로 OS 예약 등록·`--run-job` 실행·제거 정리 확인
-- [ ] 차단 목록 테스트(`tests/unit/command-builder.test.ts`)에서 백업 없는 sync `--ignore-errors`가 여전히 차단됨
-- [ ] CHANGELOG 한 줄씩, 새 rclone 동작은 rclone-notes, `docs/works/` 기록
-- [ ] Phase마다 커밋
+- [x] `pnpm run check` 통과(typecheck + oxlint + eslint + 단위)
+- [x] `pnpm run format:check` 통과
+- [x] 빌더·파서·안전 로직 변경에 단위 테스트 추가, `pnpm run test:int` 통과(GCS는 환경 변수 있을 때 skip 0, Drive는 RCLONEGUI_TEST_DRIVE_REMOTE 있을 때 skip 0·없을 때 skip)
+- [x] 화면·패키징 변경에 `pnpm run test:e2e` 통과(콘솔 오류 0), `pnpm run build:win` 성공
+- [x] `pnpm run smoke:installer`로 OS 예약 등록·`--run-job` 실행·제거 정리 확인
+- [x] 차단 목록 테스트(`tests/unit/command-builder.test.ts`)에서 백업 없는 sync `--ignore-errors`가 여전히 차단됨
+- [x] CHANGELOG 한 줄씩, 새 rclone 동작은 rclone-notes, `docs/works/` 기록
+- [x] Phase마다 커밋
 
 ## 5. 리스크 · 파급
 

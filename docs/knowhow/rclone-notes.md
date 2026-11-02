@@ -200,3 +200,20 @@
 - 명령: 임시 conf에 `[<이름>]` `type = memory`를 두고 `copy --create-empty-src-dirs --config <임시 conf> <임시 원본(파일 1 + 빈 폴더 1)> <이름>:x` → 다음 프로세스에서 `lsjson --config <임시 conf> <이름>:x`, `backend features --config <임시 conf> <이름>:`
 - 결과: copy는 exit 0이지만 다음 `lsjson`은 `error listing: directory not found`, exit 3. `Features.CanHaveEmptyDirectories`는 `false`(#27의 `:memory:`와 같음).
 - 영향: 앱 경로 검사가 `:memory:`·연결 문자열을 거부하므로, AC-13 로컬 대용 테스트(통합 `run.scope.test.ts`, E2E `empty-dirs.spec.ts`)는 임시 conf의 이름 있는 memory remote를 쓴다. 실행 뒤에도 대상이 비어 다시 비교하면 같은 차이가 나오므로 원본에는 빈 폴더만 둔다(파일을 두면 매번 createFiles가 남는다). 앱 실행 동안 features는 캐시하므로 conf의 `directory_markers` 등을 바꾸면 앱을 다시 시작해야 반영된다.
+
+## 2026-11-02 · rclone v1.75.1 · Windows 11 x64 (INT-003 T-08: Google Drive 수용 테스트)
+
+### 34. Google Drive `backend features`: 빈 폴더·서버 쪽 Move를 모두 지원한다
+- 명령: `backend features --ask-password=false --config <conf> -- <drive remote>:` (`drive-acceptance.test.ts` 1번 케이스, 값은 허용 목록만 출력)
+- 결과: `CanHaveEmptyDirectories`·`Move`·`DirMove`·`Copy`·`Purge` true, `CaseInsensitive` false, `DuplicateFiles` true, Precision 1000000(1ms), Hashes md5·sha1·sha256.
+- 영향: Drive 대상은 `전체` 범위에서 빈 폴더를 만들고(비교 화면 구분 표시 없음, T-05), 백업 폴더 sync가 FR-36(서버 쪽 Move) 검사를 통과한다. 같은 이름 파일·폴더가 여럿 있을 수 있다(`DuplicateFiles`) — 테스트는 실행마다 새 하위 폴더를 쓴다.
+
+### 35. Drive에서 앱의 copy·sync·전체 범위·백업 폴더·중지가 기대대로 동작한다
+- 명령: 앱 실행 경로(비교 → 확인 → 실제 실행, `run-harness`)로 copy / sync 갱신 / sync 삭제 / 백업 폴더 sync / 업로드 중 중지 / 전체 범위 copy·sync / 자동 실행(AC-13)
+- 결과: 모두 success(중지는 canceled). 다시 비교하면 차이 0. 전체 범위 copy는 빈 폴더 3개를 만들고 sync는 대상에만 있는 폴더·파일을 지운다. 백업 폴더 sync는 지운 파일을 `백업/<실행 하위 폴더>/`로 옮긴다. 업로드 중 중지하면 40개 중 1개만 올라가고 `.partial`은 남지 않는다(Drive는 업로드가 끝나야 파일이 생김, 로컬 #17과 다름). 케이스별 13~105초(백업 폴더가 가장 느림), 전체 약 8분.
+- 영향: 수용 시나리오는 대상 파일이 2개뿐이라 삭제 1개도 대량 삭제(50%)가 되어 `confirmLargeDeletes`가 필요하다 — 첫 실측에서 sync 삭제·전체 범위 sync가 SAFETY_BLOCKED로 멈춰 테스트 도우미(Drive·GCS 둘 다)를 고쳤다. 앱 게이트는 의도대로 동작했다.
+
+### 36. Drive sync가 지운 파일은 휴지통으로 가고, 백업 폴더로 옮긴 파일은 휴지통에 없다
+- 명령: 삭제 뒤 `lsf -R --drive-trashed-only <대상>`(`f_LogTrash`, 기록만)
+- 결과: sync 삭제 뒤 휴지통 파일 1개(지운 파일 있음). 전체 범위 sync(폴더 삭제) 뒤 1개. 백업 폴더 sync 뒤 0개 — 지운 파일이 백업으로 이동했기 때문. 테스트 정리(purge)도 기본 설정이라 휴지통으로 간다.
+- 영향: Drive 대상 sync 삭제는 기본(`use_trash` 기본값)에서 휴지통으로 되돌릴 수 있다. 앱은 conf를 읽지 않으므로(안전 규칙 6) 사용자 remote의 휴지통 설정을 확인할 수 없어 안내 문구에 휴지통 복구를 약속하지 않는다. 이 remote는 rclone 공용 client_id를 써서 실행마다 "2026년 중 중단" NOTICE가 stderr에 나온다.

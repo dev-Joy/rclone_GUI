@@ -211,9 +211,18 @@
 - 검증: `pnpm run check`(단위 70파일 1198), `format:check`, `test:int` 66(+10 skip), `test:e2e` 14, `build:win` 통과. 독립 검증 Pass(차단 결함 0). 세션이 끊겨 E2E 1건 실패 원인을 보던 중이었으나 재실행에서 재현되지 않음
 - 남은 것: `directory_markers`가 `CanHaveEmptyDirectories`에 반영되는지는 GCS 실측(T-04) 전까지 미확인(R-4)
 
+[TASK_023] : (2026-11-02) INT-003 T-08 — Google Drive 수용 테스트(T-04 GCS 실측 대체), INT-003 완료 (관련 Intent: INT-003, T-08)
+- 문서(07e1b24): T-04 취소·T-08 추가, spec FR-37~41·AC-20·21·R-7·R-8, plan Phase 6, INT-003 planned→active
+- 테스트(3f47713): `tests/integration/remote-acceptance.ts` 도우미(실행 폴더 이름·정확한 형식 경로만 purge), `drive-acceptance.test.ts`(`RCLONEGUI_TEST_DRIVE_REMOTE` 있을 때만, drive 종류·conf 위치·사전 부재 확인 뒤 9개 시나리오, 휴지통은 기록만), AGENTS.md 2·3·4.8. 독립 검증 Pass(Low 4건: `..` 접두 판정, 이름 정규식이 `.`·`@` 거부, 시간 초과 뒤 정리 겹침, `RCLONE_*` 환경 상속 — 실측 전 `RCLONE_*` 없음 확인)
+- 실측: 첫 실행 14개 중 2개 실패(sync 삭제·전체 범위 sync) — 대상 파일 2개 중 1개 삭제가 대량 삭제(50%)로 SAFETY_BLOCKED. 앱 게이트는 의도대로이고 도우미가 `confirmLargeDeletes`를 넘기지 않은 테스트 결함 → Drive 도우미와 GCS `f_RunPlan`에 같은 한 줄 수정. 재실행 14/14(skip 0, 약 8분), 실행 폴더 잔여 0
+- 기록: rclone-notes #34(Drive features), #35(앱 시나리오·중지 시 `.partial` 없음), #36(sync 삭제는 휴지통, 백업 이동은 휴지통 아님, 공용 client_id 중단 NOTICE), CHANGELOG 1줄, INT-003 결과 섹션·done 이동·INDEX 재작성, MVP_SPEC 경로
+- 검증: `pnpm run check`(단위 1198), `format:check`, `test:int` 71(+19 skip), Drive 수용 14/14
+- 남은 것: GCS `directory_markers` 반영 여부(R-4) 미검증. `gdrive-test`가 rclone 공용 client_id를 써서 2026년 중 중단 예정(개인 client_id 권장)
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
 - (2026-10-28) 테스트·스모크로 찾은 결함: writeJsonAtomic 폴더 생성 실패가 STORE_ERROR로 감싸지지 않음, settings.update 동기 예외, jobs:create가 알 수 없는 키를 버리고 저장, 운영 CSP meta의 frame-ancestors 콘솔 오류 → 모두 수정 [TASK_001 해결]
 - (2026-10-29) E2E 설정 화면 제목 셀렉터(`getByRole("heading", { name: "설정" })`)가 'rclone 설정'과 겹쳐 strict mode 위반 → `exact: true` [TASK_012 해결]
 - (2026-10-29) 기존 rcloneGUI 0.1.0 설치로 installer-smoke 사전 확인 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행, 15건 통과 [TASK_012 해결]
+- (2026-11-02) Drive 수용 첫 실측에서 sync 삭제·전체 범위 sync가 대량 삭제 게이트(SAFETY_BLOCKED)로 실패 — 테스트 도우미가 `confirmLargeDeletes`를 넘기지 않음 → 수정 후 14/14 [TASK_023 해결]

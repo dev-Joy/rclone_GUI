@@ -1,6 +1,6 @@
 # Spec: OS 예약·헤드리스 실행·sync 오류 무시/백업 폴더·GCS 실측 후속
 
-- Intent: [INT-003](intent.md) | Status: active | 작성일: 2026-11-02
+- Intent: [INT-003](intent.md) | Status: done | 작성일: 2026-11-02
 
 > 이 spec은 intent를 구현할 수 있는 수준으로 풀어 쓴 문서다. 내용이 서로 다르면 intent가 우선한다.
 > 심볼과 경로는 커밋 `928f9b4` 기준이다. 범위는 남은 태스크 T-01·T-03·T-05·T-08이다. T-02·T-06·T-07·T-04(T-08로 대체)는 취소했다(intent "결정 (2026-11-02)").
