@@ -135,6 +135,8 @@ function f_Stats(over: Partial<typRunStats> = {}): typRunStats {
         errors: 0,
         speedBps: 0,
         etaSeconds: null,
+        partialFiles: 0,
+        etaPending: false,
         elapsedMs: 10,
         fatalError: false,
         lastError: null,

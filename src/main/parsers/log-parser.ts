@@ -103,7 +103,26 @@ const zRawStats = z.object({
     elapsedTime: zNum.default(0),
     fatalError: z.boolean().default(false),
     lastError: z.string().nullable().optional(),
+    /** 진행 중 파일의 부분 진행률 합 계산용. name·srcFs·dstFs는 버린다(INT-004) */
+    transferring: z
+        .array(z.object({ bytes: zNum.optional(), size: zNum.optional() }))
+        .optional()
+        .catch(undefined),
 });
+
+/** transferring[]의 bytes/size로 진행 중 파일들의 부분 진행률 합을 구한다(FR-1) */
+function f_PartialFiles(
+    transferring: Array<{ bytes?: number; size?: number }> | undefined,
+): number {
+    if (!transferring) return 0;
+    let sum = 0;
+    for (const item of transferring) {
+        if (item.size === undefined || item.size <= 0) continue;
+        if (item.bytes === undefined) continue;
+        sum += Math.max(0, Math.min(item.bytes / item.size, 0.999));
+    }
+    return sum;
+}
 
 /** rclone stats 객체를 앱의 RunStats로 바꾼다. 형식이 맞지 않으면 null */
 export function normalizeStats(raw: unknown): typRunStats | null {
@@ -123,6 +142,8 @@ export function normalizeStats(raw: unknown): typRunStats | null {
         errors: s.errors,
         speedBps: s.speed == null ? null : Math.max(0, s.speed),
         etaSeconds: s.eta == null ? null : Math.max(0, s.eta),
+        partialFiles: f_PartialFiles(s.transferring),
+        etaPending: false,
         elapsedMs: Math.max(0, Math.round(s.elapsedTime * 1000)),
         fatalError: s.fatalError,
         lastError: s.lastError ? s.lastError : null,

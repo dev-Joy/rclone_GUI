@@ -48,7 +48,12 @@ export const zRunStats = z.object({
     listed: zCount,
     errors: zCount,
     speedBps: z.number().min(0).nullable(),
+    /** 앱이 계산한 남은 시간(초). 진행 중이 아니면 화면에 쓰지 않는다(INT-004) */
     etaSeconds: z.number().min(0).nullable(),
+    /** 진행 중 파일들의 부분 진행률 합(0 이상, 파일 이름 없음). 예전 기록에는 없어 0으로 읽는다 */
+    partialFiles: z.number().min(0).default(0),
+    /** 남은 시간을 아직 계산할 수 없음("계산 중"). 예전 기록에는 없어 false로 읽는다 */
+    etaPending: z.boolean().default(false),
     elapsedMs: z.number().min(0),
     fatalError: z.boolean(),
     lastError: z.string().nullable(),

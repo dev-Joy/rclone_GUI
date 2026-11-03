@@ -174,6 +174,24 @@ describe("normalizeStats", () => {
         expect(normalizeStats({ bytes: "x" })).toBeNull();
         expect(normalizeStats(null)).toBeNull();
     });
+
+    it("transferring의 부분 진행률을 합치고 파일 이름은 남기지 않는다(AC-1)", () => {
+        const stats = normalizeStats({
+            transferring: [
+                { name: "secret-a.txt", bytes: 512, size: 1024, srcFs: "x", dstFs: "y" },
+                { name: "secret-b.txt", size: 1024 },
+                { name: "secret-c.txt", bytes: 1, size: 0 },
+                { name: "secret-d.txt", bytes: 2000, size: 1024 },
+            ],
+        });
+        expect(stats?.partialFiles).toBeCloseTo(0.5 + 0.999, 10);
+        expect(JSON.stringify(stats)).not.toContain("secret");
+    });
+
+    it("transferring 형식이 틀리면 stats는 살리고 partialFiles는 0", () => {
+        expect(normalizeStats({ transferring: "x", bytes: 1 })?.partialFiles).toBe(0);
+        expect(normalizeStats({ transferring: [{ bytes: "x" }], bytes: 1 })?.partialFiles).toBe(0);
+    });
 });
 
 describe("parseLsjsonEntries (lsjson --max-depth 1, 실제 출력)", () => {
