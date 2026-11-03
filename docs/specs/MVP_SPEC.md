@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/planned/INT-006-in-app-remote-config/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-03 (INT-004 실행 화면 남은 시간 계산 반영 표 추가)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-03 (INT-006 앱에서 remote 추가·수정·삭제·재인증 반영 표 추가)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -165,6 +165,22 @@ INT-004(spec FR-1~FR-11, AC-1~AC-13)로 실행 화면의 "남은 시간" 계산�
 | 화면·이력 | `etaSeconds` null이면 "-" | `RunStatsGrid`의 `live`가 true(진행 중)일 때만 "계산 중"/계산값을, 끝난 실행·이력은 "-"를 보인다(FR-10). main에서 계산해 화면과 이력 값이 같다(FR-11) |
 | 스키마 | - | `zRunStats`에 `partialFiles`(기본 0)·`etaPending`(기본 false) 추가 — 예전 이력은 기본값으로 읽는다(AC-10) |
 | 테스트 | - | Drive 중단(안정성)·완료(정확도) stats fixture 2개를 경로·이름을 가려 추가. AC-8b는 실측 재생에서 초반 19개 지점이 하한 1/3을 넘어(최소 0.314배) spec §10 Q-4에 따라 하한만 1/4로 넓혔다. rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #37·#38 |
+
+### 구현 반영 (INT-006 — 앱에서 remote 추가·수정·삭제·재인증, 2026-11-03)
+
+INT-006(spec FR-1~FR-26, AC-1~AC-16)로 rclone.conf의 remote 설정을 앱에서 다룬다. 위 "허용 명령" 표(version·config file·listremotes·lsjson·copy·sync)는 이 표가 대체한다. rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #51~#54.
+
+| 항목 | 이전 | 실제 구현 |
+| :--- | :--- | :--- |
+| 허용 명령 | `version`, `config file`, `listremotes`, `lsjson`, `copy`, `sync`, `backend features` | `config providers`·`config redacted`·`config delete`·`config reconnect`·`rcd` 추가. `config show`·`dump`·`edit`·`password`·`encryption`과 `config create`·`update`의 CLI 실행은 계속 차단한다 |
+| 값 전달 | - | `config/create`·`config/update`는 `rcd --rc-addr 127.0.0.1:0`(loopback·임의 포트)에 HTTP 본문으로만 보낸다. 인증 토큰은 실행마다 새로 만들어 `RCLONE_RC_USER`·`RCLONE_RC_PASS` 환경 변수로만 넘기고, `config/get`·`dump`는 부르지 않는다. 흐름이 끝나면 `core/quit`, 응답이 없으면 프로세스 트리를 끝낸다(`rc-session.ts`) |
+| 추가 | CLI `rclone config`만 | 설정 화면의 `RemoteConfigPanel`에서 모든 종류를 검색해 고르고, providers 정의로 만든 동적 폼(`RemoteConfigForm`, 고급 접기·bool·enum·비밀 가림)에 값을 넣는다. 새 이름은 `validateNewRemoteName`(두 글자 이상·공백 금지·`-` 시작/끝 금지·대소문자 무시 중복 금지)로 renderer·main이 함께 막는다. 추가 뒤 env를 다시 감지해 목록·북마크 편집기·remote 고르기에 바로 보인다 |
+| OAuth | 만료 시 CLI 안내만 | `config_is_local`만 자동 true, 나머지 질문은 범용 질문 폼(`RemoteAuthModal`)으로 받아 `opt.continue`로 보낸다. 앱 전체 한 건·10분 제한·취소·53682 포트 충돌 안내, 실패·취소 시 이번에 만든 remote만 `config delete`로 정리한다. 재인증은 rc에 reconnect가 없어 `config reconnect <name>: --non-interactive`를 쓴다 |
+| 수정 | 없음 | `config redacted <name>`에서 비밀 아닌 값만 채우고, providers의 `IsPassword`·`Sensitive`와 `XXX`를 한 번 더 걸러 `secretsSet`만 renderer에 보낸다. 바뀐 칸만 `config/update`로 보내고, 비밀 칸을 비우면 기존 값을 유지한다. client_id·client_secret을 바꾸면 재인증을 안내한다 |
+| 삭제 | 없음 | 참조 작업(기본 conf만)·자동 실행 종류·북마크 수를 보여 주고, 예약 켜진 작업은 `autoSync.enabled=false` 저장 → `osScheduler.idle()` → OS 예약이 사라졌는지 확인 → `config delete` 순서로 지운다. 중간 실패면 remote를 남기고 자동 실행은 꺼진 채로 둔다. 작업·북마크는 지우지 않고 “remote 없음”으로 표시한다 |
+| 없는 remote | rclone 원문 오류를 힌트로 바꿈 | `resolveJobContext`가 conf의 `listremotes`에 이름이 있는지 확인하고, 없으면 `REMOTE_NOT_FOUND`로 비교·수동·자동·OS 예약을 모두 막는다. 작업 목록·작업 화면·북마크에 “remote 없음” 배지를 단다 |
+| 비밀 값 | - | 비밀 값은 rcd 본문에만 넣고 보관하지 않는다. 오류 detail은 `redactSecrets`로 값을 지운 뒤 남긴다. `config redacted` 원문은 메모리에서만 쓰고 로그·IPC·fixture에 남기지 않는다 |
+| 테스트 | - | 단위: providers·rc 응답·redacted 파서, 이름 검증, 비밀 가림, 인자·본문·삭제 순서, OAuth 질문·취소·재인증, `REMOTE_NOT_FOUND`. 통합: 임시 conf의 local·memory·alias·sftp 추가/수정/삭제, rcd 401·허용 경로·종료(AC-15). E2E: 임시 `RCLONE_CONFIG`로 추가·수정·삭제 |
 
 ---
 

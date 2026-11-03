@@ -1,0 +1,119 @@
+/**
+ * RemoteConfigPanel 스타일
+ *
+ * @author dev-Joy 2026-11-03
+ */
+
+@layer pages {
+    .RemoteConfigPanel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+
+        .header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .title {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .hint,
+        .muted {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .warning {
+            margin: 0;
+            color: var(--warning, #a66a00);
+            font-size: 13px;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            min-width: 0;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .info {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .name {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .testResult {
+            margin: 0;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 12px;
+
+            &[data-state="ok"] {
+                border-color: var(--success);
+            }
+
+            &[data-state="error"] {
+                background: var(--danger-weak);
+            }
+        }
+
+        .testError {
+            margin: 0;
+            color: var(--danger);
+            font-size: 12px;
+        }
+    }
+}

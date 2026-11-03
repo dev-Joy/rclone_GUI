@@ -7,7 +7,7 @@
  *
  * 실행: node scripts/probes/rclone-probes.mjs [rclone.exe 경로] [--only=이름,이름]   (Windows node)
  *       --only를 주면 그 이름의 실험만 실행·저장한다(다른 fixture는 그대로 둔다).
- *       묶음 이름(copy-cancel-large, excl, scope, features, backup)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
+ *       묶음 이름(copy-cancel-large, excl, scope, features, backup, filter)을 주면 그 묶음의 뒤따르는 실험도 함께 실행한다.
  *       backup-s3는 rclone serve s3를 띄우므로 --only=backup-s3로 줄 때만 실행한다.
  *       RCLONEGUI_PROBE_OTHER_DRIVE(예: D:\\)가 있으면 backup 묶음이 그 드라이브에 임시 폴더를 만들어 다른 드라이브 백업도 확인한다.
  *
@@ -47,6 +47,22 @@ function f_SetFile(path, text, mtime) {
 const maskDirs = [[work, "<TMP>"]];
 /** 출력에서 가릴 값: [값, 대체 문자열] (backup-s3 묶음의 포트·키) */
 const maskValues = [];
+// providers 기본값에는 현재 OS 사용자·컴퓨터 이름이 들어 있다(sftp user 등). fixture에 남기지 않는다
+{
+    const user = process.env.USERNAME;
+    const machine = process.env.COMPUTERNAME;
+    const candidates = [
+        process.env.USERPROFILE,
+        machine && user ? `${machine}\\${user}` : undefined,
+        machine,
+        user ? `\\${user}` : undefined,
+        user ? `/${user}` : undefined,
+    ];
+    for (const v of candidates) {
+        if (!v || v.length < 2) continue;
+        maskValues.push([v, "<USER>"], [v.replaceAll("\\", "\\\\"), "<USER>"]);
+    }
+}
 
 function f_MaskDir(text, dir, label) {
     const fwd = dir.replaceAll("\\", "/");
@@ -76,7 +92,12 @@ function f_Save(name, stdout, stderr, status) {
 
 function f_Probe(name, args, group) {
     if (!f_Selected(name, group)) return null;
-    const r = spawnSync(rclone, args, { shell: false, windowsHide: true, encoding: "utf8" });
+    const r = spawnSync(rclone, args, {
+        shell: false,
+        windowsHide: true,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+    });
     if (r.error) throw r.error;
     f_Save(name, r.stdout ?? "", r.stderr ?? "", r.status);
     console.log(`[${name}] exit=${r.status}  rclone ${f_Sanitize(args.join(" "))}`);
@@ -788,6 +809,198 @@ try {
             srv.kill();
             await new Promise((r) => setTimeout(r, 500)); // 서버가 저장소 파일을 놓을 때까지 대기
         }
+    }
+
+    // INT-006: remote 설정 쓰기 — providers·rcd(config/create·update·core/quit)·redacted·delete·이름 규칙
+    {
+        const g = "config";
+        const cconf = join(work, "config-remote.conf");
+        writeFileSync(cconf, "");
+        const cfg = ["--config", cconf];
+
+        f_Probe("config-providers", ["config", "providers"], g);
+        f_Probe("config-delete-missing", ["config", "delete", "no-such-remote", ask, ...cfg], g);
+
+        // 이름 규칙(notes #44 재현). 실패 출력만 남긴다
+        for (const [label, name] of [
+            ["space-start", " ab"],
+            ["space-end", "ab "],
+            ["dash-end", "ab-"],
+            ["colon", "a:b"],
+            ["slash", "a/b"],
+            ["one-char", "x"],
+            ["hangul", "한글"],
+        ]) {
+            f_Probe(`config-name-${label}`, ["config", "create", name, "memory", ask, ...cfg], g);
+        }
+
+        const rcdUser = `probe-${randomBytes(6).toString("hex")}`;
+        const rcdPass = randomBytes(12).toString("hex");
+        maskValues.push(
+            ["demo-secret-pass", "<SECRET>"],
+            [rcdUser, "<RC_USER>"],
+            [rcdPass, "<RC_PASS>"],
+        );
+        const rcdChild = spawn(rclone, ["rcd", "--rc-addr", "127.0.0.1:0", ask, ...cfg], {
+            shell: false,
+            windowsHide: true,
+            env: { ...process.env, RCLONE_RC_USER: rcdUser, RCLONE_RC_PASS: rcdPass },
+        });
+        let rcdOut = "";
+        let rcdErr = "";
+        rcdChild.stdout.setEncoding("utf8").on("data", (d) => (rcdOut += d));
+        rcdChild.stderr.setEncoding("utf8").on("data", (d) => (rcdErr += d));
+        const rcdClosed = new Promise((r) => rcdChild.once("close", r));
+        const f_StartLine = () => {
+            const m = rcdErr.match(/Serving remote control on (http:\/\/127\.0\.0\.1:\d+\/)/);
+            return m ? m[1] : null;
+        };
+        let base = null;
+        for (let i = 0; i < 40 && base === null; i += 1) {
+            await new Promise((r) => setTimeout(r, 250));
+            base = f_StartLine();
+        }
+        const f_Rc = async (path, body) => {
+            const res = await fetch(new URL(path, base), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization:
+                        "Basic " + Buffer.from(`${rcdUser}:${rcdPass}`).toString("base64"),
+                },
+                body: JSON.stringify(body),
+            });
+            return { status: res.status, text: await res.text() };
+        };
+        try {
+            if (base === null) {
+                console.log("  config rcd 생략: 시작 줄을 찾지 못함");
+            } else {
+                const noAuth = await fetch(new URL("/config/providers", base), { method: "POST" });
+                const create = await f_Rc("/config/create", {
+                    name: "it-sftp",
+                    type: "sftp",
+                    parameters: {
+                        host: "example.invalid",
+                        user: "demo-user",
+                        pass: "demo-secret-pass",
+                    },
+                    opt: { nonInteractive: true, obscure: true },
+                });
+                const update = await f_Rc("/config/update", {
+                    name: "it-sftp",
+                    parameters: { host: "example2.invalid" },
+                    opt: { nonInteractive: true, obscure: true },
+                });
+                // Drive: 첫 질문(client_id_warning)과 false 답 뒤 질문(client_id_set). 브라우저는 열지 않는다
+                const drive1 = await f_Rc("/config/create", {
+                    name: "it-drive",
+                    type: "drive",
+                    parameters: {},
+                    opt: { nonInteractive: true },
+                });
+                let drive2 = { status: 0, text: "" };
+                try {
+                    const q = JSON.parse(drive1.text);
+                    if (q.State === "client_id_warning") {
+                        drive2 = await f_Rc("/config/create", {
+                            name: "it-drive",
+                            type: "drive",
+                            parameters: {},
+                            opt: {
+                                nonInteractive: true,
+                                continue: true,
+                                state: q.State,
+                                result: "false",
+                            },
+                        });
+                    }
+                } catch {
+                    // 형식이 다르면 fixture만 남긴다
+                }
+                const quit = await f_Rc("/core/quit", {});
+                f_Save(
+                    "config-rcd-requests",
+                    [noAuth.status, create, update, drive1, drive2, quit]
+                        .map((x) =>
+                            typeof x === "number"
+                                ? `no-auth status: ${x}`
+                                : `${x.status} ${x.text}`,
+                        )
+                        .join("\n"),
+                    "",
+                    0,
+                );
+                console.log(`  config rcd: ${f_Sanitize(base)}`);
+                await Promise.race([rcdClosed, new Promise((r) => setTimeout(r, 5000))]);
+            }
+        } finally {
+            if (rcdChild.exitCode === null) rcdChild.kill();
+        }
+
+        f_Probe("config-listremotes-after-rcd", ["listremotes", "--long", ask, ...cfg], g);
+        f_Probe("config-redacted", ["config", "redacted", "it-sftp", ask, ...cfg], g);
+        f_Probe("config-delete", ["config", "delete", "it-sftp", ask, ...cfg], g);
+        f_Probe("config-delete-drive", ["config", "delete", "it-drive", ask, ...cfg], g);
+        f_Probe("config-listremotes-after-delete", ["listremotes", ask, ...cfg], g);
+    }
+
+    // INT-007 T-01: --filter-from("- " 접두사) 해석, 뒤 공백, BOM, 접두사 없는 줄, 인자 파일(@file)
+    // 필터 해석 결과는 --dump filters로 본다(probe 전용, 앱은 --dump*를 쓰지 않는다)
+    if (f_Selected("filter")) {
+        const g = "filter";
+        const fSrc = join(work, "filter-src");
+        for (const n of ["#a", ";a", " lead", "!a", "a", "c"]) f_SetFile(join(fSrc, n), n, OLD);
+        console.log(`  filter 원본 파일: ${JSON.stringify(f_ListFiles(fSrc))}`);
+        const f_FilterFile = (name, content) => {
+            const f = join(work, `${name}.txt`);
+            writeFileSync(f, content);
+            return f;
+        };
+        const lsBase = ["lsjson", "--recursive", "--files-only", "--no-mimetype", ask, ...common];
+        const fLs = (name, extra) => f_Probe(name, [...lsBase, ...extra, "--", fSrc], g);
+        const fDump = (name, extra) =>
+            f_Probe(name, ["lsf", ask, ...common, ...extra, "--dump", "filters", "--", fSrc], g);
+        const show = (label, r) =>
+            r &&
+            console.log(
+                `  ${label}: exit=${r.status} 남은 항목=${JSON.stringify(f_LsPaths(r.stdout))}`,
+            );
+
+        // F1: "- " 접두사면 #·;·앞 공백·! 로 시작하는 패턴도 제외 규칙인가
+        const f1 = f_FilterFile("f1", "- #a\n- ;a\n-  lead\n- !a\n");
+        show("F1 - #a ;a  lead !a", fLs("filter-from-prefixed", ["--filter-from", f1]));
+        fDump("filter-from-prefixed-dump", ["--filter-from", f1]);
+        // F2: 뒤 공백은 파일·인자 모두에서 지워지는가, [ ]로 남길 수 있는가
+        fDump("filter-trailing-space-file-dump", [
+            "--filter-from",
+            f_FilterFile("f2", "- trail \n- trail[ ]\n- two[ ][ ]\n"),
+        ]);
+        fDump("filter-trailing-space-arg-dump", ["--exclude", "trail "]);
+        fDump("filter-leading-space-arg-dump", ["--exclude", " lead"]);
+        // F3: 접두사 없는 줄은 오류인가
+        fLs("filter-from-no-prefix", ["--filter-from", f_FilterFile("f3", "a\n")]);
+        // F4: BOM, CRLF
+        show(
+            "F4 BOM - a,- c",
+            fLs("filter-from-bom", ["--filter-from", f_FilterFile("f4b", "\uFEFF- a\n- c\n")]),
+        );
+        show(
+            "F4 CRLF - a,- c",
+            fLs("filter-from-crlf", ["--filter-from", f_FilterFile("f4c", "- a\r\n- c\r\n")]),
+        );
+        // F5: --exclude 인자와 --filter-from을 함께 주면 합쳐지는가
+        show(
+            "F5 인자 a + 파일 - c",
+            fLs("filter-from-and-exclude-arg", [
+                "--exclude",
+                "a",
+                "--filter-from",
+                f_FilterFile("f5", "- c\n"),
+            ]),
+        );
+        // F6: 인자 파일(@file)을 지원하는가
+        f_Probe("argfile-at", [`@${f_FilterFile("f6", "lsf\n")}`], g);
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

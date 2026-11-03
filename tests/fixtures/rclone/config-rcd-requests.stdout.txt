@@ -1,0 +1,72 @@
+no-auth status: 401
+200 {
+	"Error": "",
+	"Option": null,
+	"Result": "",
+	"State": ""
+}
+
+200 {
+	"Error": "",
+	"Option": null,
+	"Result": "",
+	"State": ""
+}
+
+200 {
+	"Error": "",
+	"Option": {
+		"Advanced": false,
+		"Default": false,
+		"DefaultStr": "false",
+		"Examples": [
+			{
+				"Help": "Yes",
+				"Value": "true"
+			},
+			{
+				"Help": "No",
+				"Value": "false"
+			}
+		],
+		"Exclusive": true,
+		"FieldName": "",
+		"Help": "rclone's shared Google Drive client_id is being retired and will stop working during 2026.\nCreate your own to avoid interruption: https://rclone.org/drive/#making-your-own-client-id\n\nContinue using the shared client_id anyway?",
+		"Hide": 0,
+		"IsPassword": false,
+		"Name": "config_shared_client_id",
+		"NoPrefix": false,
+		"Required": false,
+		"Sensitive": false,
+		"Type": "bool",
+		"Value": null,
+		"ValueStr": "false"
+	},
+	"Result": "",
+	"State": "client_id_warning"
+}
+
+200 {
+	"Error": "",
+	"Option": {
+		"Advanced": false,
+		"Default": "",
+		"DefaultStr": "",
+		"Exclusive": false,
+		"FieldName": "",
+		"Help": "Google Application Client Id",
+		"Hide": 0,
+		"IsPassword": false,
+		"Name": "client_id",
+		"NoPrefix": false,
+		"Required": true,
+		"Sensitive": false,
+		"Type": "string",
+		"Value": null,
+		"ValueStr": ""
+	},
+	"Result": "",
+	"State": "client_id_set"
+}
+
+200 {}

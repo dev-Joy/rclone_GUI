@@ -14,7 +14,7 @@ export interface itfZBCInputProps {
     name?: string;
     value: string;
     onChange: (value: string) => void;
-    type?: "text" | "number" | "time";
+    type?: "text" | "number" | "time" | "password";
     min?: number;
     max?: number;
     step?: number;

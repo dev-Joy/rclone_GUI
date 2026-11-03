@@ -9,7 +9,7 @@
  */
 
 // ========== External imports ==========
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
 // ========== Internal imports ==========
@@ -296,3 +296,25 @@ export const runRclone: typRunRclone = async (binary, args, opts) => {
     assertCommandLength(binary, args);
     return runProcess(binary, args, { ...opts, env: buildRcloneEnv(process.env).env });
 };
+
+/**
+ * 오래 사는 rclone(rcd·config reconnect)을 띄운다. runProcess와 같은 안전 검사를 거친다.
+ * extraEnv는 정리된 환경 뒤에 더한다(rc 인증 토큰은 실행마다 새로 만들어 여기로만 넘긴다).
+ * 호출자가 stdout/stderr를 읽고 프로세스 트리를 끝낼 책임을 진다.
+ */
+export function spawnRcloneChecked(
+    binary: string,
+    args: readonly string[],
+    extraEnv: Readonly<Record<string, string>> = {},
+): ChildProcess {
+    assertAllowedCommand(args);
+    assertNoBlockedFlags(args);
+    assertCommandLength(binary, args);
+    const env: NodeJS.ProcessEnv = { ...buildRcloneEnv(process.env).env, ...extraEnv };
+    return spawn(binary, [...args], {
+        shell: false,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env,
+    });
+}

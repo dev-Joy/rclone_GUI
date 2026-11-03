@@ -1,0 +1,70 @@
+/**
+ * RemoteDeleteModal 스타일
+ *
+ * @author dev-Joy 2026-11-03
+ */
+
+@layer pages {
+    .RemoteDeleteModal {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: min(440px, 72vw);
+
+        p {
+            margin: 0;
+        }
+
+        code {
+            font-family: var(--font-mono);
+        }
+
+        .counts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            font-weight: 600;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin: 0;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            list-style: none;
+
+            li {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 13px;
+            }
+        }
+
+        .badge {
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: var(--accent-weak);
+            font-size: 11px;
+        }
+
+        .warning {
+            padding: 6px 8px;
+            border-radius: var(--radius);
+            background: var(--warning-weak);
+            font-size: 13px;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 12px;
+        }
+    }
+}

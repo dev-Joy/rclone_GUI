@@ -1,0 +1,79 @@
+/**
+ * RemoteAuthModal 스타일
+ *
+ * @author dev-Joy 2026-11-03
+ */
+
+@layer pages {
+    .RemoteAuthModal {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: min(480px, 76vw);
+
+        .remoteName {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .timer {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .urlBox {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+
+            p {
+                margin: 0;
+                font-size: 13px;
+            }
+        }
+
+        .url {
+            display: block;
+            overflow-wrap: anywhere;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .urlActions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .questionActions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+
+        .note {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .error {
+            margin: 0;
+            color: var(--danger);
+            font-size: 13px;
+        }
+
+        .warning {
+            margin: 0;
+            padding: 6px 8px;
+            border-radius: var(--radius);
+            background: var(--warning-weak);
+            font-size: 13px;
+        }
+    }
+}

@@ -58,6 +58,7 @@ import {
 import { clsOsScheduler, osSchedulerAvailability } from "@/main/services/os-scheduler";
 import { clsPathService } from "@/main/services/path-service";
 import { clsRemoteOps } from "@/main/services/remote-ops";
+import { clsRemoteConfigService } from "@/main/services/remote-config-service";
 import { clsRemoteService } from "@/main/services/remote-service";
 import { clsActiveRunStore, recoverActiveRun } from "@/main/services/run-recovery";
 import { clsRunService } from "@/main/services/run-service";
@@ -148,6 +149,7 @@ interface itfServices {
     osRuns: clsOsRunQueue;
     rcloneEnv: clsRcloneEnv;
     remoteService: clsRemoteService;
+    remoteConfig: clsRemoteConfigService;
     wsl: clsWslService;
     excludes: clsExcludeService;
 }
@@ -367,6 +369,10 @@ async function f_QuitFlow(source: typQuitSource): Promise<void> {
             logger.warn(`끝나지 않은 실행을 두고 종료(다음 시작 때 정리): run=${run.runId}`);
         }
     }
+    // OAuth 대기 중이면 rclone을 끝내고 이번에 만든 반쪽 remote를 정리한다(최대 5초, E-7)
+    await svc.remoteConfig.disposeForQuit().catch((e: unknown) => {
+        logger.warn("인증 세션 정리 실패", e);
+    });
     f_FinalQuit();
 }
 
@@ -407,6 +413,7 @@ function f_SessionEnd(): void {
         if (cmp) svc.compare.cancel(cmp.jobId);
         const run = svc.runs.getActive();
         if (run) svc.runs.cancel(run.runId);
+        void svc.remoteConfig.disposeForQuit();
     }
     f_FinalQuit();
 }
@@ -651,6 +658,20 @@ async function f_InitCore(): Promise<itfServices> {
         pathService,
         remoteOps,
     });
+    // remote 설정(추가·수정·삭제·재인증)은 rclone.conf를 rclone으로만 바꾼다(INT-006)
+    const remoteConfig = new clsRemoteConfigService({
+        rcloneEnv,
+        remoteOps,
+        jobs,
+        bookmarks: remoteStore,
+        osScheduler,
+        logger,
+        emit: (e) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(IPC_EVENTS.remoteConfigAuthProgress, e);
+            }
+        },
+    });
     const compare = new clsCompareService({
         jobs,
         settings,
@@ -734,6 +755,7 @@ async function f_InitCore(): Promise<itfServices> {
         osRuns,
         rcloneEnv,
         remoteService,
+        remoteConfig,
         wsl,
         excludes,
     };
@@ -746,7 +768,7 @@ async function f_StartGui(hidden: boolean): Promise<void> {
     if (guiStarted || !svc) return;
     guiStarted = true;
     const { settings, jobs, history, compare, runs, scheduler, osScheduler } = svc;
-    const { rcloneEnv, remoteService, wsl, excludes } = svc;
+    const { rcloneEnv, remoteService, remoteConfig, wsl, excludes } = svc;
     f_SyncLoginItem(settings.get().ui.launchAtLogin);
 
     powerMonitor.on("resume", () => {
@@ -771,6 +793,7 @@ async function f_StartGui(hidden: boolean): Promise<void> {
         osScheduler,
         excludes,
         remotes: remoteService,
+        remoteConfig,
         getWindow: () => mainWindow,
     });
 

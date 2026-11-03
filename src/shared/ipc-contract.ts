@@ -17,6 +17,13 @@ import type {
 } from "@/shared/schemas/excludes";
 import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
+import type {
+    typRemoteConfigAnswerInput,
+    typRemoteConfigCreateInput,
+    typRemoteConfigDeleteInput,
+    typRemoteConfigNameInput,
+    typRemoteConfigUpdateInput,
+} from "@/shared/schemas/remote-config";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type {
     typListDirInput,
@@ -33,6 +40,14 @@ import type {
     itfCompareResult,
 } from "@/shared/types/compare";
 import type { itfRunLogView } from "@/shared/types/history";
+import type {
+    itfRemoteAuthAnswerResult,
+    itfRemoteAuthProgress,
+    itfRemoteConfigView,
+    itfRemoteDeleteResult,
+    itfRemoteProvider,
+    itfRemoteUsage,
+} from "@/shared/types/remote-config";
 import type { itfDirListing, itfRemoteBookmark, itfRemoteFeatures } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 import type {
@@ -62,6 +77,15 @@ export const IPC_CHANNELS = {
     remotesDelete: "remotes:delete",
     remotesTest: "remotes:test",
     remotesFeatures: "remotes:features",
+    remoteConfigProviders: "remoteConfig:providers",
+    remoteConfigGet: "remoteConfig:get",
+    remoteConfigUsage: "remoteConfig:usage",
+    remoteConfigCreate: "remoteConfig:create",
+    remoteConfigUpdate: "remoteConfig:update",
+    remoteConfigDelete: "remoteConfig:delete",
+    remoteConfigReconnect: "remoteConfig:reconnect",
+    remoteConfigAnswer: "remoteConfig:answer",
+    remoteConfigAuthCancel: "remoteConfig:authCancel",
     compareRun: "compare:run",
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
@@ -93,6 +117,7 @@ export const IPC_EVENTS = {
     schedulerState: "scheduler:state",
     schedulerOsStatus: "scheduler:osStatusChanged",
     appNotify: "app:notify",
+    remoteConfigAuthProgress: "remoteConfig:authProgress",
 } as const;
 
 export type typIpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -213,6 +238,30 @@ export interface itfRcloneGuiApi {
         /** 대상 경로의 저장소 기능(빈 폴더 가능 여부). 로컬·UNC는 조회하지 않고 true, 실패는 null(오류 아님) */
         features(input: typRemoteFeaturesInput): Promise<typApiResult<itfRemoteFeatures>>;
     };
+    /** rclone.conf의 remote 설정(추가·수정·삭제·재인증). 북마크(remotes:*)와 다른 기능이다 */
+    remoteConfig: {
+        /** rclone config providers 정의(앱 실행 동안 캐시) */
+        providers(): Promise<typApiResult<itfRemoteProvider[]>>;
+        /** 수정 화면용. 비밀 아닌 값과 "설정됨" 표시만 온다 */
+        get(input: typRemoteConfigNameInput): Promise<typApiResult<itfRemoteConfigView>>;
+        /** 작업·북마크 참조 수 */
+        usage(input: typRemoteConfigNameInput): Promise<typApiResult<itfRemoteUsage>>;
+        /** OAuth 종류는 진행 이벤트(remoteConfig:authProgress)로 결과를 알린다 */
+        create(
+            input: typRemoteConfigCreateInput,
+        ): Promise<typApiResult<{ name: string; oauth: boolean }>>;
+        update(
+            input: typRemoteConfigUpdateInput,
+        ): Promise<typApiResult<{ name: string; reauthSuggested: boolean }>>;
+        /** 예약 켜진 참조 작업이 있는데 disableSchedules가 없으면 CONFIRM_REQUIRED */
+        remove(input: typRemoteConfigDeleteInput): Promise<typApiResult<itfRemoteDeleteResult>>;
+        /** OAuth 재인증. 진행 이벤트로 결과를 알린다 */
+        reconnect(input: typRemoteConfigNameInput): Promise<typApiResult<{ name: string }>>;
+        /** 진행 중인 OAuth 질문에 답한다 */
+        answer(input: typRemoteConfigAnswerInput): Promise<typApiResult<itfRemoteAuthAnswerResult>>;
+        /** 진행 중인 OAuth를 취소한다. 없으면 아무것도 하지 않는다 */
+        cancelAuth(): Promise<typApiResult<null>>;
+    };
     compare: {
         /** 원본·대상 목록을 읽어 비교한다(파일은 바꾸지 않음). 다른 비교·실행 중이면 BUSY */
         run(jobId: string): Promise<typApiResult<itfCompareResult>>;
@@ -281,5 +330,7 @@ export interface itfRcloneGuiApi {
         onSchedulerOsStatus(cb: (e: itfOsScheduleStatus) => void): () => void;
         /** 창이 보일 때 main이 보내는 알림(자동 실행 결과 등) */
         onAppNotify(cb: (e: itfAppNotify) => void): () => void;
+        /** remote 추가·재인증(OAuth) 진행 상태 */
+        onRemoteConfigAuthProgress(cb: (e: itfRemoteAuthProgress) => void): () => void;
     };
 }

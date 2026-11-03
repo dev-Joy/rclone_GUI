@@ -15,7 +15,7 @@ import ZBCBadge from "@/components/ZBCBadge";
 import ZBCButton from "@/components/ZBCButton";
 import { canStartCompare } from "@/lib/compare-view";
 import { sortJobs } from "@/lib/job-form";
-import { isOsTaskMissing, jobListItem } from "@/lib/job-list-view";
+import { isOsTaskMissing, jobListItem, missingRemoteNames } from "@/lib/job-list-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
 import { formatLocalDateTime } from "@/shared/format";
@@ -23,6 +23,7 @@ import type { typJob } from "@/shared/schemas/job";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import { useRunStore } from "@/stores/run-store";
 import { useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -54,6 +55,7 @@ export default function JobSidebar() {
     const runActive = useRunStore((s) => s.active);
     const runStartingJobId = useRunStore((s) => s.startingJobId);
     const osStatus = useSchedulerStore((s) => s.osStatus);
+    const env = useRcloneEnvStore((s) => s.env);
     const flow = useRunFlow();
 
     // ========== 내부 변수 (_V) ==========
@@ -124,6 +126,10 @@ export default function JobSidebar() {
                     const item = jobListItem(job, { showStatus });
                     const reason = f_RunNowReason(job);
                     const nameId = `job-item-name-${job.id}`;
+                    const missing =
+                        env === null || env.problem !== null
+                            ? []
+                            : missingRemoteNames(job, env.remotes);
                     return (
                         <li key={job.id} className={styles.row}>
                             <button
@@ -160,6 +166,14 @@ export default function JobSidebar() {
                                     )}
                                     {isOsTaskMissing(job, osStatus) && (
                                         <ZBCBadge tone="warning">OS 예약 미등록</ZBCBadge>
+                                    )}
+                                    {missing.length > 0 && (
+                                        <ZBCBadge
+                                            tone="warning"
+                                            title={`rclone 설정에 없는 리모트: ${missing.map((n) => `${n}:`).join(", ")}`}
+                                        >
+                                            remote 없음
+                                        </ZBCBadge>
                                     )}
                                 </span>
                                 <span className={styles.paths}>{item.pathsText}</span>

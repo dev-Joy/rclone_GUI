@@ -94,11 +94,18 @@ export function assertNoBlockedFlags(args: readonly string[]): void {
 
 /**
  * 앱이 실행하는 rclone 하위 명령 허용 목록.
- * config는 "file"만 허용한다(설정 내용을 출력하는 config show/dump 차단 — 안전 규칙 6).
+ * config는 "file"·"providers"·"redacted"·"delete"·"reconnect"만 허용한다
+ * (설정 내용을 출력하는 config show/dump·값을 명령줄에 넣는 create/update는 차단 — 안전 규칙 1·6).
+ * rcd는 remote 설정 쓰기 전용으로만 띄운다(rc-session.ts, 안전 규칙 1).
  */
 export const ALLOWED_COMMANDS: ReadonlyArray<readonly string[]> = [
     ["version"],
     ["config", "file"],
+    ["config", "providers"],
+    ["config", "redacted"],
+    ["config", "delete"],
+    ["config", "reconnect"],
+    ["rcd"],
     ["listremotes"],
     ["lsjson"],
     ["copy"],
@@ -132,6 +139,56 @@ export function buildVersionArgs(): string[] {
 /** rclone config file — 설정 파일 경로만 출력한다(내용은 읽지 않음) */
 export function buildConfigFileArgs(): string[] {
     return f_Finish(["config", "file", NO_ASK_PASSWORD]);
+}
+
+/** remote 이름을 위치 인자로 넘기기 전에 확인한다(`-` 시작은 rclone이 플래그로 해석한다, notes #44) */
+function f_AssertRemoteNameArg(name: string): void {
+    // oxlint-disable-next-line no-control-regex -- 제어문자를 찾아 거부하기 위한 정규식
+    if (name === "" || name.startsWith("-") || /[\u0000-\u001f]/.test(name)) {
+        throw new clsAppError(
+            "REMOTE_NAME_INVALID",
+            "리모트 이름이 비어 있거나 -로 시작합니다. 다른 이름을 쓰세요.",
+        );
+    }
+}
+
+/** rclone config providers — 지원하는 모든 종류와 옵션 정의(JSON). 값이 아니라 정의만 읽는다 */
+export function buildConfigProvidersArgs(): string[] {
+    return f_Finish(["config", "providers", NO_ASK_PASSWORD]);
+}
+
+/** rclone config redacted <name> — 비밀 값을 rclone이 가린 설정(수정 화면용, 안전 규칙 6 예외) */
+export function buildConfigRedactedArgs(name: string, configPath: string | null): string[] {
+    f_AssertRemoteNameArg(name);
+    const args = ["config", "redacted", name, NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+/** rclone config delete <name> — remote 하나를 지운다(없는 이름도 exit 0이므로 호출 전에 확인한다) */
+export function buildConfigDeleteArgs(name: string, configPath: string | null): string[] {
+    f_AssertRemoteNameArg(name);
+    const args = ["config", "delete", name, NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+/** rclone config reconnect <name>: — OAuth 토큰을 다시 받는다(값은 명령줄에 없다) */
+export function buildConfigReconnectArgs(name: string, configPath: string | null): string[] {
+    f_AssertRemoteNameArg(name);
+    const args = ["config", "reconnect", `${name}:`, NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
+}
+
+/**
+ * rclone rcd — remote 설정 쓰기 전용 임시 서버(안전 규칙 1).
+ * loopback·임의 포트만 쓰고 인증 토큰은 환경 변수(RCLONE_RC_USER·RCLONE_RC_PASS)로만 넘긴다.
+ */
+export function buildRcdArgs(configPath: string | null): string[] {
+    const args = ["rcd", "--rc-addr", "127.0.0.1:0", NO_ASK_PASSWORD];
+    if (configPath) args.push("--config", configPath);
+    return f_Finish(args);
 }
 
 /** rclone listremotes */

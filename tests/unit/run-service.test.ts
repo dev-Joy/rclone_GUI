@@ -255,6 +255,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
                 return { binaryPath: BIN, configPath: CONF };
             },
             resolveConfigFor: async () => CONF,
+            listRemotesAt: async () => ["x", "test-remote", "gd", "remote"],
         },
         compare: {
             compareForAuto: (jobId, signal) => {
@@ -601,6 +602,7 @@ describe("clsRunService 실제 실행 게이트", () => {
             rcloneEnv: {
                 require: async () => ({ binaryPath: BIN, configPath: CONF }),
                 resolveConfigFor: async () => CONF,
+                listRemotesAt: async () => ["x", "test-remote", "gd", "remote"],
             },
             compare: {
                 requirePlan: () => {

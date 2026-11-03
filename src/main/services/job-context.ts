@@ -23,7 +23,7 @@ import type { typSettings } from "@/shared/schemas/settings";
 
 export interface itfJobContextDeps {
     settings: { get(): typSettings };
-    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
+    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor" | "listRemotesAt">;
     /** 공용 제외 패턴 조회 */
     excludes: Pick<clsExcludeStore, "patternsFor">;
 }
@@ -106,6 +106,20 @@ export async function resolveJobContext(
             "CONFIG_REQUIRED",
             "리모트 경로를 쓰려면 rclone 설정 파일이 필요합니다.",
         );
+    }
+    // 2a) 작업이 쓰는 remote가 이 설정 파일에 있는지 확인한다(FR-24, CLI에서 지운 경우 등)
+    if (src.kind === "remote" || dst.kind === "remote") {
+        const names = await deps.rcloneEnv.listRemotesAt(configPath);
+        for (const p of [src, dst]) {
+            if (p.kind !== "remote") continue;
+            const name = p.root.slice(0, -1);
+            if (!names.includes(name)) {
+                throw new clsAppError(
+                    "REMOTE_NOT_FOUND",
+                    `remote ‘${name}’가 rclone 설정에 없습니다. 설정 화면에서 추가하거나 작업의 경로를 바꾸세요.`,
+                );
+            }
+        }
     }
     // 3) 제외 패턴: 마지막 await 뒤 동기로 해석해 이후 비교·실행이 같은 값을 쓴다
     const excludes = resolveEffectiveExcludes(job, deps.excludes);

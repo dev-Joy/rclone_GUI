@@ -9,6 +9,7 @@
 // ========== Internal imports ==========
 import { shortenPath } from "@/lib/path-display";
 import { formatLocalDateTime } from "@/shared/format";
+import { parsePath } from "@/shared/path-utils";
 import { scheduleText } from "@/shared/schedule";
 import type { typRunStatus } from "@/shared/schemas/common";
 import type { typJob } from "@/shared/schemas/job";
@@ -78,4 +79,24 @@ export function isOsTaskMissing(
     const id = job.id.toLowerCase();
     const task = status.tasks.find((t) => t.jobId === id);
     return task !== undefined && (!task.registered || task.error !== null);
+}
+
+/**
+ * 기본 conf를 쓰는 작업이 가리키는 remote 중 목록에 없는 이름(FR-25).
+ * remotes가 null이면(아직 못 읽음) 표시하지 않는다. 작업별 conf를 쓰는 작업도 확인하지 않는다.
+ */
+export function missingRemoteNames(
+    job: Pick<typJob, "source" | "destination" | "configPathOverride">,
+    remotes: readonly string[] | null,
+): string[] {
+    if (remotes === null || job.configPathOverride !== null) return [];
+    const known = new Set(remotes.map((n) => n.toLowerCase()));
+    const out: string[] = [];
+    for (const raw of [job.source, job.destination]) {
+        const r = parsePath(raw);
+        if (!r.ok || r.path.kind !== "remote") continue;
+        const name = r.path.root.slice(0, -1);
+        if (!known.has(name.toLowerCase()) && !out.includes(name)) out.push(name);
+    }
+    return out;
 }

@@ -50,6 +50,17 @@ const api: itfRcloneGuiApi = {
         test: (input) => ipcRenderer.invoke(C.remotesTest, input),
         features: (input) => ipcRenderer.invoke(C.remotesFeatures, input),
     },
+    remoteConfig: {
+        providers: () => ipcRenderer.invoke(C.remoteConfigProviders),
+        get: (input) => ipcRenderer.invoke(C.remoteConfigGet, input),
+        usage: (input) => ipcRenderer.invoke(C.remoteConfigUsage, input),
+        create: (input) => ipcRenderer.invoke(C.remoteConfigCreate, input),
+        update: (input) => ipcRenderer.invoke(C.remoteConfigUpdate, input),
+        remove: (input) => ipcRenderer.invoke(C.remoteConfigDelete, input),
+        reconnect: (input) => ipcRenderer.invoke(C.remoteConfigReconnect, input),
+        answer: (input) => ipcRenderer.invoke(C.remoteConfigAnswer, input),
+        cancelAuth: () => ipcRenderer.invoke(C.remoteConfigAuthCancel),
+    },
     compare: {
         run: (jobId) => ipcRenderer.invoke(C.compareRun, { jobId }),
         cancel: (jobId) => ipcRenderer.invoke(C.compareCancel, { jobId }),
@@ -104,6 +115,7 @@ const api: itfRcloneGuiApi = {
         onSchedulerState: (cb) => f_Subscribe(E.schedulerState, cb),
         onSchedulerOsStatus: (cb) => f_Subscribe(E.schedulerOsStatus, cb),
         onAppNotify: (cb) => f_Subscribe(E.appNotify, cb),
+        onRemoteConfigAuthProgress: (cb) => f_Subscribe(E.remoteConfigAuthProgress, cb),
     },
 };
 

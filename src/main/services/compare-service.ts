@@ -64,7 +64,7 @@ import type {
 export interface itfCompareServiceDeps {
     jobs: Pick<clsJobStore, "get">;
     settings: { get(): typSettings };
-    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
+    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor" | "listRemotesAt">;
     pathService: Pick<clsPathService, "probe">;
     /** 대상 저장소의 빈 폴더 가능 여부(INT-003 FR-30). 보통 clsRemoteService */
     features: Pick<clsRemoteService, "canHaveEmptyDirs">;

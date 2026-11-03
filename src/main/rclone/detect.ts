@@ -199,6 +199,13 @@ export class clsRcloneEnv {
         return listRemotes(rt.binaryPath, configPath, this.deps);
     }
 
+    /** 이미 정한 설정 파일 경로로 remote 이름 목록을 읽는다(실행 전 remote 존재 확인, FR-24) */
+    async listRemotesAt(configPath: string | null): Promise<string[]> {
+        if (configPath === null) return [];
+        const rt = await this.require();
+        return listRemotes(rt.binaryPath, configPath, this.deps);
+    }
+
     private async tryBinary(path: string): Promise<typTryResult> {
         try {
             const r = await this.deps.run(path, buildVersionArgs(), {

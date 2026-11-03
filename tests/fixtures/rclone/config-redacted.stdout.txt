@@ -1,0 +1,6 @@
+[it-sftp]
+type = sftp
+pass = XXX
+user = XXX
+host = XXX
+### Double check the config for sensitive info before posting publicly

@@ -105,7 +105,7 @@ import {
 export interface itfRunServiceDeps {
     jobs: Pick<clsJobStore, "get" | "setBookkeeping">;
     settings: { get(): typSettings };
-    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor">;
+    rcloneEnv: Pick<clsRcloneEnv, "require" | "resolveConfigFor" | "listRemotesAt">;
     compare: Pick<clsCompareService, "requirePlan" | "invalidate" | "get" | "compareForAuto">;
     history: Pick<clsHistoryStore, "begin" | "patch">;
     activity: clsActivityLock;

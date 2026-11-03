@@ -382,6 +382,20 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 return f_Ok({ canHaveEmptyDirs: true });
             },
         },
+        remoteConfig: {
+            providers: () => {
+                calls.push("remoteConfig.providers");
+                return notImplemented("remoteConfig.providers");
+            },
+            get: () => notImplemented("remoteConfig.get"),
+            usage: () => notImplemented("remoteConfig.usage"),
+            create: () => notImplemented("remoteConfig.create"),
+            update: () => notImplemented("remoteConfig.update"),
+            remove: () => notImplemented("remoteConfig.remove"),
+            reconnect: () => notImplemented("remoteConfig.reconnect"),
+            answer: () => notImplemented("remoteConfig.answer"),
+            cancelAuth: () => notImplemented("remoteConfig.cancelAuth"),
+        },
         compare: {
             run: (jobId) => {
                 calls.push(`compare.run:${jobId}`);
@@ -514,6 +528,7 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 notifyListeners.add(cb);
                 return () => notifyListeners.delete(cb);
             },
+            onRemoteConfigAuthProgress: () => () => undefined,
         },
     };
 

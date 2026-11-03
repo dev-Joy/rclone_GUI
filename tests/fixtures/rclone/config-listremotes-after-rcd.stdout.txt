@@ -1,0 +1,4 @@
+x:        memory 
+한글:       memory 
+it-sftp:  sftp   
+it-drive: drive  

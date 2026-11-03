@@ -36,6 +36,7 @@ import ExcludesEditor from "./ExcludesEditor";
 import JobOptionsFields from "./JobOptionsFields";
 import RcloneSetupPanel from "./RcloneSetupPanel";
 import RemoteBookmarksPanel from "./RemoteBookmarksPanel";
+import RemoteConfigPanel from "./RemoteConfigPanel";
 import styles from "./SettingsPage.module.css";
 
 // ========== Props & Types ==========
@@ -234,6 +235,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
             <h2 className={styles.pageTitle}>설정</h2>
 
             <RcloneSetupPanel />
+            <RemoteConfigPanel />
             <RemoteBookmarksPanel />
 
             <section className={styles.section} aria-labelledby="settings-defaults-title">

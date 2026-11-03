@@ -39,6 +39,14 @@ export const RCLONE_TIMEOUTS = {
     listDir: 60_000,
     /** 비교용 전체 목록(lsjson --recursive) 한 쪽 */
     compare: 30 * 60_000,
+    /** config providers 정의 읽기 */
+    providers: 20_000,
+    /** config redacted·delete·update 같은 설정 쓰기(짧은 작업) */
+    remoteConfig: 30_000,
+    /** rcd가 시작 줄을 낼 때까지 */
+    rcStart: 15_000,
+    /** OAuth 로그인 대기(FR-11) */
+    oauth: 10 * 60_000,
 } as const;
 
 export const NO_CONFIG_WARNING = "rclone 설정 파일이 없습니다. 로컬·UNC 경로만 쓸 수 있습니다.";

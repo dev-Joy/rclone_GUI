@@ -15,6 +15,7 @@ import { registerExcludesIpc, type itfExcludesIpcDeps } from "@/main/ipc/exclude
 import { handle } from "@/main/ipc/handle";
 import { registerHistoryIpc, type itfHistoryIpcDeps } from "@/main/ipc/history";
 import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
+import { registerRemoteConfigIpc, type itfRemoteConfigIpcDeps } from "@/main/ipc/remote-config";
 import { registerRemotesIpc, type itfRemotesIpcDeps } from "@/main/ipc/remotes";
 import { registerRunIpc, type itfRunIpcDeps } from "@/main/ipc/run";
 import { registerSchedulerIpc, type itfSchedulerIpcDeps } from "@/main/ipc/scheduler";
@@ -41,7 +42,8 @@ export interface itfIpcServices
         itfHistoryIpcDeps,
         itfSchedulerIpcDeps,
         itfExcludesIpcDeps,
-        itfRemotesIpcDeps {
+        itfRemotesIpcDeps,
+        itfRemoteConfigIpcDeps {
     settings: clsSettingsStore;
     jobs: clsJobStore;
     paths: { userData: string; logs: string };
@@ -144,6 +146,7 @@ export function registerIpc(s: itfIpcServices): void {
 
     registerExcludesIpc(s);
     registerRemotesIpc(s);
+    registerRemoteConfigIpc(s);
     registerCompareIpc(s);
     registerRunIpc(s);
     registerHistoryIpc(s);

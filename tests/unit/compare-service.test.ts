@@ -206,6 +206,7 @@ function f_Harness(o: itfHarnessOptions = {}) {
         rcloneEnv: {
             require: async () => ({ binaryPath: BIN, configPath: CONF }),
             resolveConfigFor: async (c) => c ?? (o.configPath === undefined ? CONF : o.configPath),
+            listRemotesAt: async () => ["x", "test-remote", "gd", "remote"],
         },
         pathService: {
             probe: async ({ path }) => {

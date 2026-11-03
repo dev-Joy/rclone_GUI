@@ -7,6 +7,7 @@ import {
     findDriveLetterRemotes,
     isDriveLetterRemoteName,
     looksLikeDriveLetterRemotePath,
+    validateNewRemoteName,
 } from "@/shared/remote-name";
 
 describe("한 글자 리모트 이름", () => {
@@ -42,5 +43,37 @@ describe("한 글자 리모트 이름", () => {
         ["x:", false],
     ])("looksLikeDriveLetterRemotePath(%j) → %s", (raw, expected) => {
         expect(looksLikeDriveLetterRemotePath(raw)).toBe(expected);
+    });
+});
+
+describe("새 리모트 이름 검사(INT-006 FR-5)", () => {
+    it.each([
+        ["gdrive", null],
+        ["ab", null],
+        ["한글", null],
+        ["a.b+c@d_e-f", null],
+        ["my-remote", null],
+    ])("%j는 쓸 수 있다", (name, expected) => {
+        expect(validateNewRemoteName(name)).toBe(expected);
+    });
+
+    it.each([
+        ["x", "두 글자"],
+        ["a b", "공백"],
+        [" ab", "앞뒤"],
+        ["ab ", "앞뒤"],
+        ["-ab", "-로 시작"],
+        ["ab-", "-로 시작"],
+        ["a:b", "글자·숫자"],
+        ["a/b", "글자·숫자"],
+        ["a\\b", "글자·숫자"],
+        ["", "두 글자"],
+    ])("%j는 거부한다", (name, contains) => {
+        expect(validateNewRemoteName(name)).toContain(contains);
+    });
+
+    it("기존 이름과 대소문자만 달라도 거부한다", () => {
+        expect(validateNewRemoteName("AB", ["ab"])).toContain("이미 있습니다");
+        expect(validateNewRemoteName("ab2", ["ab"])).toBeNull();
     });
 });

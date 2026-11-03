@@ -586,6 +586,11 @@ describe("허용 명령 목록", () => {
         expect(ALLOWED_COMMANDS.map((c) => c.join(" "))).toEqual([
             "version",
             "config file",
+            "config providers",
+            "config redacted",
+            "config delete",
+            "config reconnect",
+            "rcd",
             "listremotes",
             "lsjson",
             "copy",

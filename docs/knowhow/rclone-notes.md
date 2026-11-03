@@ -269,3 +269,57 @@
 - 명령: `config create <n> drive --non-interactive`, 이어서 `config update <n> --continue --state client_id_warning --result <true|false> --non-interactive`
 - 결과: 첫 응답 `State: client_id_warning`, `Option.Name: config_shared_client_id`, Help "rclone's shared Google Drive client_id is being retired and will stop working during 2026. ... Continue using the shared client_id anyway?", `Default: false`. false면 `State: client_id_set`(client_id 입력), true면 `State: *oauth-islocal,teamdrive,oauth,`(`config_is_local`, 기본 true). create 때 `client_id`·`client_secret`을 주면 바로 `config_is_local` 질문으로 간다. 이 단계까지는 브라우저를 열지 않았다.
 - 영향: INT-006 FR-15a. 질문을 기본값으로 넘기면 Drive 추가가 client_id 입력에서 멈춘다. 앱은 범용 질문 폼으로 받는다.
+
+## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-007 T-01: `--filter-from`·뒤 공백·인자 파일)
+
+probe `filter` 묶음(`node scripts/probes/rclone-probes.mjs rclone --only=filter`). 임시 폴더(`#a`, `;a`, ` lead`, `!a`, `a`, `c`)와 빈 임시 conf만 썼다. 필터 해석은 `--dump filters`로 봤다(probe 전용, 앱은 `--dump*`를 쓰지 않는다). 최소 버전 1.65.0에서는 아직 확인하지 않았다.
+
+### 46. rclone은 인자 파일(`@file`)을 지원하지 않는다
+- 명령: `rclone @<파일>`(파일 내용 `lsf`) (fixture `argfile-at`)
+- 결과: exit 2, `Error: unknown command "@<파일>" for "rclone"`.
+- 영향: 명령줄 전체를 파일로 옮기는 방법은 없다. INT-007은 필터만 파일로 옮긴다.
+
+### 47. `--filter-from`의 `- ` 접두사 줄은 `#`·`;`·앞 공백·`!`로 시작하는 패턴도 그대로 제외 규칙이 된다
+- 명령: `lsjson --recursive --files-only --no-mimetype --ask-password=false --config <conf> --filter-from <파일> -- <폴더>`, 파일 내용 `- #a\n- ;a\n-  lead\n- !a\n` (fixture `filter-from-prefixed`, 해석 `filter-from-prefixed-dump`)
+- 결과: 네 파일이 모두 빠지고 `a`·`c`만 남았다. 해석 결과 `(^|/)#a$`, `(^|/);a$`, `(^|/) lead$`, `(^|/)!a$`. exit 0. (`--exclude-from`은 `#`·`;` 줄을 주석으로, 앞 공백을 지운다, #18)
+- 영향: 앱이 만드는 필터 파일 줄을 모두 `- <패턴>`으로 쓰면 `#`·`;`·앞 공백 패턴을 인자로 따로 넘길 필요가 없다.
+
+### 48. 패턴 뒤 공백은 파일·인자 모두에서 지워진다. `[ ]`로 쓰면 남는다
+- 명령: `lsf ... --filter-from <파일> --dump filters`(`- trail \n- trail[ ]\n- two[ ][ ]\n`, fixture `filter-trailing-space-file-dump`), `lsf ... --exclude "trail " --dump filters`(`filter-trailing-space-arg-dump`), `--exclude " lead"`(`filter-leading-space-arg-dump`)
+- 결과: 파일 `- trail ` → `(^|/)trail$`, **인자 `--exclude "trail "`도 `(^|/)trail$`**. `trail[ ]` → `(^|/)trail[ ]$`, `two[ ][ ]` → `(^|/)two[ ][ ]$`. 인자 앞 공백은 남는다(`(^|/) lead$`).
+- 영향: 지금 `isFileSafePattern`은 뒤 공백 패턴을 인자로 넘기면 공백이 남는다고 보지만, 실제로는 지워져 저장한 패턴과 다른 규칙이 적용된다(버그). 필터 파일에 쓸 때 뒤 공백을 `[ ]`로 바꾼다.
+
+### 49. `--filter-from`은 BOM·접두사 없는 줄을 `malformed rule`로 거부한다, CRLF는 문제없다
+- 명령: 파일 내용 `﻿- a\n- c\n`(fixture `filter-from-bom`), `a\n`(`filter-from-no-prefix`), `- a\r\n- c\r\n`(`filter-from-crlf`)
+- 결과: BOM은 exit 1 `CRITICAL: Failed to initialise global options: failed to reload "filter" options: malformed rule "﻿- a"`. 접두사 없는 줄은 exit 1 `malformed rule "a"`. CRLF는 `a`·`c`가 빠지고 exit 0.
+- 영향: `--exclude-from`의 BOM은 첫 패턴만 조용히 깨지지만(#19) `--filter-from`은 실행 전에 실패한다. BOM 확인(`writeExcludeFile`)은 그대로 둔다.
+
+### 50. `--exclude` 인자와 `--filter-from`은 합쳐 적용된다
+- 명령: `--exclude a --filter-from <파일(- c)>` (fixture `filter-from-and-exclude-arg`)
+- 결과: `a`·`c` 모두 빠졌다. exit 0.
+- 영향: 전환 중이나 인자로 남는 패턴이 있어도 두 방식을 함께 쓸 수 있다(#20과 같음).
+
+## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-006 T-01: remote 설정 쓰기 실측)
+
+`scripts/probes/rclone-probes.mjs --only=config`로 임시 conf에서 다시 받았다(fixture `config-*`). 값은 모두 가짜다.
+
+### 51. `config providers`는 1MB JSON이고, 숨김·선택지·비밀 표시를 옵션마다 준다
+- 명령: `config providers --ask-password=false` (fixture `config-providers`)
+- 결과: 69종·옵션 968개. 옵션 필드 `Name`·`Help`·`DefaultStr`·`Required`·`Advanced`·`Hide`·`IsPassword`·`Sensitive`·`Type`·`Exclusive`·`Examples`가 온다. `Hide`는 0·1·2·3이 있고 0이 아닌 옵션은 설정 화면에 나오지 않는다. `Type`은 `string`·`bool`·`int`·`float64`·`Duration`·`SizeSuffix`·`CommaSepList` 등 14가지다. `Exclusive`는 azureblob `delete_snapshots` 하나뿐이다.
+- 기본값에는 현재 OS 사용자·컴퓨터 이름(`sftp user`, `cache-backend` 경로)이 들어 있어 fixture에서 `<USER>`로 가렸다.
+- 영향: INT-006 FR-2·FR-3. `Hide != 0`은 폼에서 빼고, `Exclusive`일 때만 선택지 고르기로 만든다. OAuth 판정은 `token` 옵션 유무다.
+
+### 52. `config delete`는 없는 이름도 exit 0이다
+- 명령: `config delete no-such-remote --ask-password=false` (fixture `config-delete-missing`)
+- 결과: stdout·stderr 없이 exit 0.
+- 영향: INT-006 FR-22. 지우기 전에 `listremotes`로 이름이 있는지 확인해야 `REMOTE_NOT_FOUND`를 구분할 수 있다.
+
+### 53. rcd 응답은 `State`·`Option`·`Error`·`Result`이고, Drive 질문 흐름은 그대로 재현된다
+- 명령: `rcd --rc-addr 127.0.0.1:0 --ask-password=false --config <임시>` + `POST /config/create`·`/config/update`·`/core/quit` (fixture `config-rcd-requests`)
+- 결과: 인증 없는 요청은 401. 성공 응답은 `{"Error":"","Option":null,"Result":"","State":""}`. Drive 첫 질문은 `State: client_id_warning`, `Option.Name: config_shared_client_id`(bool, Exclusive, Default false)이고, `result=false`로 이어 가면 `State: client_id_set`, `Option.Name: client_id`(Required)가 온다. `core/quit` 응답은 `{}`이고 프로세스가 끝난다. `config/update`도 같은 형식이다.
+- 영향: INT-006 FR-14·FR-15a. 질문 Option은 providers와 같은 모양이라 파서를 함께 쓴다.
+
+### 54. `config redacted`는 sftp의 host·user·pass를 모두 XXX로 가린다
+- 명령: `config redacted it-sftp --ask-password=false` (fixture `config-redacted`)
+- 결과: `type = sftp`만 보이고 `host`·`user`·`pass`는 `XXX`. 끝에 `### Double check the config for sensitive info before posting publicly`.
+- 영향: INT-006 FR-17. `Sensitive`(host·user)까지 가려지므로 수정 화면에서 채워지는 값은 비밀이 아닌 옵션뿐이다. providers 정의로 `XXX`를 한 번 더 걸러 `secretsSet`으로만 알린다.

@@ -193,6 +193,11 @@ export default function RemoteBookmarksPanel() {
                                     <ZBCBadge tone="neutral">
                                         {type === undefined ? "종류 미확인" : type}
                                     </ZBCBadge>
+                                    {env !== null &&
+                                        env.problem === null &&
+                                        !env.remotes.some(
+                                            (r) => r.toLowerCase() === b.remoteName.toLowerCase(),
+                                        ) && <ZBCBadge tone="warning">remote 없음</ZBCBadge>}
                                     <div className={styles.actions}>
                                         <ZBCButton
                                             onClick={h_Test(b)}

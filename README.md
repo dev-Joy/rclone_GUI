@@ -32,14 +32,21 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱입니다. 
 
    1.65.0 이상이어야 합니다. 앱은 수동 지정 → `PATH` → WinGet/일반 설치 경로 순으로 rclone을 찾습니다.
 
-3. cloud remote를 쓸 때만 rclone 설정을 만듭니다.
+3. cloud remote를 쓸 때만 rclone 설정을 만듭니다. 앱의 **설정 → rclone 리모트 → 리모트 추가**에서
+   rclone이 지원하는 모든 종류를 골라 만들 수 있습니다. OAuth 종류(Google Drive·OneDrive·Dropbox 등)는
+   브라우저 로그인으로 이어지고, 비밀 값은 rclone에만 넘기며 앱은 저장하지 않습니다. 기존 remote는
+   같은 화면에서 수정·삭제·재인증합니다.
+
+   CLI로 만들려면:
 
    ```powershell
    rclone config
    ```
 
-   remote 이름은 예를 들어 `gdrive:`처럼 정합니다. 앱의 경로 입력란에는 `gdrive:백업/폴더`처럼
-   **remote 이름과 폴더**를 함께 씁니다(remote 루트 전체는 저장할 수 없음).
+   remote 이름은 예를 들어 `gdrive:`처럼 정합니다(두 글자 이상, 공백·`-`로 시작·끝 금지). 앱의 경로
+   입력란에는 `gdrive:백업/폴더`처럼 **remote 이름과 폴더**를 함께 씁니다(remote 루트 전체는 저장할 수
+   없음). 이미 있는 한 글자 remote(`x:`)는 Windows 드라이브로 해석되어 앱에서 쓸 수 없고, 설정
+   화면에서 삭제만 할 수 있습니다.
 
 ### 1.2 앱 설치
 

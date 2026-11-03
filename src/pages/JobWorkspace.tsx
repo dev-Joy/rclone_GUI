@@ -20,7 +20,7 @@ import ZBCModal from "@/components/ZBCModal";
 import ZBCTabs, { type itfZBCTab } from "@/components/ZBCTabs";
 import { canStartCompare } from "@/lib/compare-view";
 import { sortJobs } from "@/lib/job-form";
-import { isOsTaskMissing } from "@/lib/job-list-view";
+import { isOsTaskMissing, missingRemoteNames } from "@/lib/job-list-view";
 import { canStartRun, RUN_LABEL } from "@/lib/run-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -28,6 +28,7 @@ import { scheduleText } from "@/shared/schedule";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useRcloneEnvStore } from "@/stores/rclone-env-store";
 import { useRunStore } from "@/stores/run-store";
 import { useSchedulerStore } from "@/stores/scheduler-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -84,6 +85,7 @@ export default function JobWorkspace() {
     const runStartingJobId = useRunStore((s) => s.startingJobId);
     const startRun = useRunStore((s) => s.start);
     const osStatus = useSchedulerStore((s) => s.osStatus);
+    const env = useRcloneEnvStore((s) => s.env);
     const flow = useRunFlow();
     const caseInsensitive = useSettingsStore(
         (s) => s.settings?.compare.caseInsensitivePaths ?? true,
@@ -199,6 +201,12 @@ export default function JobWorkspace() {
                     {job && isOsTaskMissing(job, osStatus) && (
                         <ZBCBadge tone="warning">OS 예약 미등록</ZBCBadge>
                     )}
+                    {job &&
+                        env !== null &&
+                        env.problem === null &&
+                        missingRemoteNames(job, env.remotes).length > 0 && (
+                            <ZBCBadge tone="warning">remote 없음</ZBCBadge>
+                        )}
                 </div>
                 {job && (
                     <p className={styles.paths} title={`${job.source} → ${job.destination}`}>
