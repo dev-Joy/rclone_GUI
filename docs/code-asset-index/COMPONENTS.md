@@ -1,10 +1,10 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-02 18:55:29
+- 생성일시: 2026-11-03 11:38:44
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 326 건
-- 수동 갱신: 2026-11-02 (INT-003 Phase 4 — `useEmptyDirSupport`·`emptyDirQueryRoot`·`emptyDirsUnsupportedText`·`hasPlannedChanges`, `clsRemoteService` 설명)
+- 총 인덱싱 자산: 325 건
+- 수동 보완: 2026-11-03 (스크립트 미감지 — 여러 줄 시그니처 `useEmptyDirSupport`·`hasPlannedChanges`, 파일당 한도 초과 `emptyDirsUnsupportedText`)
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -68,7 +68,6 @@
 | `browserParent` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | browserParent(bookmark: itfRemoteBookmark, path: string) - 기준 경로 위로 올라간 부모. 기준 경로에 닿았거나 밖이면 null |
 | `isBrowserRoot` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | isBrowserRoot(path: string) - remote 루트("name:")인지. 루트는 작업 경로로 고를 수 없다 |
 | `visibleDirEntries` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | visibleDirEntries(entries: readonly itfDirEntry[], shown: number) - 더 보기: 앞에서 shown개만 |
-| `emptyDirQueryRoot` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | emptyDirQueryRoot(destination: string) - 해석되는 remote 경로면 remote 루트("name:"), 아니면 null |
 | `hasPlannedChanges` | [`src/shared/run-plan.ts`](src/shared/run-plan.ts) | hasPlannedChanges(plan, destCanHaveEmptyDirs: boolean \| null) - 실행하면 바뀌는 것이 있는지(자동 noop·실행 버튼). false면 폴더 생성은 세지 않음 |
 | `canStartRun` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | canStartRun(input: itfCanStartRunInput) - 미리보기·실제 실행 버튼 가능 여부와 이유. 공통: 저장 안 됨 → 미저장 변경 → 경로 오류 → 비교 중 → 실행 중. |
 | `deleteDirSamples` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | deleteDirSamples(result: itfCompareResult, limit = 20) - 삭제 예정(대상에만 있음) 폴더 샘플. 경로 오름차순으로 최대 limit개 (전체 범위만) |
@@ -79,6 +78,7 @@
 | `isSettingsEqual` | [`src/lib/settings-form.ts`](src/lib/settings-form.ts) | isSettingsEqual(a: typSettings, b: typSettings) - 공통 함수/유틸리티 |
 | `settingsToPatch` | [`src/lib/settings-form.ts`](src/lib/settings-form.ts) | settingsToPatch(s: typSettings) - 화면에 노출된 섹션만 patch로 (defaults, compare, safety, logs, ui). scheduler(일시정지)는 넣지 않는다: settings:update가 거부하며 scheduler:setPaused로만 바꾼다. |
 | `validateSettingsDraft` | [`src/lib/settings-form.ts`](src/lib/settings-form.ts) | validateSettingsDraft(s: typSettings) - 공통 함수/유틸리티 |
+| `emptyDirQueryRoot` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | emptyDirQueryRoot(destination: string) - 조회 키: 해석되는 remote 경로면 remote 루트("name:"), 아니면 null(로컬·UNC·입력 중). 순수 |
 | `fail` | [`src/main/lib/app-error.ts`](src/main/lib/app-error.ts) | fail(e: unknown) - 공통 함수/유틸리티 |
 | `toErrorPayload` | [`src/main/lib/app-error.ts`](src/main/lib/app-error.ts) | toErrorPayload(e: unknown) - 공통 함수/유틸리티 |
 | `redactSecrets` | [`src/main/lib/logger.ts`](src/main/lib/logger.ts) | redactSecrets(text: string) - 공통 함수/유틸리티 |
@@ -89,8 +89,7 @@
 | `checkDestProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
 | `checkSourceProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
 | `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
-| `isExcludeFileName` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | isExcludeFileName(name: string) - 앱이 만든 제외 파일 이름인지(테스트·로그 확인용) |
-| _(외 54 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 55 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
 ## 4. Shared Services & Clients
 
@@ -106,7 +105,7 @@
 | `clsFsGate` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
 | `clsPathService` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsPathService - 공유 서비스/클라이언트 클래스 |
 | `clsRemoteOps` | [`src/main/services/remote-ops.ts`](src/main/services/remote-ops.ts) | class clsRemoteOps - 공유 서비스/클라이언트 클래스 |
-| `clsRemoteService` | [`src/main/services/remote-service.ts`](src/main/services/remote-service.ts) | class clsRemoteService - 북마크·폴더 탐색, `features(root, conf)`(backend features 캐시·10초), `canHaveEmptyDirs(dst, conf)`·`emptyDirSupport(input)`(실패는 null) |
+| `clsRemoteService` | [`src/main/services/remote-service.ts`](src/main/services/remote-service.ts) | class clsRemoteService - 공유 서비스/클라이언트 클래스 |
 | `clsRunEventBatcher` | [`src/main/services/run-events.ts`](src/main/services/run-events.ts) | class clsRunEventBatcher - 공유 서비스/클라이언트 클래스 |
 | `clsRunLogFile` | [`src/main/services/run-log-file.ts`](src/main/services/run-log-file.ts) | class clsRunLogFile - 공유 서비스/클라이언트 클래스 |
 | `clsActiveRunStore` | [`src/main/services/run-recovery.ts`](src/main/services/run-recovery.ts) | class clsActiveRunStore - 공유 서비스/클라이언트 클래스 |
@@ -168,5 +167,5 @@
 | `itfExcludeFileHandle` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | interface itfExcludeFileHandle - 인터페이스 정의 |
 | `itfExcludeServiceDeps` | [`src/main/services/exclude-service.ts`](src/main/services/exclude-service.ts) | interface itfExcludeServiceDeps - 인터페이스 정의 |
 | `itfJobContext` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | interface itfJobContext - 인터페이스 정의 |
-| _(외 140 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 142 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
