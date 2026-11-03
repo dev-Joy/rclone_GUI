@@ -1,6 +1,6 @@
 # Plan: 앱에서 rclone remote 추가·수정·삭제·재인증
 
-- Intent: [INT-006](intent.md) | Tier: 3 | 작성일: 2026-11-03
+- Intent: [INT-006](intent.md) | Tier: 3 | 작성일: 2026-11-03 | 완료: 2026-11-03
 
 > 기준: [spec.md](spec.md), 커밋 `2215254`. Phase마다 검증 통과 뒤 커밋한다.
 > Phase 0(결정)이 끝나기 전에는 Phase 2 이후 구현을 시작하지 않는다. Phase 1(probe)은 결정과 무관하게 먼저 해도 된다.

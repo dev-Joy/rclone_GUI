@@ -1,6 +1,6 @@
 # Spec: 앱에서 rclone remote 추가·수정·삭제·재인증
 
-- Intent: [INT-006](intent.md) | Status: planned | 작성일: 2026-11-03
+- Intent: [INT-006](intent.md) | Status: done (2026-11-03) | 작성일: 2026-11-03
 
 > 이 spec은 intent를 구현할 수 있는 수준으로 풀어 쓴 문서다. 내용이 서로 다르면 intent가 우선한다.
 > 심볼과 경로는 커밋 `2215254` 기준이다.
