@@ -250,6 +250,7 @@
 - 실측(probe `filter` 묶음, v1.75.1): `@file` 미지원, `- ` 접두사 줄은 `#`·`;`·앞 공백·`!` 패턴 유지, 뒤 공백은 파일·인자 모두 지워짐(현재 인자 경로 버그)·`[ ]`로 유지, BOM·접두사 없는 줄은 `malformed rule` exit 1, CRLF 정상, 인자와 합집합 → rclone-notes #46~#50, fixture `filter-*`·`argfile-at` 30개
 - 문서: intent 제목·문제·제안·제약·질문·태스크(T-01 완료, T-02~T-05) 재작성, INDEX 행 갱신
 - 참고: probe의 INT-006 `config` 묶음이 `--only` 조건 없이 실행돼 `config-rcd-requests` fixture를 같은 버전 출력으로 다시 씀(INT-006 S1-1에서 조건 추가 필요)
+- spec 미해결 질문 결정(Q-1~Q-5): 빈 필터 파일 안 넘김, 공용 `#`·`;` 해제는 INBOX(2026-11-03-03), T-02 P2, 계획 토큰 버전 4 유지, 공백만 패턴 그대로. 사전 실측(v1.75.1 일회성, spec §6.3): rclone이 지우는 끝 공백은 Go `unicode.IsSpace` 집합(U+0085 포함·U+FEFF 제외)이라 FR-3을 JS `\s`에서 명시 집합으로 수정·AC-3b 추가, 끝 `a\ `는 `a\$` 규칙이 됨, 빈 파일·`--exclude ""`는 규칙 0개. Q-6(1.65.0)은 zip SHA256 확인까지만, 실행은 T-05
 
 [TASK_027] : (2026-11-03) INT-006 앱에서 remote 추가·수정·삭제·재인증 구현 (관련 Intent: INT-006, T-01~T-06)
 - probe(T-01): `scripts/probes/rclone-probes.mjs`에 `config` 묶음 추가 — `config providers`(69종·옵션 968개, Hide 0/1/2/3, Exclusive는 azureblob 하나, 기본값의 OS 사용자 이름은 `<USER>`로 가림), `config delete` 없는 이름 exit 0, rcd `config/create`·`update`·`core/quit` 응답과 401, Drive `client_id_warning`→`client_id_set` 질문, `config redacted`의 sftp host·user·pass XXX. rclone-notes #51~#54, fixture `config-*` 30개. rcd 묶음은 `--only=config`일 때만 실행하도록 가드(다른 묶음 실행 때 덮어쓰지 않게)

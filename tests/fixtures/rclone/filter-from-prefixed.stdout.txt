@@ -1,0 +1,4 @@
+[
+{"Path":"a","Name":"a","Size":1,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false},
+{"Path":"c","Name":"c","Size":1,"ModTime":"2026-01-01T09:00:00.0000000+09:00","IsDir":false}
+]

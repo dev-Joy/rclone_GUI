@@ -1,0 +1,13 @@
+--- start filters ---
+--- File filter rules ---
+- (^|/)trail$
+- (^|/)trail[ ]$
+- (^|/)two[ ][ ]$
+--- Directory filter rules ---
+--- end filters ---
+ lead
+!a
+#a
+;a
+a
+c

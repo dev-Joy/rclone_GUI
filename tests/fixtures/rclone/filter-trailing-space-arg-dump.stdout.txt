@@ -1,0 +1,11 @@
+--- start filters ---
+--- File filter rules ---
+- (^|/)trail$
+--- Directory filter rules ---
+--- end filters ---
+ lead
+!a
+#a
+;a
+a
+c

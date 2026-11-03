@@ -1,0 +1,5 @@
+Error: unknown command "@<TMP>\\f6.txt" for "rclone"
+Run 'rclone --help' for usage.
+You could use 'rclone selfupdate' to get latest features.
+
+2026/11/03 14:15:03 NOTICE: Fatal error: unknown command "@<TMP>\\f6.txt" for "rclone"
