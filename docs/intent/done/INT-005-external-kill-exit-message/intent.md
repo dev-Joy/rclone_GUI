@@ -1,7 +1,7 @@
 ---
 id: INT-005
 title: rclone이 외부에서 강제 종료됐을 때 이해할 수 있는 실패 안내
-status: planned
+status: done
 priority: P2
 created: 2026-11-03
 updated: 2026-11-03
@@ -52,6 +52,12 @@ updated: 2026-11-03
   - 반복되면 선택적으로 Sysmon 이벤트 10(ProcessAccess, `rclone.exe`에 PROCESS_TERMINATE 요청)으로 종료 주체를 기록한다.
 
 ## 작업 (Tasks)
-- [ ] T-01 [P2] probe `kill` 묶음: 임시 폴더에서 `--bwlimit`로 느린 copy를 띄워 `taskkill /F`·`taskkill /T /F`·`Stop-Process -Force`·.NET `Process.Kill()`·CIM `Terminate()`·앱 `killProcessTree`로 종료하고 `exitCode`·`signal`·stderr 끝부분을 `tests/fixtures/rclone/`에 저장(작업 관리자 종료는 수동 1회), rclone-notes 기록
-- [ ] T-02 [P2] decideRunOutcome 분류(`RCLONE_KILLED`·충돌·exit 1 불변, Go 충돌 메시지 확인)·문구·int32/16진 종료 코드 표기, T-01 fixture 값으로 단위 테스트
-- [ ] T-03 [P3] 실행 결과·이력·알림 문구(연속 실패 경고 포함) 반영, `drive-app`으로 실행 중 rclone을 밖에서 `Stop-Process`로 종료해 화면·이력·알림 확인, CHANGELOG
+- [x] T-01 [P2] probe `kill` 묶음: 임시 폴더에서 `--bwlimit`로 느린 copy를 띄워 `taskkill /F`·`taskkill /T /F`·`Stop-Process -Force`·.NET `Process.Kill()`·CIM `Terminate()`·앱 `killProcessTree`로 종료하고 `exitCode`·`signal`·stderr 끝부분을 `tests/fixtures/rclone/`에 저장(작업 관리자 종료는 수동 1회), rclone-notes 기록 — 완료: probe `kill` 6방식 실측, fixture 18개, rclone-notes #58~#62. `0xC000013A` 미재현, exit 1·0은 외부 종료와 구분 불가한 한계를 notes·spec에 문서화
+- [x] T-02 [P2] decideRunOutcome 분류(`RCLONE_KILLED`·충돌·exit 1 불변, Go 충돌 메시지 확인)·문구·int32/16진 종료 코드 표기, T-01 fixture 값으로 단위 테스트 — 완료: shared `exit-code.ts`, `RCLONE_KILLED`·`RCLONE_CRASHED`, `decideRunOutcome` 분기, run-service exitCode 정규화·로그 표기, AC-1~AC-8·AC-15~AC-17 테스트
+- [x] T-03 [P3] 실행 결과·이력·알림 문구(연속 실패 경고 포함) 반영, `drive-app`으로 실행 중 rclone을 밖에서 `Stop-Process`로 종료해 화면·이력·알림 확인, CHANGELOG — 완료: 스케줄러 연속 실패 문구, HistoryDetail 종료 코드 표기, drive-app AC-13 실측(Stop-Process로 실행 중 종료 → 외부 종료 문구·exitCode -1·로그 `exit=-1(0xFFFFFFFF)`·콘솔 오류 0) 112건 통과, CHANGELOG·MVP_SPEC 갱신
+
+## 결과 (Result)
+- 외부 종료(`-1`)·충돌(NTSTATUS)·rclone 오류를 나눠 안내하고 종료 코드를 int32/16진으로 표기한다(T-01~T-03).
+- 최종 검증: unit 1,312·통합 77(+19 skip)·E2E 15·`build:win`·drive-app 112 통과.
+- 남은 것: exit 1(`taskkill /F`·작업 관리자)과 exit 0(CIM `Terminate`)은 외부 종료로 구분할 수 없다(spec R-1 한계).
+- 완료일: 2026-11-03
