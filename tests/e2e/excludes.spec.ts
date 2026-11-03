@@ -63,7 +63,9 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
         // #로 시작하는 패턴은 공용으로 막는다
         await library.locator("#job-exclude-library-new").fill("#주석");
         await library.getByRole("button", { name: "공용 패턴 추가" }).click();
-        await expect(library.getByRole("alert")).toContainText("#·;로 시작하는 패턴은");
+        await expect(library.getByRole("alert")).toContainText(
+            "공용 패턴은 #·;로 시작할 수 없습니다",
+        );
 
         // 작업 전용에는 쓸 수 있고 안내만 보인다
         await page.locator("#job-excludes").fill("#keep\nlogs/**");

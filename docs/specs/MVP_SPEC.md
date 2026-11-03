@@ -96,7 +96,7 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 | 항목 | 이 문서 | 실제 구현 |
 | :--- | :--- | :--- |
 | 저장소 (§5.6) | JSON 파일 | SQLite `rclonegui-store.sqlite`(`node:sqlite`, `src/main/store/sqlite-db.ts`만 import). v2에서 `exclude_patterns`(CHECK: `#`·`;` 시작 금지)·`job_exclude_patterns`(패턴 RESTRICT, 작업 CASCADE) 추가. v1의 `schedules` 테이블은 쓰지 않고 예약은 `jobs.data.autoSync`에 둔다(spec Q8) |
-| 제외 패턴 (§5.2) | 작업별 `excludes`(최대 100개, 각 512자) | 공용 라이브러리 + 작업 전용. 합계 500개. IPC `excludes:list/create/update/delete`, 수정·삭제는 사용 작업 확인(`CONFIRM_REQUIRED`). 64개 초과 또는 길면 `--exclude-from` 임시 파일(UTF-8 BOM 없음·LF·`wx`, 실행 뒤·시작 시 정리, `%APPDATA%\rcloneGUI\exclude-files\`). 계획 토큰에 패턴 스냅샷 해시 |
+| 제외 패턴 (§5.2) | 작업별 `excludes`(최대 100개, 각 512자) | 공용 라이브러리 + 작업 전용. 합계 500개. IPC `excludes:list/create/update/delete`, 수정·삭제는 사용 작업 확인(`CONFIRM_REQUIRED`). 패턴이 하나라도 있으면 실행마다 `--filter-from` 임시 파일 하나로 넘긴다(모든 줄 `- <패턴>`, 끝 공백 문자는 `[<문자>]`, UTF-8 BOM 없음·LF·`wx`, 실행 뒤·시작 시 정리, `%APPDATA%\rcloneGUI\exclude-files\`). 계획 토큰에 패턴·파일 내용 스냅샷 해시 |
 | 길이 한도 | - | 경로 4096자(spec Q1), 패턴 512자, 작업 전용 100개·합계 500개, 실행 전 명령 길이 검사(`WIN_CMDLINE_MAX`) |
 | 리모트 북마크 | - | `remotes` 테이블(remote 이름 + 기준 경로 + 별칭), IPC `remotes:list/create/update/delete/test`·`rclone:listDir`. 탐색 인자 `lsjson --max-depth 1 --dirs-only --ask-password=false`(허용 명령은 늘리지 않음). 탐색·테스트는 전역 1개, 같은 remote를 비교·실행 중이면 `BUSY`. rclone.conf는 쓰지 않음 |
 | 동기화 범위 (§8.1) | 파일만 | 작업 `scope`: `files`(기본, `lsjson --files-only`) / `all`(폴더 포함 목록, copy·sync·dry-run에 `--create-empty-src-dirs`). 비교 결과 `createDirs`·`deleteDirs`·`dirChanges`, 실행 입력 `confirmedDeleteDirs`, 계획 토큰 v3에 scope·폴더 수. `--max-delete`는 파일 삭제 수만(rclone이 폴더를 세지 않음), 폴더 삭제는 확인 수·사전 확인(`remove directory`·`deletedDirs`)으로 맞춤. 자동 실행의 삭제 조건은 파일+폴더 합산 |
@@ -954,14 +954,14 @@ writeJsonAtomic(file, value):
 
 ```
 rclone lsjson --recursive --files-only --no-mimetype [--hash] [--skip-links]
-       [--config <conf>] [--exclude <pattern> ...] -- <path>
+       [--config <conf>] [--filter-from <파일>] -- <path>
 ```
 
 - `--files-only`: 디렉터리 제외(빈 디렉터리 차이는 MVP에서 표시하지 않음).
 - `--no-mimetype`: payload 축소.
 - `--hash`: `checkHashes=true`일 때만. local은 해시 계산 비용이 있으므로 기본 OFF.
 - `--skip-links`: job 옵션.
-- `--exclude`: job excludes를 순서대로 각각 전달. 원본/대상 양쪽에 동일 적용.
+- `--filter-from`: job excludes(공용 + 작업 전용)를 `- <패턴>` 줄로 쓴 파일 하나를 넘긴다. 원본/대상 양쪽에 동일 적용. 패턴이 없으면 넘기지 않는다(INT-007).
 - `--config`: 경로가 확인된 경우 항상 전달.
 - **exit code != 0이면 stdout을 파싱하지 않는다.** rclone은 없는 경로에서 stdout에 `[`만 출력하고
   exit 3을 반환하는 것을 실측 확인했다. 이 경우 `PATH_NOT_FOUND` + stderr 요약으로 처리한다.
@@ -1090,7 +1090,7 @@ planToken = sha256(
 | mode | `copy` \| `sync` | - | positional |
 | source/destination | positional | - | 정규화된 경로 |
 | configPath | `--config <path>` | 감지값 | 존재 확인, 토큰 내용 비노출 |
-| excludes[] | `--exclude <p>` 반복 | 기본 패턴 | 각각 별도 arg |
+| excludes[] | `--filter-from <파일>` | 기본 패턴 | 모든 패턴을 `- <패턴>` 줄로 쓴 임시 파일 하나(INT-007) |
 | checkers | `--checkers N` | 8 | 1..64 clamp/검증 |
 | transfers | `--transfers N` | 4 | 1..32 |
 | fastList | `--fast-list` | true | 메모리 사용 증가 |
@@ -1101,10 +1101,10 @@ planToken = sha256(
 | dryRun | `--dry-run` | false | 미리보기/사전검증 |
 | (sync only) delete guard | `--max-delete <plan.deleteFiles>` | 계획 수 | 0도 유효(모든 삭제 차단) |
 | logging | `-v --use-json-log --stats 1s` | 항상 | dry-run 포함 |
-| lsjson | `lsjson ...flags -- <path>` | - | `--recursive --files-only --no-mimetype`, `--hash`, `--skip-links`, `--exclude`, `--config` 추가 |
+| lsjson | `lsjson ...flags -- <path>` | - | `--recursive --files-only --no-mimetype`, `--hash`, `--skip-links`, `--filter-from`, `--config` 추가 |
 
 **금지/미사용**: `--delete-excluded`, `--ignore-times`, `--size-only`, `--update`,
-`--track-renames`, `--progress`(JSON 로그와 충돌), 셸 문자열 조합.
+`--track-renames`, `--progress`(JSON 로그와 충돌), 셸 문자열 조합. 제외는 `--filter-from` 파일만 쓰므로 `--exclude`·`--exclude-from`·`--include*`·`--filter`(단독)는 만들지 않는다(INT-007).
 **조건부 사용**: `--backup-dir`는 sync + 작업 백업 폴더가 있을 때만(INT-003 T-03, 아래 반영 표).
 
 
