@@ -271,3 +271,12 @@
 - 문서: MVP_SPEC(제외 패턴 표·§7.2 lsjson·§8.1 매핑·미사용 목록), README(공용 패턴·임시 파일), CHANGELOG 1줄, intent T-02~T-05 완료·done 이동·INDEX 재작성, spec §6.3 F7 재측정 반영, plan DoD 체크
 - 검증: `pnpm run check`(단위 76파일 1,289), `format:check`, `test:int` 77(+19 skip), `test:e2e` 15(콘솔 오류 0), `build:win` 통과
 - 참고: 인자 `--exclude`는 같은 값을 여러 번 주면 첫 값만 뒤 공백이 남는 등 일관성이 없어(1.75.1 재측정) 파일 방식만 쓰는 근거가 됐다. 1.65.0의 빈 패턴 차이는 앱이 `min(1)`로 빈 패턴을 저장하지 않아 해당 없음
+
+[TASK_029] : (2026-11-03) INT-005 외부 종료·충돌 종료 코드 분류와 안내 (관련 Intent: INT-005, T-01~T-03)
+- probe(T-01): `f_ProbeKillOnTransfer`가 killer 함수(pid → { ok, reason? })를 받도록 확장(기본 taskkill /T /F, 실패 시 taskkill 정리·fixture 미저장), 절대 경로 taskkill·powershell 래퍼(15초), 방식 6종(kill-taskkill-f/tf, kill-stop-process, kill-dotnet-kill, kill-cim-terminate, kill-ctrl-c). `--only=kill`로 임시 폴더·16 MiB·`--bwlimit 4M` 실행, `--only=copy-cancel-large` 회귀(exit 1) 유지. 실측: Stop-Process·.NET Kill = 4294967295(int32 -1), taskkill = 1, CIM Terminate(Reason 생략) = 0, Ctrl+C = 1 + `Signal received: interrupt` + `Exiting...`, 0xC000013A 미재현. fixture `kill-*` 18개, 경로 가림 확인. rclone-notes #58~#62
+- 분류·표기(T-02): 신규 `src/shared/exit-code.ts`(`toInt32ExitCode`·`formatExitCode`·`formatExitCodeForLog`·`classifyAbnormalExit`·`EXTERNAL_KILL_EXIT_CODES=[-1]`·NTSTATUS 5종, Node/DOM import 없음), `ERROR_CODES`에 `RCLONE_KILLED`·`RCLONE_CRASHED`와 기본 메시지, `itfRunOutcomeInput.stderrTail` 필수 추가와 `f_HasGoCrashMarker`/`f_HasSignalMarker`, `decideRunOutcome` 분기(취소>3>7>0>Go 충돌>exit1+신호>외부 종료+오류 없음>NTSTATUS 충돌>그 밖)와 FR-8 문구, run-service `decide` stderrTail 전달·이력 exitCode int32 정규화·사전 확인/`# 종료`/app.log `exit=` 표기
+- 화면·알림(T-03): 스케줄러 연속 실패 경고(마지막 실패 `RCLONE_KILLED`면 외부 종료 반복 안내, 집계 불변), `HistoryDetail` 종료 코드 `formatExitCode`, 목록 배지 없음(Q-3)
+- 테스트: 신규 `exit-code.test.ts`(AC-1·AC-2·분류 경계), run-output AC-3~AC-8(fixture 기반)·AC-15~AC-17·E-8c·hint, fixture `readFixtureExitCode`, run-service AC-11(exitCode -1·로그 `exit=-1(0xFFFFFFFF)`), scheduler AC-9·AC-10. 단위 77파일 1,312
+- 문서: spec 머리말·FR-3·FR-3a·FR-15·§6.1·§6.4·AC-8·AC-13·AC-17·R-1·R-2를 실측에 맞게 갱신(CIM exit 0 구분 불가 추가), intent 제안·제약·Q2 실측 반영, rclone-notes #58~#62, CHANGELOG 1줄, MVP_SPEC §8.6 행 4개
+- 검증: `pnpm run check`, `pnpm run format:check`, `pnpm run test:int` 77(+19 skip), `pnpm run test:e2e` 15(콘솔 오류 0), `pnpm run build:win` 통과
+- 미수행: S3-3 drive-app 실측은 CDP 시나리오에 외부 종료 단계를 추가해야 해 이번 범위에서 실행하지 않았다(AC-11은 run-service 단위 테스트로 입증). 사용자 확인 후 커밋·intent 완료 이동 필요

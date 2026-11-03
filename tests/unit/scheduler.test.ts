@@ -463,6 +463,48 @@ describe("clsScheduler 알림", () => {
         expect(h.notices.filter((n) => n.message.includes("연속 실패"))).toHaveLength(2);
     });
 
+    it("AC-9: 자동 실행 실패 코드가 RCLONE_KILLED면 외부 종료 안내를 쓴다", () => {
+        const notice = autoOutcomeNotice({
+            runId: "r",
+            jobId: "j",
+            jobName: "n",
+            status: "failed",
+            error: { code: "RCLONE_KILLED", message: "x" },
+            plan: null,
+            stats: null,
+            finishedAt: iso(0),
+            recorded: true,
+            transferStarted: false,
+        });
+        expect(notice?.level).toBe("error");
+        expect(notice?.message).toContain("rclone이 외부에서 종료된 것으로 보입니다.");
+    });
+
+    it("AC-10: 연속 실패 3회째 마지막 실패가 RCLONE_KILLED면 외부 종료 반복 안내(집계는 같음)", async () => {
+        const h = f_Harness([f_Job(1, iso(-MIN))]);
+        const f_Run = async (o: Partial<itfAutoOutcome>) => {
+            h.advance(11 * MIN);
+            await h.sched.tick();
+            h.started.at(-1)!.resolve(o);
+            await h.flush();
+        };
+        const killed = {
+            status: "failed" as const,
+            error: { code: "RCLONE_KILLED" as const, message: "x" },
+        };
+        for (let i = 0; i < FAILURE_WARN_COUNT; i += 1) await f_Run(killed);
+        const warns = h.notices.filter((n) => n.message.includes("연속 실패"));
+        expect(warns).toHaveLength(1);
+        expect(warns[0]!.message).toContain("마지막 실패는 rclone이 외부에서 종료된 경우입니다");
+        expect(warns[0]!.message).toContain(
+            "백신이나 다른 프로그램이 rclone을 끝내는지 확인하세요",
+        );
+        expect(warns[0]!.message).not.toContain("작업 설정과 이력의 로그를 확인하세요");
+        // 네 번째는 추가 경고가 없다(집계 조건 불변)
+        await f_Run(killed);
+        expect(h.notices.filter((n) => n.message.includes("연속 실패"))).toHaveLength(1);
+    });
+
     it("autoOutcomeNotice: noop은 null", () => {
         expect(
             autoOutcomeNotice({

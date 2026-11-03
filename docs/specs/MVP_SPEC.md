@@ -1253,6 +1253,10 @@ spawn(binary, args, {
 | exit 0, errors>0 또는 `--ignore-errors`로 오류 존재 | `partial` |
 | exit 3 | `failed` + `PATH_NOT_FOUND` 안내 |
 | exit 7 | `failed` + `MAX_DELETE_EXCEEDED` |
+| exit 0 + CIM `Terminate`(Reason 생략)처럼 외부에서 exit 0으로 종료 | 구분 불가 — `success`/`partial` (R-1) |
+| exit -1(0xFFFFFFFF), 오류 줄 없음, Go 충돌 표지 없음 | `failed` + `RCLONE_KILLED` (외부 종료 안내) |
+| exit 1 + `Signal received:` 로그 | `failed` + `RCLONE_KILLED` (중단 신호 안내) |
+| Go 충돌 표지(`panic:`·`fatal error:`·`Exception 0x`) 또는 0xC0000000 이상(0xC000013A 제외) | `failed` + `RCLONE_CRASHED` (충돌 안내, NTSTATUS 이름) |
 | 그 외 비정상 exit | `failed` |
 | 자동 비교 결과 변경 없음 | `noop` (이력 미기록, lastRun 갱신) |
 | 앱 비정상 종료 후 복구 | `interrupted` |

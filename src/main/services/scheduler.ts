@@ -269,7 +269,10 @@ export class clsScheduler {
             this.deps.logger.warn(`자동 실행 연속 실패 ${n}회: job=${o.jobId}`);
             this.safeNotify({
                 level: "warning",
-                message: `‘${o.jobName}’ 자동 실행이 ${n}번 연속 실패했습니다. 작업 설정과 이력의 로그를 확인하세요.`,
+                message:
+                    o.error?.code === "RCLONE_KILLED"
+                        ? `‘${o.jobName}’ 자동 실행이 ${n}번 연속 실패했습니다. 마지막 실패는 rclone이 외부에서 종료된 경우입니다. 백신이나 다른 프로그램이 rclone을 끝내는지 확인하세요.`
+                        : `‘${o.jobName}’ 자동 실행이 ${n}번 연속 실패했습니다. 작업 설정과 이력의 로그를 확인하세요.`,
             });
         }
     }

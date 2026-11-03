@@ -13,6 +13,7 @@ import { errorText, getApi, unwrap } from "@/lib/api";
 import { HISTORY_KIND_LABEL, historyKind } from "@/lib/history-view";
 import { shortenPath } from "@/lib/path-display";
 import { runStatusText } from "@/lib/run-view";
+import { formatExitCode } from "@/shared/exit-code";
 import { formatBytes, formatDuration, formatLocalDateTime } from "@/shared/format";
 import { mayLeavePartial, PARTIAL_LEFT_NOTICE } from "@/shared/partial-files";
 import { useHistoryStore } from "@/stores/history-store";
@@ -72,7 +73,7 @@ export default function HistoryDetail() {
                         {rec.exitCode !== null && (
                             <>
                                 <dt>rclone 종료 코드</dt>
-                                <dd>{rec.exitCode}</dd>
+                                <dd>{formatExitCode(rec.exitCode)}</dd>
                             </>
                         )}
                         {rec.plan && (
