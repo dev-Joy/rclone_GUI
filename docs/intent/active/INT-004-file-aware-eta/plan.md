@@ -93,7 +93,7 @@
 
 - Tier 2 기본: 영향 모듈 단위 테스트와 타입 검사 통과(`pnpm run check`).
 - 프로젝트 완료 기준(AGENTS 6장)에 따른 추가 항목:
-  - [x] `pnpm run check` 통과 (2026-11-03: 71파일 1,217)
+  - [x] `pnpm run check` 통과 (2026-11-03: 71파일 1,218)
   - [x] `pnpm run format:check` 통과
   - [x] 파서를 바꿨으므로 테스트를 추가하고 `pnpm run test:int` 통과(rclone 실측 진행 stats 경로 회귀 확인 — 71 통과, 19 skip)
   - [x] 화면을 바꿨으므로 `pnpm run test:e2e` 통과(콘솔 오류 0, 14 통과), `pnpm run build:win` 성공

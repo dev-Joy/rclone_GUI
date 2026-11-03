@@ -234,6 +234,7 @@
 - 테스트: AC-2~AC-8b, AC-10~AC-13 단위 테스트, 파서 AC-1·깨진 `transferring` 케이스, run-service 계산값 전달·사전 확인→실제 실행 초기화, `etaText` 표시 규칙. AC-12는 `command-builder.ts`·게이트·`spawnTransfer` 시작 조건 diff 0으로 확인
 - 측정: 완료 fixture는 초반 10초에 30MB와 작은 파일 10여 개가 끝나 바이트 98%가 된 뒤 Drive 속도 제한으로 초당 0.3~0.5개로 느려졌다. 재생 결과 11~29초 19개 지점이 실제 남은 시간의 0.314~0.330배, 30초 이후는 1/3~3배, 인접 비율 최대 1.11배. 분모·부분 진행률·평활 결함이 아니라 누적 평균의 알려진 한계(FR-5)로 진단해 AC-8b 하한만 1/4로 넓히고 spec §10 Q-4에 근거 기록
 - 문서: CHANGELOG 1줄, rclone-notes #37(`totalChecks` 0·`totalBytes` 실행 중 증가)·#38(Drive 초반 폭주→속도 제한, rclone eta 0초, AC-8b 하한 근거), spec AC-8b/Q-4, plan DoD 체크, intent T-01~T-03 완료·active 이동, INDEX 재작성
-- 검증: `pnpm run check`(단위 71파일 1,217), `format:check`, `test:int` 71 통과(+19 skip: GCS 9·Drive 10), `test:e2e` 14(콘솔 오류 0), `build:win` 통과
+- 검토 보완: 완료 stats에서 평활값 때문에 0초가 아닌 값이 남던 FR-7 결함을 찾아, 원시 남은 시간이 0이면 평활과 관계없이 0초를 내도록 고치고 단위 테스트를 추가했다(단위 1,218)
+- 검증: `pnpm run check`(단위 71파일 1,218), `format:check`, `test:int` 71 통과(+19 skip: GCS 9·Drive 10), `test:e2e` 14(콘솔 오류 0), `build:win` 통과
 - 특이: 완료 fixture 첫 시도는 실행 중이던 다른 앱 rclone과 같은 Drive remote를 동시에 써 20분간 진행이 멈췄다(로그 0바이트). 두 프로세스를 정리하고 테스트 폴더를 지운 뒤 다시 실행해 8분 만에 완료했다. 생성한 테스트 폴더는 purge로 정리
 - 남은 것: 사용자 완료 확인 후 INT-004 done 이동
