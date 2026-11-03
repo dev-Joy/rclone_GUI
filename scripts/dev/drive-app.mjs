@@ -7,6 +7,7 @@
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
  *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
  *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영),
+ *        실행 중 rclone을 바깥에서 Stop-Process로 강제 종료 → 외부 종료 문구·이력 exitCode -1·로그 exit=-1(0xFFFFFFFF)(INT-005 AC-13),
  *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변
  *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 비교 탭) → 대상 반영),
  *        대상의 가짜 `x.bin.0123abcd.partial`을 비교 목록·삭제 확인 창에서 "취소로 남은 임시 파일"로 표시,
@@ -96,6 +97,24 @@ function f_Schtasks(args) {
                 done({
                     code: err ? (typeof err.code === "number" ? err.code : -1) : 0,
                     text: Buffer.from(stdout ?? []).toString("latin1"),
+                }),
+        );
+    });
+}
+
+const POWERSHELL = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+
+/** powershell(셸 없음). 인자에는 숫자 pid만 넣는다(안전 규칙 1의 정신) */
+function f_PowerShell(args) {
+    return new Promise((done) => {
+        execFile(
+            POWERSHELL,
+            args,
+            { shell: false, windowsHide: true, timeout: 30_000 },
+            (err, stdout, stderr) =>
+                done({
+                    code: err ? (typeof err.code === "number" ? err.code : -1) : 0,
+                    text: `${stdout ?? ""}${stderr ?? ""}`,
                 }),
         );
     });
@@ -492,7 +511,7 @@ try {
     f_Check(
         "window.rclonegui API",
         keys ===
-            "app,settings,jobs,excludes,remotes,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
+            "app,settings,jobs,excludes,remotes,remoteConfig,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -503,7 +522,7 @@ try {
     );
     f_Check(`app:getInfo isPackaged === ${PACKAGED}`, info.ok && info.data.isPackaged === PACKAGED);
     const draft = `({ ...{ name: "스모크", notes: "", source: "C:\\\\tmp\\\\src", destination: "test-remote:dst", mode: "copy", scope: "files",
-        excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null,
+        excludes: ["node_modules/**"], excludePatternIds: [], configPathOverride: null, backupDir: null,
         autoSync: { enabled: false, intervalMinutes: 60, allowDeletes: false, kind: "interval", timeOfDay: "09:00", weekdays: 62, backend: "app" },
         options: { checkers: 8, transfers: 4, fastList: true, skipLinks: true, ignoreErrors: false,
             checkHashes: false, modtimeToleranceMs: 2000, preflightBeforeDestructive: true } } })`;
@@ -1052,6 +1071,129 @@ try {
     await a.evaluate(`window.rclonegui.jobs.remove(${js(syncJob.data?.id)})`);
     await f_Sleep(300);
 
+    // ===== INT-005 AC-13: 실행 중 rclone을 바깥에서 강제 종료(Stop-Process) =====
+    // 작업 옵션에 --bwlimit이 없으므로 로컬 복사가 몇 초 걸리도록 작은 파일을 많이 만든다
+    const killSrc = join(smokeRoot, "kill-src");
+    const killDst = join(smokeRoot, "kill-dst");
+    mkdirSync(killDst, { recursive: true });
+    for (let i = 0; i < 6000; i += 1) {
+        const dir = join(killSrc, `d${f_Pad2(i % 30)}`);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+            join(dir, `f${String(i).padStart(4, "0")}.bin`),
+            Buffer.alloc(16 * 1024, i % 251),
+        );
+    }
+    const killJob = await a.evaluate(
+        `window.rclonegui.jobs.create({ ...${draft}, name: "외부 종료 스모크", source: ${js(killSrc)}, destination: ${js(killDst)},
+            options: { checkers: 1, transfers: 1, fastList: false, skipLinks: true, ignoreErrors: false,
+                checkHashes: false, modtimeToleranceMs: 2000, preflightBeforeDestructive: true } })`,
+    );
+    f_Check(
+        "AC-13 준비: 외부 종료 스모크 작업 생성",
+        killJob.ok,
+        JSON.stringify(killJob).slice(0, 200),
+    );
+    await ui.clickJob("외부 종료 스모크");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "외부 종료 스모크"`);
+    await ui.click("비교");
+    const killReady = await ui.until(
+        `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "복사 실행" && !b.disabled)`,
+        120_000,
+    );
+    f_Check("AC-13 준비: 비교 완료·복사 실행 활성", killReady, (await ui.text()).slice(0, 200));
+    await ui.click("복사 실행");
+    await ui.until(`document.querySelector("dialog[open] button")`);
+    await ui.click("복사 실행", { inDialog: true });
+    // active-run.json에 pid가 기록되면 바깥에서 강제 종료한다(앱 중지 경로가 아니라 Stop-Process)
+    let killPid = 0;
+    for (let i = 0; i < 300 && !killPid; i += 1) {
+        try {
+            killPid = JSON.parse(readFileSync(join(userData, "active-run.json"), "utf8")).pid ?? 0;
+        } catch {
+            // 아직 기록 전이다
+        }
+        if (!killPid) await f_Sleep(20);
+    }
+    f_Check("AC-13 준비: 실행 중 rclone pid 확인", killPid > 0, `pid=${killPid}`);
+    const stop = await f_PowerShell([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Stop-Process -Id ${killPid} -Force`,
+    ]);
+    f_Check(
+        "AC-13: rclone을 바깥에서 Stop-Process -Force로 종료",
+        stop.code === 0,
+        stop.text.trim(),
+    );
+    const killShown = await ui.until(
+        `document.body.innerText.includes("rclone이 외부에서 종료된 것으로 보입니다")`,
+        30_000,
+    );
+    const killActive = await a.evaluate("window.rclonegui.run.getActive()");
+    const killList = await a.evaluate("window.rclonegui.history.list({ limit: 1 })");
+    const killRec = killList.ok ? (killList.data[0] ?? null) : null;
+    f_Check(
+        "AC-13: 실행 결과 화면에 외부 종료 문구, 진행 중 실행 없음",
+        killShown && killActive.ok && killActive.data === null,
+        JSON.stringify(killActive).slice(0, 200),
+    );
+    f_Check(
+        "AC-13: 이력 레코드 status failed·code RCLONE_KILLED·exitCode -1",
+        killRec?.status === "failed" &&
+            killRec?.error?.code === "RCLONE_KILLED" &&
+            killRec?.exitCode === -1 &&
+            (killRec?.error?.message ?? "").includes("rclone이 외부에서 종료된 것으로 보입니다"),
+        JSON.stringify({ status: killRec?.status, error: killRec?.error, exit: killRec?.exitCode }),
+    );
+    const killLogPath =
+        killRec?.logFile === null || killRec?.logFile === undefined
+            ? null
+            : join(userData, "logs", killRec.logFile);
+    const killLog =
+        killLogPath !== null && existsSync(killLogPath) ? readFileSync(killLogPath, "utf8") : "";
+    f_Check(
+        "AC-13: 실행 로그 끝 줄이 exit=-1(0xFFFFFFFF)",
+        /# 종료: .* exit=-1\(0xFFFFFFFF\)/.test(killLog.trimEnd().split("\n").at(-1) ?? ""),
+        (killLog.trimEnd().split("\n").at(-1) ?? "").slice(0, 200),
+    );
+    await a.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+    await ui.until(
+        `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr").length >= 1`,
+        5000,
+    );
+    const killBadgeTitle = await a.evaluate(
+        `document.querySelector("table[aria-label='실행 이력'] tbody tr td span[title]")?.getAttribute("title") ?? ""`,
+    );
+    f_Check(
+        "AC-13: 이력 목록 배지 title에 외부 종료 문구",
+        killBadgeTitle.includes("rclone이 외부에서 종료된 것으로 보입니다"),
+        killBadgeTitle.slice(0, 200),
+    );
+    await a.evaluate(
+        `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+    );
+    const killDetailShown = await ui.until(
+        `document.querySelector("dialog[open]")?.innerText.includes("rclone이 외부에서 종료된 것으로 보입니다")`,
+        5000,
+    );
+    const killDetailText = await ui.dialogText();
+    f_Check(
+        "AC-13: 이력 상세에 외부 종료 문구·종료 코드 -1 (0xFFFFFFFF)",
+        killDetailShown && killDetailText.includes("-1 (0xFFFFFFFF)"),
+        killDetailText.replace(/\s+/g, " ").slice(0, 300),
+    );
+    await ui.click("닫기", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
+    f_Check(
+        "AC-13: 외부 종료까지 renderer 콘솔 오류 0건",
+        a.consoleErrors.length === 0,
+        a.consoleErrors.join(" | "),
+    );
+    if (killJob.ok) await a.evaluate(`window.rclonegui.jobs.remove(${js(killJob.data?.id)})`);
+    await f_Sleep(300);
+
     // ===== 취소로 남은 임시 파일(.partial) 표시: 비교 목록·삭제 확인 창 (가짜 .partial, 사용자 파일 report.partial은 아님) =====
     const partSrc = join(smokeRoot, "partial-src");
     const partDst = join(smokeRoot, "partial-dst");
@@ -1528,8 +1670,14 @@ try {
     // ===== 5회차(--os-schedule, 설치본만): Windows 작업 스케줄러 예약 =====
     if (OS_SCHEDULE) await f_OsScheduleRound(draft);
 } finally {
-    rmSync(userData, { recursive: true, force: true });
-    rmSync(smokeRoot, { recursive: true, force: true });
+    // Electron·SQLite 핸들이 잠시 남아 EPERM이 날 수 있다. 결과 출력을 막지 않도록 재시도한 뒤 넘긴다
+    for (const dir of [userData, smokeRoot]) {
+        try {
+            rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch (e) {
+            console.warn(`임시 폴더 정리 생략(${e?.code ?? e}): ${dir}`);
+        }
+    }
 }
 
 /** 5회차. 자세한 순서는 파일 머리말(--os-schedule) */

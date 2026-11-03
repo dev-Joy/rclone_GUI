@@ -279,4 +279,5 @@
 - 테스트: 신규 `exit-code.test.ts`(AC-1·AC-2·분류 경계), run-output AC-3~AC-8(fixture 기반)·AC-15~AC-17·E-8c·hint, fixture `readFixtureExitCode`, run-service AC-11(exitCode -1·로그 `exit=-1(0xFFFFFFFF)`), scheduler AC-9·AC-10. 단위 77파일 1,312
 - 문서: spec 머리말·FR-3·FR-3a·FR-15·§6.1·§6.4·AC-8·AC-13·AC-17·R-1·R-2를 실측에 맞게 갱신(CIM exit 0 구분 불가 추가), intent 제안·제약·Q2 실측 반영, rclone-notes #58~#62, CHANGELOG 1줄, MVP_SPEC §8.6 행 4개
 - 검증: `pnpm run check`, `pnpm run format:check`, `pnpm run test:int` 77(+19 skip), `pnpm run test:e2e` 15(콘솔 오류 0), `pnpm run build:win` 통과
-- 미수행: S3-3 drive-app 실측은 CDP 시나리오에 외부 종료 단계를 추가해야 해 이번 범위에서 실행하지 않았다(AC-11은 run-service 단위 테스트로 입증). 사용자 확인 후 커밋·intent 완료 이동 필요
+- AC-13 실측(S3-3): drive-app에 외부 종료 단계를 추가했다 — 작은 파일 6,000개(16 KiB) copy 실행 중 `active-run.json`의 pid를 읽어 PowerShell `Stop-Process -Force`로 종료하고, 실행 결과 문구·이력(failed·`RCLONE_KILLED`·exitCode -1)·로그 끝 `exit=-1(0xFFFFFFFF)`·이력 목록 배지 title·이력 상세 `-1 (0xFFFFFFFF)`·renderer 콘솔 오류 0건을 확인했다. drive-app의 오래된 드리프트(`backupDir: null` 누락, `remoteConfig` API 키)도 함께 고쳐 전체 112건 통과
+- 참고: drive-app은 INT-003·INT-006 이후 스키마·API 목록이 갱신되지 않아 동기화 단계에서 먼저 실패하던 상태였고, 이번에 AC-13 검증을 위해 함께 맞췄다. 사용자 확인 후 커밋·intent 완료 이동 필요
