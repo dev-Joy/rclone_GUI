@@ -1006,6 +1006,38 @@ try {
         );
         // F6: 인자 파일(@file)을 지원하는가
         f_Probe("argfile-at", [`@${f_FilterFile("f6", "lsf\n")}`], g);
+        // F7: 끝 공백 문자(공백·탭·NBSP·NEL·U+2028·U+3000·BOM 등)를 파일·인자에서 어떻게 해석하는가
+        const f7Chars = [
+            " ",
+            "\t",
+            "\u000b",
+            "\u00a0",
+            "\u2003",
+            "\u202f",
+            "\u2028",
+            "\u3000",
+            "\u0085",
+            "\uFEFF",
+        ];
+        const f7 = f7Chars.flatMap((c) => [`- a${c}`, `- b[${c}]`]).join("\n") + "\n";
+        fDump("filter-space-file-dump", ["--filter-from", f_FilterFile("f7", f7)]);
+        fDump("filter-space-arg-dump", [
+            "--exclude",
+            "a ",
+            "--exclude",
+            "a\u00a0",
+            "--exclude",
+            "a\u0085",
+            "--exclude",
+            "a\uFEFF",
+        ]);
+        // F8: 역슬래시·공백만·빈 패턴·빈 필터 파일·"- " 한 줄
+        const f8 = "- a\\ \n- b\\\\ \n- c\\\\[ ]\n- [ ][ ]\n";
+        fDump("filter-backslash-space-dump", ["--filter-from", f_FilterFile("f8", f8)]);
+        fDump("filter-space-only-arg-dump", ["--exclude", "  "]);
+        fDump("filter-empty-arg-dump", ["--exclude", ""]);
+        fLs("filter-empty-file", ["--filter-from", f_FilterFile("f9", "")]);
+        fLs("filter-malformed-empty-line", ["--filter-from", f_FilterFile("f10", "- \n")]);
     }
 } finally {
     rmSync(work, { recursive: true, force: true });

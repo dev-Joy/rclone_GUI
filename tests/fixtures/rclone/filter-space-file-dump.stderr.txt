@@ -1,0 +1,6 @@
+2026/11/03 16:02:07 NOTICE: Automatically setting -vv as --dump is enabled
+2026/11/03 16:02:07 DEBUG : rclone: Version "v1.75.1" starting with parameters ["rclone" "lsf" "--ask-password=false" "--config" "<TMP>\\rclone.conf" "--filter-from" "<TMP>\\f7.txt" "--dump" "filters" "--" "<TMP>\\filter-src"]
+2026/11/03 16:02:07 DEBUG : Creating backend with remote "<TMP>\\filter-src"
+2026/11/03 16:02:07 DEBUG : Using config file from "<TMP>\\rclone.conf"
+2026/11/03 16:02:07 DEBUG : fs cache: renaming cache item "<TMP>\\filter-src" to be canonical "<TMP>/filter-src"
+2026/11/03 16:02:07 DEBUG : 1 go routines active

@@ -1,0 +1,10 @@
+--- start filters ---
+--- File filter rules ---
+--- Directory filter rules ---
+--- end filters ---
+ lead
+!a
+#a
+;a
+a
+c

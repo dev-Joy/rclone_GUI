@@ -1,0 +1,14 @@
+--- start filters ---
+--- File filter rules ---
+- (^|/)a $
+- (^|/)a $
+- (^|/)a$
+- (^|/)a﻿$
+--- Directory filter rules ---
+--- end filters ---
+ lead
+!a
+#a
+;a
+a
+c
