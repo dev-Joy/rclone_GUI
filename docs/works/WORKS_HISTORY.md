@@ -244,3 +244,19 @@
 - 결정: Q1 rcd HTTP 본문(원래 제안 obscure 대체), Q2 redacted + 이중 제거(안전 규칙 6 예외), Q3 10분, Q4 미지원(INBOX), Q5 `remoteConfig:*`, Q6 범위 밖(기본 conf 작업만 집계), Q7 공백·한 글자·`-` 시작/끝 금지, Q8 범용 질문 폼(`config_is_local`만 자동)
 - 문서: AGENTS.md 안전 규칙 1(rcd 조건)·6(redacted 예외), spec FR-5·6·9·11·13~15a·17·18·NFR·§6.4·AC-3·15·16·§10, plan S0 완료·S1-1/S1-2/S2-2/S4 갱신, intent 질문 체크, INBOX 이름 변경 캡처
 - 남은 것: Phase 1 probe 스크립트·fixture(S1-1), OAuth 수동 실측(S1-2, 사람이 로그인)
+
+[TASK_026] : (2026-11-03) INT-007 범위 재검토와 `--filter-from` 실측 (관련 Intent: INT-007, T-01)
+- 검토: 명령줄 한도가 막는 것은 제외 패턴의 인자 전용 예산(`EXCLUDE_ARG_ONLY_BUDGET`)뿐이고, rclone에는 작업 설정 파일·인자 파일이 없어 "모든 옵션 파일 전달"은 rc 전환만 가능 → 범위를 `--filter-from` 전환으로 축소, rc 방식은 INBOX(2026-11-03-02)
+- 실측(probe `filter` 묶음, v1.75.1): `@file` 미지원, `- ` 접두사 줄은 `#`·`;`·앞 공백·`!` 패턴 유지, 뒤 공백은 파일·인자 모두 지워짐(현재 인자 경로 버그)·`[ ]`로 유지, BOM·접두사 없는 줄은 `malformed rule` exit 1, CRLF 정상, 인자와 합집합 → rclone-notes #46~#50, fixture `filter-*`·`argfile-at` 30개
+- 문서: intent 제목·문제·제안·제약·질문·태스크(T-01 완료, T-02~T-05) 재작성, INDEX 행 갱신
+- 참고: probe의 INT-006 `config` 묶음이 `--only` 조건 없이 실행돼 `config-rcd-requests` fixture를 같은 버전 출력으로 다시 씀(INT-006 S1-1에서 조건 추가 필요)
+
+[TASK_027] : (2026-11-03) INT-006 앱에서 remote 추가·수정·삭제·재인증 구현 (관련 Intent: INT-006, T-01~T-06)
+- probe(T-01): `scripts/probes/rclone-probes.mjs`에 `config` 묶음 추가 — `config providers`(69종·옵션 968개, Hide 0/1/2/3, Exclusive는 azureblob 하나, 기본값의 OS 사용자 이름은 `<USER>`로 가림), `config delete` 없는 이름 exit 0, rcd `config/create`·`update`·`core/quit` 응답과 401, Drive `client_id_warning`→`client_id_set` 질문, `config redacted`의 sftp host·user·pass XXX. rclone-notes #51~#54, fixture `config-*` 30개. rcd 묶음은 `--only=config`일 때만 실행하도록 가드(다른 묶음 실행 때 덮어쓰지 않게)
+- 기반(T-02): `command-builder` 허용 명령 확장(show/dump/edit/password/encryption·CLI create/update는 계속 차단)과 builders, `rc-session.ts`(loopback·임의 포트·실행별 Basic 토큰 env·허용 경로 3개·시작 줄 파서·종료 보장), `secret-redact.ts`, `rclone-providers-parser`(숨김 제외·IsPassword/Sensitive 비밀·token=OAuth·Exclusive enum), `rclone-config-parser`(시작 줄·rc 응답·redacted), shared 타입·zod·오류 코드, `validateNewRemoteName`
+- 추가·수정·삭제(T-03·T-05): `remote-config-service`가 providers 캐시·이름 검증·옵션 재검증·rcd 본문 전송·비밀 비보관·redacted 이중 제거·참조 수 계산·삭제 순서(자동 실행 끄기→osScheduler.idle→예약 확인→config delete)를 담당. `remote-auth-session`은 OAuth 한 건·10분·취소·질문 폼(`config_is_local` 자동 true)·반쪽 remote 정리·`config reconnect --non-interactive` 재인증. IPC `remoteConfig:*` 9채널·이벤트·preload
+- 화면: `RemoteConfigPanel`(목록·연결 테스트·추가/수정/재인증/삭제), `RemoteConfigEditor`(종류 검색·OAuth 표시·이름 읽기 전용), `RemoteConfigForm`(bool/enum/비밀/고급 접기), `RemoteAuthModal`(남은 시간·주소·질문), `RemoteDeleteModal`(참조 수·버튼 문구), `remote-config-store`. 작업 목록·화면·북마크에 “remote 없음”
+- 실행 전 확인: `resolveJobContext`가 conf의 listremotes로 remote 존재를 확인해 `REMOTE_NOT_FOUND`(비교·수동·자동·OS 예약 공통), `clsRcloneEnv.listRemotesAt` 추가
+- 테스트: 단위 76파일 1,274(providers/redacted/rc 응답 파서, 이름, 비밀 가림, 서비스 인자·본문·삭제 순서, OAuth 질문·자동 답·취소·재인증, job-context), 통합 75(+19 skip: 임시 conf local/memory/alias/sftp·rcd 401/허용 경로/종료·예약 끄기), E2E 15(설정에서 추가·수정·삭제, 콘솔 오류 0)
+- 검증: `pnpm run check`, `format:check`, `test:int`, `test:e2e`, `build:win` 통과
+- 남은 것: OAuth 실제 계정 로그인 수동 확인(S1-2, 사람이 로그인), INT-006 done 이동

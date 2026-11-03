@@ -1,7 +1,7 @@
 ---
 id: INT-006
 title: 앱에서 rclone remote 추가·수정·삭제·재인증
-status: planned
+status: done
 priority: P2
 created: 2026-11-03
 updated: 2026-11-03
@@ -73,10 +73,13 @@ updated: 2026-11-03
   - 이유: 같은 이름으로 다른 저장소를 다시 만들면 살아 있는 예약이 삭제 포함 sync를 엉뚱한 대상에 돌릴 수 있다. 오류 상태로만 두면 OS 예약이 주기마다 실패·재시도한다. 완전 차단은 작업 설정을 지우게 만들어 불편하다.
   - CLI에서 지운 경우도 같으므로, 실행 전에 remote가 있는지 확인하고 `REMOTE_NOT_FOUND`로 안내한다(rclone 원문 오류 대신).
 
+## 결과 (Outcome)
+- 2026-11-03 완료: 설정 화면에서 모든 rclone 종류를 추가하고 OAuth 로그인·질문·취소를 앱에서 처리한다. 기존 remote는 비밀 아닌 값만 채운 수정 화면에서 바꾸고, 참조 작업·자동 실행·북마크 수를 확인한 뒤 삭제·재인증한다. 비밀 값은 짧게 띄운 rcd HTTP 본문으로만 넘기고 앱은 보관하지 않는다. rclone 설정에 없는 remote를 쓰는 작업은 비교·실행 전에 `REMOTE_NOT_FOUND`로 멈추고 목록에 “remote 없음”을 표시한다. OAuth 실제 계정 로그인만 사람이 확인해야 한다(S1-2).
+
 ## 작업 (Tasks)
-- [ ] T-01 [P2] probe: `config providers`·delete·`config redacted` 가림 범위, rcd `config/create`·`update`(질문 흐름 `continue/state/result`)·`core/quit`·인증 없는 요청, OAuth(rcd 안 브라우저·53682 대기·포트 충돌·취소)·재인증 출력 실측과 rclone-notes·fixture (결정용 1차 실측은 notes #39~#45)
-- [ ] T-02 [P2] providers 파서·옵션 스키마와 동적 입력 폼(모든 종류, 고급 옵션 접기)
-- [ ] T-03 [P2] remote 추가(비OAuth) — main 명령·IPC·이름 검증·목록 갱신
-- [ ] T-04 [P2] OAuth 종류 추가와 재인증 — 브라우저 연동·대기·취소
-- [ ] T-05 [P2] remote 수정·삭제 — 참조 작업·예약 표시, 확인 창, BUSY, 삭제 시 참조 작업 자동 실행 끄기·OS 예약 제거, 작업 목록 "remote 없음" 표시, 실행 전 remote 존재 확인(`REMOTE_NOT_FOUND`)
-- [ ] T-06 [P3] README·CHANGELOG·MVP_SPEC·E2E 반영
+- [x] T-01 [P2] probe: `config providers`·delete·`config redacted` 가림 범위, rcd `config/create`·`update`(질문 흐름 `continue/state/result`)·`core/quit`·인증 없는 요청, OAuth(rcd 안 브라우저·53682 대기·포트 충돌·취소)·재인증 출력 실측과 rclone-notes·fixture (결정용 1차 실측은 notes #39~#45)
+- [x] T-02 [P2] providers 파서·옵션 스키마와 동적 입력 폼(모든 종류, 고급 옵션 접기)
+- [x] T-03 [P2] remote 추가(비OAuth) — main 명령·IPC·이름 검증·목록 갱신
+- [x] T-04 [P2] OAuth 종류 추가와 재인증 — 브라우저 연동·대기·취소
+- [x] T-05 [P2] remote 수정·삭제 — 참조 작업·예약 표시, 확인 창, BUSY, 삭제 시 참조 작업 자동 실행 끄기·OS 예약 제거, 작업 목록 "remote 없음" 표시, 실행 전 remote 존재 확인(`REMOTE_NOT_FOUND`)
+- [x] T-06 [P3] README·CHANGELOG·MVP_SPEC·E2E 반영

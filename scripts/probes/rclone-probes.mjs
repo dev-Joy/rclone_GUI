@@ -834,108 +834,113 @@ try {
             f_Probe(`config-name-${label}`, ["config", "create", name, "memory", ask, ...cfg], g);
         }
 
-        const rcdUser = `probe-${randomBytes(6).toString("hex")}`;
-        const rcdPass = randomBytes(12).toString("hex");
-        maskValues.push(
-            ["demo-secret-pass", "<SECRET>"],
-            [rcdUser, "<RC_USER>"],
-            [rcdPass, "<RC_PASS>"],
-        );
-        const rcdChild = spawn(rclone, ["rcd", "--rc-addr", "127.0.0.1:0", ask, ...cfg], {
-            shell: false,
-            windowsHide: true,
-            env: { ...process.env, RCLONE_RC_USER: rcdUser, RCLONE_RC_PASS: rcdPass },
-        });
-        let rcdOut = "";
-        let rcdErr = "";
-        rcdChild.stdout.setEncoding("utf8").on("data", (d) => (rcdOut += d));
-        rcdChild.stderr.setEncoding("utf8").on("data", (d) => (rcdErr += d));
-        const rcdClosed = new Promise((r) => rcdChild.once("close", r));
-        const f_StartLine = () => {
-            const m = rcdErr.match(/Serving remote control on (http:\/\/127\.0\.0\.1:\d+\/)/);
-            return m ? m[1] : null;
-        };
-        let base = null;
-        for (let i = 0; i < 40 && base === null; i += 1) {
-            await new Promise((r) => setTimeout(r, 250));
-            base = f_StartLine();
-        }
-        const f_Rc = async (path, body) => {
-            const res = await fetch(new URL(path, base), {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization:
-                        "Basic " + Buffer.from(`${rcdUser}:${rcdPass}`).toString("base64"),
-                },
-                body: JSON.stringify(body),
+        // rcd 묶음은 f_Probe가 아니라 직접 띄우므로 --only=config일 때만 실행한다
+        if (!only || only.has("config") || only.has("config-rcd-requests")) {
+            const rcdUser = `probe-${randomBytes(6).toString("hex")}`;
+            const rcdPass = randomBytes(12).toString("hex");
+            maskValues.push(
+                ["demo-secret-pass", "<SECRET>"],
+                [rcdUser, "<RC_USER>"],
+                [rcdPass, "<RC_PASS>"],
+            );
+            const rcdChild = spawn(rclone, ["rcd", "--rc-addr", "127.0.0.1:0", ask, ...cfg], {
+                shell: false,
+                windowsHide: true,
+                env: { ...process.env, RCLONE_RC_USER: rcdUser, RCLONE_RC_PASS: rcdPass },
             });
-            return { status: res.status, text: await res.text() };
-        };
-        try {
-            if (base === null) {
-                console.log("  config rcd 생략: 시작 줄을 찾지 못함");
-            } else {
-                const noAuth = await fetch(new URL("/config/providers", base), { method: "POST" });
-                const create = await f_Rc("/config/create", {
-                    name: "it-sftp",
-                    type: "sftp",
-                    parameters: {
-                        host: "example.invalid",
-                        user: "demo-user",
-                        pass: "demo-secret-pass",
-                    },
-                    opt: { nonInteractive: true, obscure: true },
-                });
-                const update = await f_Rc("/config/update", {
-                    name: "it-sftp",
-                    parameters: { host: "example2.invalid" },
-                    opt: { nonInteractive: true, obscure: true },
-                });
-                // Drive: 첫 질문(client_id_warning)과 false 답 뒤 질문(client_id_set). 브라우저는 열지 않는다
-                const drive1 = await f_Rc("/config/create", {
-                    name: "it-drive",
-                    type: "drive",
-                    parameters: {},
-                    opt: { nonInteractive: true },
-                });
-                let drive2 = { status: 0, text: "" };
-                try {
-                    const q = JSON.parse(drive1.text);
-                    if (q.State === "client_id_warning") {
-                        drive2 = await f_Rc("/config/create", {
-                            name: "it-drive",
-                            type: "drive",
-                            parameters: {},
-                            opt: {
-                                nonInteractive: true,
-                                continue: true,
-                                state: q.State,
-                                result: "false",
-                            },
-                        });
-                    }
-                } catch {
-                    // 형식이 다르면 fixture만 남긴다
-                }
-                const quit = await f_Rc("/core/quit", {});
-                f_Save(
-                    "config-rcd-requests",
-                    [noAuth.status, create, update, drive1, drive2, quit]
-                        .map((x) =>
-                            typeof x === "number"
-                                ? `no-auth status: ${x}`
-                                : `${x.status} ${x.text}`,
-                        )
-                        .join("\n"),
-                    "",
-                    0,
-                );
-                console.log(`  config rcd: ${f_Sanitize(base)}`);
-                await Promise.race([rcdClosed, new Promise((r) => setTimeout(r, 5000))]);
+            let rcdOut = "";
+            let rcdErr = "";
+            rcdChild.stdout.setEncoding("utf8").on("data", (d) => (rcdOut += d));
+            rcdChild.stderr.setEncoding("utf8").on("data", (d) => (rcdErr += d));
+            const rcdClosed = new Promise((r) => rcdChild.once("close", r));
+            const f_StartLine = () => {
+                const m = rcdErr.match(/Serving remote control on (http:\/\/127\.0\.0\.1:\d+\/)/);
+                return m ? m[1] : null;
+            };
+            let base = null;
+            for (let i = 0; i < 40 && base === null; i += 1) {
+                await new Promise((r) => setTimeout(r, 250));
+                base = f_StartLine();
             }
-        } finally {
-            if (rcdChild.exitCode === null) rcdChild.kill();
+            const f_Rc = async (path, body) => {
+                const res = await fetch(new URL(path, base), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization:
+                            "Basic " + Buffer.from(`${rcdUser}:${rcdPass}`).toString("base64"),
+                    },
+                    body: JSON.stringify(body),
+                });
+                return { status: res.status, text: await res.text() };
+            };
+            try {
+                if (base === null) {
+                    console.log("  config rcd 생략: 시작 줄을 찾지 못함");
+                } else {
+                    const noAuth = await fetch(new URL("/config/providers", base), {
+                        method: "POST",
+                    });
+                    const create = await f_Rc("/config/create", {
+                        name: "it-sftp",
+                        type: "sftp",
+                        parameters: {
+                            host: "example.invalid",
+                            user: "demo-user",
+                            pass: "demo-secret-pass",
+                        },
+                        opt: { nonInteractive: true, obscure: true },
+                    });
+                    const update = await f_Rc("/config/update", {
+                        name: "it-sftp",
+                        parameters: { host: "example2.invalid" },
+                        opt: { nonInteractive: true, obscure: true },
+                    });
+                    // Drive: 첫 질문(client_id_warning)과 false 답 뒤 질문(client_id_set). 브라우저는 열지 않는다
+                    const drive1 = await f_Rc("/config/create", {
+                        name: "it-drive",
+                        type: "drive",
+                        parameters: {},
+                        opt: { nonInteractive: true },
+                    });
+                    let drive2 = { status: 0, text: "" };
+                    try {
+                        const q = JSON.parse(drive1.text);
+                        if (q.State === "client_id_warning") {
+                            drive2 = await f_Rc("/config/create", {
+                                name: "it-drive",
+                                type: "drive",
+                                parameters: {},
+                                opt: {
+                                    nonInteractive: true,
+                                    continue: true,
+                                    state: q.State,
+                                    result: "false",
+                                },
+                            });
+                        }
+                    } catch {
+                        // 형식이 다르면 fixture만 남긴다
+                    }
+                    const quit = await f_Rc("/core/quit", {});
+                    f_Save(
+                        "config-rcd-requests",
+                        [noAuth.status, create, update, drive1, drive2, quit]
+                            .map((x) =>
+                                typeof x === "number"
+                                    ? `no-auth status: ${x}`
+                                    : `${x.status} ${x.text}`,
+                            )
+                            .join("\n"),
+                        "",
+                        0,
+                    );
+                    console.log(`  config rcd: ${f_Sanitize(base)}`);
+                    await Promise.race([rcdClosed, new Promise((r) => setTimeout(r, 5000))]);
+                }
+            } finally {
+                if (rcdChild.exitCode === null) rcdChild.kill();
+            }
         }
 
         f_Probe("config-listremotes-after-rcd", ["listremotes", "--long", ask, ...cfg], g);
