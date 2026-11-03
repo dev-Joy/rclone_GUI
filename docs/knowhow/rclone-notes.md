@@ -230,3 +230,42 @@
 - 결과: 201개를 492.9초에 완료(오류 0). 첫 10초에 30MB 파일과 작은 파일 10여 개가 끝나 `bytes`가 98%가 되었고, 이후 작은 파일은 초당 0.3~0.5개로 떨어졌다(172초 91개, 272초 147개, 493초 201개). `transferring`은 항상 4개 안팎이었다. 대부분의 stats에서 rclone `eta`는 0초다(남은 바이트가 거의 없어서).
 - 영향: 파일 수 누적 평균은 초반 폭주를 미래 속도로 외삽해 초반 남은 시간을 낮게 낸다. 실측 재생에서 "계산 중"이 풀린 11~29초의 19개 지점이 실제 남은 시간의 0.314~0.330배(최대 3.18배 과소)였고, 30초 이후에는 1/3~3배 안이었다. spec AC-8b의 하한을 1/3 → 1/4로 넓힌 근거다(spec §10 Q-4). 상한 3배·인접 2배는 그대로다.
 - fixture: 가림은 `msg`를 비우고 `transferring[].name`을 `file-NNNN`, `srcFs`·`dstFs`를 `<SRC>`·`<DST>`로 바꾸는 방식. 30초 이후는 5초 간격으로 줄였다(용량 500KB 제한).
+
+## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-006 결정용 실측: remote 설정 쓰기)
+
+모두 `%TEMP%` 아래 임시 conf(`--config <임시>\t.conf`)와 가짜 값으로 했고, 끝난 뒤 폴더를 지웠다. fixture는 아직 없다(INT-006 S1-1에서 probe 스크립트로 다시 받는다).
+
+### 39. `obscure -`는 stdin을 받고, `config create/update`는 `--no-obscure`를 지킨다
+- 명령: `rclone obscure -`(stdin에 평문), `config create <n> sftp host=h pass=<obscure 값> --no-obscure --non-interactive`, `config update <n> pass=<obscure 값> --no-obscure --non-interactive`
+- 결과: 모두 exit 0, conf 값을 `reveal`하면 원래 평문. `--no-obscure` 없이 obscure 값을 넘겨도 이중 obscure 하지 않았다(이미 obscure 된 값으로 판단). 평문을 넘기면 rclone이 obscure 한다. 성공 시 stdout은 `{"State":"","Option":null,"Error":"","Result":""}`.
+- 영향: 방식 자체는 동작하지만 INT-006은 쓰지 않는다(#40·#42).
+
+### 40. obscure는 `IsPassword` 옵션에만 적용된다. `Sensitive` 옵션은 conf에 평문이다
+- 명령: `rclone config providers`(69종) 집계
+- 결과: `IsPassword` 옵션 36개, `IsPassword` 없이 `Sensitive`만 붙은 옵션 206개. 예: sftp `pass`·`key_file_pass`는 IsPassword, `host`·`user`·`key_pem`은 Sensitive. S3 `access_key_id`·`secret_access_key`·`session_token`, Drive `client_id`·`client_secret`·`token`·`service_account_credentials`는 Sensitive.
+- 영향: `obscure -` + `--no-obscure`로는 S3 비밀 키·client_secret이 평문으로 명령줄에 나온다. obscure 값도 `rclone reveal`로 되돌릴 수 있어 프로세스 감사 로그에 남으면 평문과 같다. INT-006 Q1을 rcd HTTP 본문으로 결정한 근거.
+
+### 41. `RCLONE_CONFIG_<NAME>_<OPT>`는 conf에 기록되지 않고, 암호화 conf는 `RCLONE_CONFIG_PASS`가 있으면 create 된다
+- 명령: `RCLONE_CONFIG_<N>_PASS=<값> rclone config update <n> host=h2 --non-interactive`, 같은 환경 변수로 `config create`(pass 인자 없음). 암호화 conf: `config encryption set`(stdin에 비밀번호 두 줄) 뒤 `config create ... --ask-password=false`
+- 결과: 환경 변수 값은 conf에 저장되지 않았다(update는 기존 pass 유지, create는 pass 줄 없음). 암호화 conf는 `RCLONE_CONFIG_PASS`가 있으면 create exit 0이고 `listremotes`에 보인다. 없으면 `unable to decrypt configuration and not allowed to ask for password` CRITICAL.
+- 영향: 환경 변수로는 비밀 값을 conf에 쓸 수 없다. 암호화 conf도 지금 env 정책(`RCLONE_CONFIG_PASS` 통과)으로 쓰기가 된다.
+
+### 42. `rcd --rc-addr 127.0.0.1:0`은 실제 포트를 출력하고, `config/create`는 HTTP 본문의 평문을 obscure 해 저장한다
+- 명령: `RCLONE_RC_USER=<u> RCLONE_RC_PASS=<p> rclone rcd --rc-addr 127.0.0.1:0 [--ask-password=false] --config <임시>`, `POST /config/create {"name","type","parameters":{...},"opt":{"obscure":true,"nonInteractive":true}}`, `POST /core/quit`
+- 결과: stderr `NOTICE: Serving remote control on http://127.0.0.1:<port>/`. 인증 헤더 없는 요청은 401. sftp `pass` 평문은 obscure 되어, S3 `secret_access_key`(Sensitive)는 평문으로 저장됐다(conf 동작은 CLI와 같음). 암호화 conf(`RCLONE_CONFIG_PASS`)에서도 됐다. `core/quit`으로 프로세스가 끝났다. **`POST /config/get`은 obscure 된 `pass` 값을 그대로 돌려준다.**
+- 영향: INT-006 FR-14. 값이 명령줄에 나오지 않는다. 앱은 `config/get`·`config/dump`를 부르지 않는다.
+
+### 43. `config redacted`는 `IsPassword`·`Sensitive`를 모두 `XXX`로 가리고, `config show`는 비밀번호를 `*** ENCRYPTED ***`로 보여 준다
+- 명령: `rclone config redacted <n>`, `rclone config show <n>`
+- 결과: redacted는 sftp `host`·`user`·`pass`·`key_file_pass`, S3 `access_key_id`·`secret_access_key`를 `XXX`로 바꾸고 `port`·`provider`는 그대로 보였다. 끝에 `### Double check the config for sensitive info before posting publicly`. 도움말에도 "redaction may not be perfect". `config show`는 IsPassword만 `*** ENCRYPTED ***`로 바꾸고 host·user·Sensitive 값은 그대로 보였다.
+- 영향: INT-006 FR-17. 수정 화면에 채워지는 것은 비밀 아닌 옵션뿐이다. providers 정의로 한 번 더 버린다. `config show`는 계속 막는다.
+
+### 44. remote 이름 규칙: 글자·숫자·`_ - . + @`·공백, `-`로 시작하면 플래그로 해석된다
+- 명령: `config create "<이름>" memory --non-interactive`
+- 결과: 허용 — `a b`, `a.b`, `a@b`, `a+b`, `a-b`, `a_b`, `한글`, `a`, `1`, `a b c`, `ab.`, `.ab`. 거부 — ` ab`, `ab `, `ab-`, `a:b`, `a/b`, `a\b`(`config name contains invalid characters - may only contain numbers, letters, _, -, ., +, @ and space, while not start with - or space, and not end with space`). `-ab`는 이름 검사 전에 `unknown shorthand flag: 'a' in -ab`.
+- 영향: INT-006 FR-5. 앱은 새 이름에서 공백·한 글자·`-`로 시작·끝을 막는다. 끝 `-` 거부는 오류 문구와 다르므로 버전을 올릴 때 다시 확인한다.
+
+### 45. Drive 비대화형 추가의 첫 질문은 공용 client_id 중단 경고이고 기본값이 false다
+- 명령: `config create <n> drive --non-interactive`, 이어서 `config update <n> --continue --state client_id_warning --result <true|false> --non-interactive`
+- 결과: 첫 응답 `State: client_id_warning`, `Option.Name: config_shared_client_id`, Help "rclone's shared Google Drive client_id is being retired and will stop working during 2026. ... Continue using the shared client_id anyway?", `Default: false`. false면 `State: client_id_set`(client_id 입력), true면 `State: *oauth-islocal,teamdrive,oauth,`(`config_is_local`, 기본 true). create 때 `client_id`·`client_secret`을 주면 바로 `config_is_local` 질문으로 간다. 이 단계까지는 브라우저를 열지 않았다.
+- 영향: INT-006 FR-15a. 질문을 기본값으로 넘기면 Drive 추가가 client_id 입력에서 멈춘다. 앱은 범용 질문 폼으로 받는다.

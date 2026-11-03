@@ -238,3 +238,9 @@
 - 검증: `pnpm run check`(단위 71파일 1,218), `format:check`, `test:int` 71 통과(+19 skip: GCS 9·Drive 10), `test:e2e` 14(콘솔 오류 0), `build:win` 통과
 - 특이: 완료 fixture 첫 시도는 실행 중이던 다른 앱 rclone과 같은 Drive remote를 동시에 써 20분간 진행이 멈췄다(로그 0바이트). 두 프로세스를 정리하고 테스트 폴더를 지운 뒤 다시 실행해 8분 만에 완료했다. 생성한 테스트 폴더는 purge로 정리
 - 남은 것: 사용자 완료 확인 후 INT-004 done 이동
+
+[TASK_025] : (2026-11-03) INT-006 미해결 질문 Q1~Q8 결정과 결정용 rclone 실측 (관련 Intent: INT-006, Phase 0 S0-1·S0-2)
+- 실측(임시 conf·가짜 값, 끝난 뒤 폴더 삭제): `obscure -` stdin·`--no-obscure` 동작, obscure는 IsPassword 36개에만 적용(Sensitive 206개 평문), `RCLONE_CONFIG_<NAME>_<OPT>` conf 미기록, 암호화 conf는 `RCLONE_CONFIG_PASS`로 create 가능, `rcd --rc-addr 127.0.0.1:0` 포트 출력·인증 없으면 401·`config/create` 본문 저장·`config/get`은 obscure 값 반환, `config redacted`는 IsPassword+Sensitive 가림, 이름 규칙(`-ab`는 플래그로 해석), Drive 첫 질문 `config_shared_client_id` 기본값 false → rclone-notes #39~#45
+- 결정: Q1 rcd HTTP 본문(원래 제안 obscure 대체), Q2 redacted + 이중 제거(안전 규칙 6 예외), Q3 10분, Q4 미지원(INBOX), Q5 `remoteConfig:*`, Q6 범위 밖(기본 conf 작업만 집계), Q7 공백·한 글자·`-` 시작/끝 금지, Q8 범용 질문 폼(`config_is_local`만 자동)
+- 문서: AGENTS.md 안전 규칙 1(rcd 조건)·6(redacted 예외), spec FR-5·6·9·11·13~15a·17·18·NFR·§6.4·AC-3·15·16·§10, plan S0 완료·S1-1/S1-2/S2-2/S4 갱신, intent 질문 체크, INBOX 이름 변경 캡처
+- 남은 것: Phase 1 probe 스크립트·fixture(S1-1), OAuth 수동 실측(S1-2, 사람이 로그인)

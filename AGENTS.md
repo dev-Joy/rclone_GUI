@@ -11,12 +11,12 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ## 1. 안전 규칙 (예외 없음)
 
-1. rclone은 `spawn`/`execFile(rcloneExe, args[], { shell: false })`로만 실행한다. 명령 문자열 조립과 `shell: true` 금지. `schtasks.exe`(`%SystemRoot%\System32` 절대 경로)·`powershell.exe`도 같은 규칙이며, 사용자 문자열(작업 이름·경로)은 인자에 넣지 않는다(OS 예약의 exe 경로는 작업 XML 본문에만).
+1. rclone은 `spawn`/`execFile(rcloneExe, args[], { shell: false })`로만 실행한다. 명령 문자열 조립과 `shell: true` 금지. `schtasks.exe`(`%SystemRoot%\System32` 절대 경로)·`powershell.exe`도 같은 규칙이며, 사용자 문자열(작업 이름·경로)은 인자에 넣지 않는다(OS 예약의 exe 경로는 작업 XML 본문에만). remote 설정 쓰기(create·update)는 옵션 값이 명령줄에 나오지 않도록 짧게 띄운 `rclone rcd`에 HTTP 본문으로만 보낸다: `--rc-addr 127.0.0.1:0`, 인증 토큰은 실행마다 새로 만들어 환경 변수(`RCLONE_RC_USER`·`RCLONE_RC_PASS`)로만, `--rc-no-auth`·웹 GUI·파일 서비스 금지, 호출은 `config/create`·`config/update`·`core/quit`만(`config/get`·`config/dump` 금지), 흐름이 끝나면 바로 종료한다.
 2. 실제 전송(`--dry-run` 없는 sync/copy)은 `run-service.ts`의 `spawnTransfer` 한 곳에서만 시작한다. 수동 실행은 비교 계획 토큰과 확인한 삭제 수, 자동 실행은 같은 실행 안에서 새로 만든 비교 결과와 자동 조건(삭제가 있으면 `allowDeletes` 켜짐·`autoMaxDeletes` 이하·대량 아님·사전 확인 켜짐) 없이는 시작하지 않는다. 삭제가 있는 sync는 직전에 사전 확인 dry-run을 거친다(수동에서 작업 옵션으로 끄면 `--max-delete`가 백스톱). 백업 폴더가 있는 sync는 미리보기·사전 확인·실제 실행에 같은 `--backup-dir`를 주고, remote 대상은 `backend features`의 Move가 true일 때만 실행한다(삭제 한도는 그대로 계획 삭제 수). Windows 작업 스케줄러가 띄운 OS 예약(`--run-job <id>`, 헤드리스)도 `os-run-queue.ts`에서 `runs.startAuto(id, "os-scheduler")`만 거친다(자동 실행과 같은 조건, 별도 전송 경로 없음).
 3. 위험 옵션(`--delete-excluded`, `--no-check-dest`, `--max-delete -1`, `--dump*`, 백업 없는 `--ignore-errors`)은 `command-builder.ts`의 차단 목록을 거친다.
 4. 테스트·예제·로그에 실제 사용자 경로(`E:\…`, `\\wsl.localhost\…`, `GDRIVE-…`)와 rclone.conf 내용을 넣지 않는다. 테스트는 임시 폴더만 쓴다.
 5. renderer에서 Node API를 쓰지 않는다. `contextIsolation`과 `sandbox`를 끄지 않는다.
-6. rclone.conf는 경로로만 넘긴다. 앱 코드에서 열어 읽거나 기록에 남기지 않는다.
+6. rclone.conf는 경로로만 넘긴다. 앱 코드에서 열어 읽거나 기록에 남기지 않는다. 예외: remote 수정 화면은 `rclone config redacted <name>` 출력에서 비밀 아닌 값만 쓴다(main이 providers의 `IsPassword`·`Sensitive` 옵션과 `token`을 한 번 더 버리고, 원문은 로그·IPC·fixture에 남기지 않는다). `config show`·`config dump`는 쓰지 않는다.
 
 ## 2. 명령
 
