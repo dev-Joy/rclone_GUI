@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-03 11:38:44
+- 생성일시: 2026-11-03 17:23:19
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 325 건
+- 총 인덱싱 자산: 355 건
 - 수동 보완: 2026-11-03 (스크립트 미감지 — 여러 줄 시그니처 `useEmptyDirSupport`·`hasPlannedChanges`, 파일당 한도 초과 `emptyDirsUnsupportedText`)
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
@@ -29,8 +29,8 @@
 
 | 훅 명칭 | 정의 파일 | 시그니처 / 반환 요약 |
 | :--- | :--- | :--- |
-| `useEmptyDirSupport` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | useEmptyDirSupport(destination: string, configPath: string \| null, enabled: boolean) - 대상 빈 폴더 가능 여부(remotes:features, 400ms 디바운스·마지막 요청만). 로컬·UNC true, 실패·조회 중 null |
 | `usePathProbe` | [`src/lib/use-path-probe.ts`](src/lib/use-path-probe.ts) | usePathProbe() - 커스텀 훅 |
+| `useEmptyDirSupport` | [`src/lib/use-empty-dir-support.ts`](src/lib/use-empty-dir-support.ts) | useEmptyDirSupport(destination: string, configPath: string \| null, enabled: boolean) - 대상 빈 폴더 가능 여부(remotes:features, 400ms 디바운스·마지막 요청만). 로컬·UNC true, 실패·조회 중 null |
 | `useRunFlow` | [`src/lib/use-run-flow.ts`](src/lib/use-run-flow.ts) | useRunFlow() - 커스텀 훅 |
 
 ## 3. Utilities & Helpers
@@ -39,11 +39,11 @@
 | :--- | :--- | :--- |
 | `errorText` | [`src/lib/api.ts`](src/lib/api.ts) | errorText(e: unknown) - 사용자에게 보일 오류 문구 |
 | `getApi` | [`src/lib/api.ts`](src/lib/api.ts) | getApi() - 공통 함수/유틸리티 |
-| `emptyDirsUnsupportedText` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | emptyDirsUnsupportedText(s: Pick<itfCompareSummary, "createDirs">, destCanHaveEmptyDirs: boolean \| null) - 빈 폴더를 만들 수 없는 대상의 폴더 생성 안내. false이고 createDirs > 0일 때만 |
 | `reasonText` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | reasonText(reasons: readonly typModifiedReason[]) - 변경 사유 문구. 예: ["size", "mtime"] → "크기, 수정시간" |
 | `statusLabel` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | statusLabel(status: typCompareStatus, mode: typRunMode) - 상태 라벨. onlyDest: copy "대상만(유지)", sync "대상만(삭제 예정)" |
 | `statusTone` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | statusTone(status: typCompareStatus, mode: typRunMode) - 공통 함수/유틸리티 |
 | `summaryCards` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | summaryCards(s: itfCompareSummary, mode: typRunMode) - 요약 카드. 문구는 일어날 일: "대상에 12개 복사", "8개 덮어씀", sync "3개 삭제" / copy "3개 대상에만 있음(유지)" |
+| `emptyDirsUnsupportedText` | [`src/lib/compare-view.ts`](src/lib/compare-view.ts) | emptyDirsUnsupportedText(s: Pick<itfCompareSummary, "createDirs">, destCanHaveEmptyDirs: boolean \| null) - 빈 폴더를 만들 수 없는 대상의 폴더 생성 안내. false이고 createDirs > 0일 때만 |
 | `excludeChangeConfirmText` | [`src/lib/exclude-view.ts`](src/lib/exclude-view.ts) | excludeChangeConfirmText(kind: typExcludeChangeKind, userCount: number) - 확인 버튼 문구(일어날 일). 예: "패턴 지우고 작업 3개의 비교 결과 버리기" |
 | `jobOnlyCommentLike` | [`src/lib/exclude-view.ts`](src/lib/exclude-view.ts) | jobOnlyCommentLike(patterns: readonly string[]) - 이 작업 전용 패턴 중 공용으로 둘 수 없는 줄(#·; 시작) |
 | `togglePatternId` | [`src/lib/exclude-view.ts`](src/lib/exclude-view.ts) | togglePatternId(selected: readonly string[], id: string, on: boolean) - 선택 토글. 결과는 정렬한다(저장소가 정렬해 돌려주므로 변경 여부 비교가 맞게) |
@@ -68,11 +68,10 @@
 | `browserParent` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | browserParent(bookmark: itfRemoteBookmark, path: string) - 기준 경로 위로 올라간 부모. 기준 경로에 닿았거나 밖이면 null |
 | `isBrowserRoot` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | isBrowserRoot(path: string) - remote 루트("name:")인지. 루트는 작업 경로로 고를 수 없다 |
 | `visibleDirEntries` | [`src/lib/remote-browser.ts`](src/lib/remote-browser.ts) | visibleDirEntries(entries: readonly itfDirEntry[], shown: number) - 더 보기: 앞에서 shown개만 |
-| `hasPlannedChanges` | [`src/shared/run-plan.ts`](src/shared/run-plan.ts) | hasPlannedChanges(plan, destCanHaveEmptyDirs: boolean \| null) - 실행하면 바뀌는 것이 있는지(자동 noop·실행 버튼). false면 폴더 생성은 세지 않음 |
 | `canStartRun` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | canStartRun(input: itfCanStartRunInput) - 미리보기·실제 실행 버튼 가능 여부와 이유. 공통: 저장 안 됨 → 미저장 변경 → 경로 오류 → 비교 중 → 실행 중. |
 | `deleteDirSamples` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | deleteDirSamples(result: itfCompareResult, limit = 20) - 삭제 예정(대상에만 있음) 폴더 샘플. 경로 오름차순으로 최대 limit개 (전체 범위만) |
 | `deleteSamples` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | deleteSamples(result: itfCompareResult, limit = 20) - 삭제 예정(대상에만 있음) 파일 샘플. 비교 결과 순서(경로 오름차순)로 최대 limit개 |
-| `dryRunHeadline` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | dryRunHeadline(s: itfDryRunSummary) - dry-run 요약 한 줄. 예: "실행하면 대상에 3개 복사(24 B), 1개 수정시간만 맞춤, 2개 삭제" |
+| `etaText` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | etaText(stats: typRunStats \| null, live: boolean) - 남은 시간 칸 문구(INT-004 FR-10). 진행 중일 때만 "계산 중"·계산값을 보여 준다 |
 | `progressPercent` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | progressPercent(stats: typRunStats \| null) - 진행률(0~100). 바이트 기준, 바이트를 모르면 파일 수 기준. 계산할 수 없으면 null |
 | `runStatusText` | [`src/lib/run-view.ts`](src/lib/run-view.ts) | runStatusText(status: typRunStatus, dryRun: boolean, mode: typRunMode) - 상태 문구. 예: 미리보기 완료, 복사 완료, 복사 중지됨 |
 | `isSettingsEqual` | [`src/lib/settings-form.ts`](src/lib/settings-form.ts) | isSettingsEqual(a: typSettings, b: typSettings) - 공통 함수/유틸리티 |
@@ -82,14 +81,15 @@
 | `fail` | [`src/main/lib/app-error.ts`](src/main/lib/app-error.ts) | fail(e: unknown) - 공통 함수/유틸리티 |
 | `toErrorPayload` | [`src/main/lib/app-error.ts`](src/main/lib/app-error.ts) | toErrorPayload(e: unknown) - 공통 함수/유틸리티 |
 | `redactSecrets` | [`src/main/lib/logger.ts`](src/main/lib/logger.ts) | redactSecrets(text: string) - 공통 함수/유틸리티 |
+| `collectSecretValues` | [`src/main/lib/secret-redact.ts`](src/main/lib/secret-redact.ts) | collectSecretValues(...maps: ReadonlyArray<Record<string, string>>) - 값을 모아 가림 목록을 만든다(빈 값 제외) |
+| `redactSecrets` | [`src/main/lib/secret-redact.ts`](src/main/lib/secret-redact.ts) | redactSecrets(text: string, secrets: readonly string[]) - text에서 비밀 값을 `***`로 바꾼다 |
 | `fileStamp` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | fileStamp(d = new Date() - 파일 이름용 시각. 예: 20261028-173500 (로컬 시각) |
 | `nowIso` | [`src/main/lib/time.ts`](src/main/lib/time.ts) | nowIso() - 공통 함수/유틸리티 |
 | `buildBackupSubdir` | [`src/main/services/backup-dir.ts`](src/main/services/backup-dir.ts) | buildBackupSubdir(at: Date, jobId: string) - 실행별 하위 폴더 이름. 예: 2026-11-02_103000_1a2b3c4d |
 | `nextBackupTime` | [`src/main/services/backup-dir.ts`](src/main/services/backup-dir.ts) | nextBackupTime(now: Date, last: Date \| null) - 이번 실행의 백업 시각. last(같은 프로세스에서 마지막으로 쓴 시각)가 없거나 now가 초 단위로 더 늦으면 now, 아니면(같은 초·시계가 뒤로 감) last + 1초. 초 아래는 버린다. |
 | `checkDestProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
-| `checkSourceProbe` | [`src/main/services/compare-service.ts`](src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
-| `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
-| _(외 55 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| `hasPlannedChanges` | [`src/shared/run-plan.ts`](src/shared/run-plan.ts) | hasPlannedChanges(plan, destCanHaveEmptyDirs: boolean \| null) - 실행하면 바뀌는 것이 있는지(자동 noop·실행 버튼). false면 폴더 생성은 세지 않음 |
+| _(외 59 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
 ## 4. Shared Services & Clients
 
@@ -104,6 +104,8 @@
 | `clsExcludeService` | [`src/main/services/exclude-service.ts`](src/main/services/exclude-service.ts) | class clsExcludeService - 공유 서비스/클라이언트 클래스 |
 | `clsFsGate` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
 | `clsPathService` | [`src/main/services/path-service.ts`](src/main/services/path-service.ts) | class clsPathService - 공유 서비스/클라이언트 클래스 |
+| `clsRemoteAuthSession` | [`src/main/services/remote-auth-session.ts`](src/main/services/remote-auth-session.ts) | class clsRemoteAuthSession - 공유 서비스/클라이언트 클래스 |
+| `clsRemoteConfigService` | [`src/main/services/remote-config-service.ts`](src/main/services/remote-config-service.ts) | class clsRemoteConfigService - 공유 서비스/클라이언트 클래스 |
 | `clsRemoteOps` | [`src/main/services/remote-ops.ts`](src/main/services/remote-ops.ts) | class clsRemoteOps - 공유 서비스/클라이언트 클래스 |
 | `clsRemoteService` | [`src/main/services/remote-service.ts`](src/main/services/remote-service.ts) | class clsRemoteService - 공유 서비스/클라이언트 클래스 |
 | `clsRunEventBatcher` | [`src/main/services/run-events.ts`](src/main/services/run-events.ts) | class clsRunEventBatcher - 공유 서비스/클라이언트 클래스 |
@@ -167,5 +169,5 @@
 | `itfExcludeFileHandle` | [`src/main/services/exclude-file.ts`](src/main/services/exclude-file.ts) | interface itfExcludeFileHandle - 인터페이스 정의 |
 | `itfExcludeServiceDeps` | [`src/main/services/exclude-service.ts`](src/main/services/exclude-service.ts) | interface itfExcludeServiceDeps - 인터페이스 정의 |
 | `itfJobContext` | [`src/main/services/job-context.ts`](src/main/services/job-context.ts) | interface itfJobContext - 인터페이스 정의 |
-| _(외 142 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
+| _(외 163 건 생략)_ | - | 상세 항목은 소스 파일 직접 참조 |
 
