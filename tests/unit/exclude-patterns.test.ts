@@ -3,21 +3,20 @@ import { describe, expect, it } from "vitest";
 
 // ========== Internal imports ==========
 import {
+    buildFilterFileContent,
     excludesSaveIssue,
-    isFileSafePattern,
     libraryPatternIssue,
     mergeExcludePatterns,
     normalizeExcludePattern,
-    planExcludeTransport,
+    toFilterExcludeLine,
 } from "@/shared/exclude-patterns";
-import { EXCLUDE_FILE_MIN_COUNT } from "@/shared/option-limits";
 import { zExcludeCreateInput } from "@/shared/schemas/excludes";
 
 describe("공용 패턴 검사", () => {
     it.each([
         ["", "입력"],
-        ["#a", "주석"],
-        [";a", "주석"],
+        ["#a", "공용"],
+        [";a", "공용"],
         ["a\nb", "제어문자"],
         ["a\tb", "제어문자"],
         [" a", "공백"],
@@ -33,15 +32,6 @@ describe("공용 패턴 검사", () => {
         expect(zExcludeCreateInput.parse({ pattern: "  *.tmp " })).toEqual({ pattern: "*.tmp" });
         expect(zExcludeCreateInput.safeParse({ pattern: "  #a" }).success).toBe(false);
         expect(zExcludeCreateInput.safeParse({ pattern: "   " }).success).toBe(false);
-    });
-
-    it("파일에 넣을 수 있는 패턴", () => {
-        expect(isFileSafePattern("a")).toBe(true);
-        expect(isFileSafePattern("\\#a")).toBe(true);
-        expect(isFileSafePattern("#a")).toBe(false);
-        expect(isFileSafePattern(";a")).toBe(false);
-        expect(isFileSafePattern(" a")).toBe(false);
-        expect(isFileSafePattern("a ")).toBe(false);
     });
 });
 
@@ -66,25 +56,61 @@ describe("mergeExcludePatterns", () => {
     });
 });
 
-describe("planExcludeTransport", () => {
-    it("적으면 모두 인자", () => {
-        expect(planExcludeTransport(["a", "#b"])).toEqual({
-            argPatterns: ["a", "#b"],
-            filePatterns: [],
-        });
+describe("toFilterExcludeLine (INT-007 FR-3)", () => {
+    it.each([
+        ["#a", "- #a"],
+        [";a", "- ;a"],
+        [" lead", "-  lead"],
+        ["!a", "- !a"],
+        ["x/**", "- x/**"],
+        ["a  ", "- a[ ][ ]"],
+        ["  ", "- [ ][ ]"],
+        ["a\\ ", "- a[ ]"],
+        ["a\\\\ ", "- a\\\\[ ]"],
+        ["c\\\\[ ]", "- c\\\\[ ]"],
+        ["a[ ]", "- a[ ]"],
+    ])("%j → %j", (p, line) => {
+        expect(toFilterExcludeLine(p)).toBe(line);
     });
 
-    it("64개를 넘으면 파일 가능한 것은 파일, #·;·공백 패턴은 인자", () => {
-        const many = Array.from({ length: EXCLUDE_FILE_MIN_COUNT }, (_v, i) => `p${i}`);
-        const r = planExcludeTransport([...many, "#a", ";b", " c"]);
-        expect(r.filePatterns).toEqual(many);
-        expect(r.argPatterns).toEqual(["#a", ";b", " c"]);
-        expect(planExcludeTransport(many).filePatterns).toEqual([]);
+    it("rclone이 지우는 유니코드 공백은 [c]로, U+FEFF는 그대로 둔다", () => {
+        for (const c of [
+            "\t",
+            "\u000b",
+            "\u00a0",
+            "\u2003",
+            "\u202f",
+            "\u2028",
+            "\u0085",
+            "\u3000",
+        ])
+            expect(toFilterExcludeLine(`a${c}`)).toBe(`- a[${c}]`);
+        expect(toFilterExcludeLine("a\uFEFF")).toBe("- a\uFEFF");
+        // 끝 공백 직전 역슬래시가 홀수면 하나 지운다
+        expect(toFilterExcludeLine("a\\\u0085")).toBe("- a[\u0085]");
+        expect(toFilterExcludeLine("a\\\\\u0085")).toBe("- a\\\\[\u0085]");
     });
 
-    it("개수가 적어도 길이 합이 8000자를 넘으면 파일", () => {
-        const long = Array.from({ length: 20 }, (_v, i) => `${i}${"x".repeat(400)}`);
-        expect(planExcludeTransport(long).filePatterns).toHaveLength(20);
+    it("모든 줄은 '- '로 시작하고 +·! 규칙 줄을 만들지 않는다", () => {
+        const patterns = ["#a", ";a", " lead", "!a", "a  ", "x/**", "a\\ ", "  "];
+        const lines = patterns.map(toFilterExcludeLine);
+        for (const line of lines) {
+            expect(line.startsWith("- ")).toBe(true);
+            expect(line.startsWith("+ ")).toBe(false);
+            expect(line.startsWith("! ")).toBe(false);
+        }
+    });
+});
+
+describe("buildFilterFileContent (INT-007 FR-1·2)", () => {
+    it("적용 순서대로 한 줄씩, 마지막도 LF", () => {
+        expect(buildFilterFileContent(["#a", ";a", " lead", "!a", "a  ", "x/**"])).toBe(
+            "- #a\n- ;a\n-  lead\n- !a\n- a[ ][ ]\n- x/**\n",
+        );
+    });
+
+    it("패턴이 없으면 null", () => {
+        expect(buildFilterFileContent([])).toBeNull();
     });
 });
 
@@ -94,10 +120,8 @@ describe("excludesSaveIssue", () => {
         expect(excludesSaveIssue(["a"], 500)).toContain("500개");
     });
 
-    it("인자로만 넘길 패턴의 길이 예산 초과", () => {
-        const argOnly = Array.from({ length: 40 }, (_v, i) => `#${i}${"x".repeat(450)}`);
-        expect(excludesSaveIssue(argOnly, 0)).toContain("너무 길어");
-        const fileSafe = argOnly.map((p) => p.slice(1));
-        expect(excludesSaveIssue(fileSafe, 0)).toBeNull();
+    it("길이 예산은 없다: #·;로 시작하는 긴 작업 전용 패턴도 저장된다(AC-11)", () => {
+        const long = Array.from({ length: 40 }, (_v, i) => `#${i}${"x".repeat(450)}`);
+        expect(excludesSaveIssue(long, 0)).toBeNull();
     });
 });

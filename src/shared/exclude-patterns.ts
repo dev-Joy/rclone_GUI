@@ -1,34 +1,18 @@
 /**
- * 제외 패턴 순수 도우미 (INT-002 T-03·T-09). main과 화면이 같이 쓴다(Node·DOM 의존 없음).
+ * 제외 패턴 순수 도우미 (INT-002 T-03·T-09, INT-007). main과 화면이 같이 쓴다(Node·DOM 의존 없음).
  *
- * - rclone --exclude-from 파일은 #·; 시작 줄을 주석으로, 줄 앞뒤 공백을 지우고 읽는다(rclone-notes #18).
- *   그런 패턴은 파일에 넣지 않고 항상 --exclude 인자로 넘긴다.
+ * - rclone에는 작업 설정 파일이 없어 제외 패턴은 실행마다 만든 --filter-from 파일 하나로 넘긴다.
+ *   모든 줄은 "- <패턴>"이고, 패턴 끝의 공백 문자는 rclone이 지우므로 "[<문자>]"로 바꿔 쓴다(rclone-notes #47·#48).
  * - 전달 방식은 패턴만으로 정한다(명령 종류와 무관) → 비교와 실행이 항상 같은 방식.
  *
  * @author dev-Joy 2026-10-29
  */
 
 // ========== Internal imports ==========
-import {
-    EXCLUDE_ARG_ONLY_BUDGET,
-    EXCLUDE_FILE_MIN_CHARS,
-    EXCLUDE_FILE_MIN_COUNT,
-    EXCLUDE_PATTERN_MAX_LEN,
-    EXCLUDES_TOTAL_MAX,
-} from "@/shared/option-limits";
-
-/** 인자 하나의 길이 추정: 패턴 + "--exclude " + 따옴표·공백 */
-const ARG_OVERHEAD = 12;
+import { EXCLUDE_PATTERN_MAX_LEN, EXCLUDES_TOTAL_MAX } from "@/shared/option-limits";
 
 // oxlint-disable-next-line no-control-regex -- 제어문자를 찾아 거부하기 위한 정규식
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
-
-export interface itfExcludeTransport {
-    /** --exclude 인자로 넘길 패턴(순서 유지) */
-    argPatterns: string[];
-    /** --exclude-from 파일에 넣을 패턴(순서 유지). 비면 파일을 쓰지 않는다 */
-    filePatterns: string[];
-}
 
 /** 입력 정규화: 앞뒤 공백만 지운다(NFC 변환 없음) */
 export function normalizeExcludePattern(raw: string): string {
@@ -43,13 +27,8 @@ export function libraryPatternIssue(p: string): string | null {
     if (CONTROL_RE.test(p)) return "제어문자(줄바꿈·탭 포함)는 쓸 수 없습니다.";
     if (p !== p.trim()) return "패턴 앞뒤에 공백을 둘 수 없습니다.";
     if (p.startsWith("#") || p.startsWith(";"))
-        return "#·;로 시작하는 패턴은 공용으로 저장할 수 없습니다(rclone 제외 파일에서 주석으로 읽힘). 이 작업 전용 패턴으로 쓰세요.";
+        return "공용 패턴은 #·;로 시작할 수 없습니다. 이 작업 전용 패턴으로 쓰세요.";
     return null;
-}
-
-/** --exclude-from 파일에 넣어도 같은 뜻으로 읽히는지 (#·; 시작, 앞뒤 공백이면 false) */
-export function isFileSafePattern(p: string): boolean {
-    return p.length > 0 && !p.startsWith("#") && !p.startsWith(";") && p === p.trim();
 }
 
 /** 코드포인트 오름차순 비교(localeCompare를 쓰지 않는다) */
@@ -84,36 +63,56 @@ export function mergeExcludePatterns(
     return out;
 }
 
-function f_ArgChars(patterns: readonly string[]): number {
-    return patterns.reduce((sum, p) => sum + p.length + ARG_OVERHEAD, 0);
+/** rclone(Go unicode.IsSpace)이 패턴 끝에서 지우는 공백 문자인지. JS \s는 쓰지 않는다(U+0085 누락·U+FEFF 포함) */
+function f_IsRcloneSpace(ch: string): boolean {
+    const c = ch.charCodeAt(0);
+    return (
+        c === 0x09 ||
+        c === 0x0a ||
+        c === 0x0b ||
+        c === 0x0c ||
+        c === 0x0d ||
+        c === 0x20 ||
+        c === 0x85 ||
+        c === 0xa0 ||
+        c === 0x1680 ||
+        (c >= 0x2000 && c <= 0x200a) ||
+        c === 0x2028 ||
+        c === 0x2029 ||
+        c === 0x202f ||
+        c === 0x205f ||
+        c === 0x3000
+    );
 }
 
 /**
- * 전달 방식. 패턴이 EXCLUDE_FILE_MIN_COUNT개를 넘거나 인자 길이 합이 EXCLUDE_FILE_MIN_CHARS를 넘으면
- * 파일에 넣을 수 있는 패턴은 파일로, 나머지는 인자로. 아니면 모두 인자.
+ * 패턴 하나를 --filter-from 제외 줄로 바꾼다: "- " + 끝 공백 문자 → "[c]" (INT-007 FR-3).
+ * 끝 공백 직전의 연속 역슬래시가 홀수면 그 역슬래시 하나를 지운다(사용자가 쓴 "\ " 이스케이프).
  */
-export function planExcludeTransport(patterns: readonly string[]): itfExcludeTransport {
-    const useFile =
-        patterns.length > EXCLUDE_FILE_MIN_COUNT || f_ArgChars(patterns) > EXCLUDE_FILE_MIN_CHARS;
-    if (!useFile) return { argPatterns: [...patterns], filePatterns: [] };
-    const argPatterns: string[] = [];
-    const filePatterns: string[] = [];
-    for (const p of patterns) (isFileSafePattern(p) ? filePatterns : argPatterns).push(p);
-    return { argPatterns, filePatterns };
+export function toFilterExcludeLine(pattern: string): string {
+    let end = pattern.length;
+    while (end > 0 && f_IsRcloneSpace(pattern[end - 1]!)) end -= 1;
+    if (end === pattern.length) return `- ${pattern}`;
+    let head = pattern.slice(0, end);
+    const trailing = pattern.slice(end);
+    let backslashes = 0;
+    while (backslashes < head.length && head[head.length - 1 - backslashes] === "\\")
+        backslashes += 1;
+    if (backslashes % 2 === 1) head = head.slice(0, -1);
+    const escaped = Array.from(trailing, (c) => `[${c}]`).join("");
+    return `- ${head}${escaped}`;
 }
 
-/**
- * 작업 저장 전 제외 패턴 합계 검사. 문제가 없으면 null.
- * - 공용 + 작업 전용 > EXCLUDES_TOTAL_MAX
- * - 파일에 넣을 수 없는 작업 전용 패턴의 인자 길이 합 > EXCLUDE_ARG_ONLY_BUDGET
- */
+/** 적용 순서 패턴 → 필터 파일 내용(LF, 마지막 LF). 패턴이 없으면 null (INT-007 FR-1·2) */
+export function buildFilterFileContent(patterns: readonly string[]): string | null {
+    if (patterns.length === 0) return null;
+    return `${patterns.map(toFilterExcludeLine).join("\n")}\n`;
+}
+
+/** 작업 저장 전 제외 패턴 합계 검사. 문제가 없으면 null (공용 + 작업 전용 > EXCLUDES_TOTAL_MAX) */
 export function excludesSaveIssue(jobOnly: readonly string[], libraryCount: number): string | null {
     if (jobOnly.length + libraryCount > EXCLUDES_TOTAL_MAX) {
         return `제외 패턴은 공용과 이 작업 전용을 합쳐 ${EXCLUDES_TOTAL_MAX}개까지 쓸 수 있습니다(지금 ${jobOnly.length + libraryCount}개).`;
-    }
-    const argOnly = jobOnly.filter((p) => !isFileSafePattern(p));
-    if (f_ArgChars(argOnly) > EXCLUDE_ARG_ONLY_BUDGET) {
-        return "#·;로 시작하거나 앞뒤 공백이 있는 패턴이 너무 길어 rclone 명령에 다 넣을 수 없습니다. 줄이거나 바꾸세요.";
     }
     return null;
 }

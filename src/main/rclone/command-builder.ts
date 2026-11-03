@@ -4,7 +4,7 @@
  * 순서: [명령, ...플래그, "--", 원본, 대상] — "--" 뒤의 경로는 플래그로 해석되지 않는다.
  *
  * 차단 목록을 줄이는 변경은 docs/adr/ 에 ADR이 필요하다.
- * 제외 패턴은 --exclude 인자와 --exclude-from 파일만 쓴다(--filter·--filter-from·--include*는 만들지 않음).
+ * 제외 패턴은 실행마다 만든 --filter-from 파일로만 넘긴다(--exclude·--exclude-from·--include*·--filter 인자는 만들지 않음).
  *
  * @author dev-Joy 2026-10-28
  */
@@ -252,10 +252,9 @@ export function buildProbeListArgs(input: itfProbeListArgsInput): string[] {
     return f_Finish(args);
 }
 
-/** 제외 패턴 전달: 인자 패턴과 (있으면) --exclude-from 파일 경로 */
+/** 제외 패턴 전달: --filter-from 파일 경로(없으면 null) */
 export interface itfExcludeArgs {
-    patterns: readonly string[];
-    fromFile: string | null;
+    filterFile: string | null;
 }
 
 export interface itfLsjsonArgsInput {
@@ -281,8 +280,7 @@ export const COMPARE_HASH_TYPES: readonly string[] = ["md5", "sha1"];
 /**
  * 비교용 전체 목록:
  * lsjson --recursive [--files-only] --no-mimetype --ask-password=false
- *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--exclude P]...
- *        [--exclude-from F] -- <path>
+ *        [--hash [--hash-type X]...] [--skip-links] [--fast-list] [--config C] [--filter-from F] -- <path>
  */
 export function buildLsjsonArgs(input: itfLsjsonArgsInput): string[] {
     const args = [
@@ -355,11 +353,10 @@ export function buildTransferArgs(input: itfTransferArgsInput): string[] {
     return f_Finish(args);
 }
 
-/** --config → --exclude P… → (파일이 있으면) --exclude-from F */
+/** --config → (파일이 있으면) --filter-from F */
 function f_PushCommon(args: string[], configPath: string | null, excludes: itfExcludeArgs): void {
     if (configPath) args.push("--config", configPath);
-    for (const pattern of excludes.patterns) args.push("--exclude", pattern);
-    if (excludes.fromFile !== null) args.push("--exclude-from", excludes.fromFile);
+    if (excludes.filterFile !== null) args.push("--filter-from", excludes.filterFile);
 }
 
 /** Windows 명령줄 한 인자의 추정 길이: 값 + 따옴표·공백 3 + 이스케이프될 " 와 \ */

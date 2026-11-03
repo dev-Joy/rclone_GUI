@@ -425,7 +425,7 @@ describe("clsRunService 미리보기(dry-run)", () => {
         const h = f_Harness();
         await h.svc.start({ jobId: JOB_ID, dryRun: true });
         const rec = await f_Done(h);
-        const files = readdirSync(h.logsDir);
+        const files = readdirSync(h.logsDir).filter((n) => n.endsWith(".log"));
         expect(files).toEqual([rec.logFile]);
         expect(rec.logFile).toMatch(/^run-\d{8}-\d{6}-00000000-00000000\.log$/);
         const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
@@ -648,6 +648,7 @@ describe("clsRunService 락·취소·실패", () => {
         expect(e2.message).toContain("실행하는 중");
         expect(h.begun).toHaveLength(1);
         expect(h.svc.isRunningJob(JOB_ID)).toBe(true);
+        await f_WaitProcs(h, 1);
         h.procs[0]!.finish([]);
         await f_Done(h);
         expect(h.svc.isRunningJob(JOB_ID)).toBe(false);
@@ -656,6 +657,7 @@ describe("clsRunService 락·취소·실패", () => {
     it("getActive: 진행 중 스냅샷(최근 로그·단계·집계), 끝나면 null", async () => {
         const h = f_Harness({ script: null });
         const { runId } = await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_WaitProcs(h, 1);
         h.procs[0]!.opts.onStderrLine?.(fixtureLines("copy-dryrun")[0]!);
         const snap = h.svc.getActive();
         expect(snap).toMatchObject({
@@ -676,6 +678,7 @@ describe("clsRunService 락·취소·실패", () => {
     it("취소는 한 번만 abort(idempotent), 결과 canceled, 다른 runId는 무시", async () => {
         const h = f_Harness({ script: null });
         const { runId } = await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_WaitProcs(h, 1);
         h.svc.cancel("00000000-0000-4000-8000-000000000999");
         expect(h.procs[0]!.aborts).toBe(0);
         h.svc.cancel(runId);
@@ -699,6 +702,7 @@ describe("clsRunService 락·취소·실패", () => {
             planToken: TOKEN,
             confirmedDeletes: 0,
         });
+        await f_WaitProcs(h, 1);
         h.svc.cancel(runId);
         const rec = await f_Done(h);
         expect(h.invalidated).toEqual([JOB_ID]);
@@ -723,6 +727,7 @@ describe("clsRunService 락·취소·실패", () => {
     it("프로세스 종료를 확인하지 못하면(closed:false) active-run을 남긴다", async () => {
         const h = f_Harness({ script: null, cancelResult: { closed: false } });
         const { runId } = await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_WaitProcs(h, 1);
         h.svc.cancel(runId);
         await f_Done(h);
         expect(h.activeOps).toEqual(["write"]);
@@ -752,6 +757,7 @@ describe("clsRunService 락·취소·실패", () => {
         const h = f_Harness({ script: null });
         expect(await h.svc.whenIdle(10)).toBe(true);
         await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_WaitProcs(h, 1);
         expect(await h.svc.whenIdle(10)).toBe(false);
         h.procs[0]!.finish([]);
         expect(await h.svc.whenIdle(1000)).toBe(true);
@@ -765,15 +771,15 @@ function f_SyncJob(preflight = true): typJob {
     });
 }
 
-/** --exclude-from 값 */
-function f_ExcludeFromArg(args: readonly string[]): string {
-    return args[args.indexOf("--exclude-from") + 1]!;
+/** --filter-from 값 */
+function f_FilterFromArg(args: readonly string[]): string {
+    return args[args.indexOf("--filter-from") + 1]!;
 }
 
 describe("clsRunService 실제 sync (Phase 7)", () => {
     const SYNC_INPUT = { jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 2 };
 
-    it("제외 패턴 파일: 사전 확인·실제 실행이 같은 --exclude-from 파일을 쓰고, 끝나면 지운다", async () => {
+    it("제외 패턴 파일: 사전 확인·실제 실행이 같은 --filter-from 파일을 쓰고, 끝나면 지운다", async () => {
         const many = Array.from({ length: 70 }, (_v, i) => `p${i}/**`);
         const job = { ...f_SyncJob(), excludes: [...many, "#keep"] };
         const h = f_Harness({
@@ -785,28 +791,26 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
         for (let i = 0; i < 200 && h.procs.length < 1; i += 1) {
             await new Promise((r) => setTimeout(r, 1));
         }
-        const file = f_ExcludeFromArg(h.procs[0]!.args);
+        const file = f_FilterFromArg(h.procs[0]!.args);
         expect(existsSync(file)).toBe(true);
-        expect(readFileSync(file, "utf8")).toBe(`${many.join("\n")}\n`);
-        expect(
-            h.procs[0]!.args.slice(
-                h.procs[0]!.args.indexOf("--exclude"),
-                h.procs[0]!.args.indexOf("--exclude") + 2,
-            ),
-        ).toEqual(["--exclude", "#keep"]);
+        expect(readFileSync(file, "utf8")).toBe(
+            [...many, "#keep"].map((x) => `- ${x}`).join("\n") + "\n",
+        );
+        expect(h.procs[0]!.args).not.toContain("--exclude");
         h.procs[0]!.finish(fixtureLines("sync-dryrun"));
         for (let i = 0; i < 200 && h.procs.length < 2; i += 1) {
             await new Promise((r) => setTimeout(r, 1));
         }
-        expect(f_ExcludeFromArg(h.procs[1]!.args)).toBe(file);
+        expect(f_FilterFromArg(h.procs[1]!.args)).toBe(file);
         h.procs[1]!.finish(fixtureLines("sync-real"));
         const rec = await f_Done(h);
         expect(rec.status).toBe("success");
         expect(existsSync(file)).toBe(false);
         expect(readdirSync(h.excludeFileDir)).toEqual([]);
         const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
-        expect(text).toContain("--exclude-from <제외 파일>");
+        expect(text).toContain("--filter-from <제외 파일>");
         expect(text).not.toContain("excl-run-");
+        expect(text).not.toContain("#keep");
     });
 
     it("수동 실행: 비교 뒤 제외 패턴이 바뀌면(해시 다름) PLAN_STALE, 이력·프로세스 없음", async () => {
@@ -922,6 +926,7 @@ describe("clsRunService 실제 sync (Phase 7)", () => {
     it("사전 확인 중 취소 → canceled(대상 불변 안내), 실제 실행 없음", async () => {
         const h = f_Harness({ job: f_SyncJob(), compare: f_SyncCompare(), script: null });
         const { runId } = await h.svc.start(SYNC_INPUT);
+        await f_WaitProcs(h, 1);
         expect(h.svc.getActive()?.phase).toBe("preflight");
         h.svc.cancel(runId);
         const rec = await f_Done(h);
@@ -1501,6 +1506,7 @@ describe("clsRunService OS 예약 (INT-003 T-01)", () => {
     it("recordAutoBlocked: 락·진행 중 실행과 무관하게 blocked 이력 1건 + lastRun, 프로세스 없음", async () => {
         const h = f_Harness({ script: null });
         const { runId: busyRun } = await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        await f_WaitProcs(h, 1);
         expect(h.activity.current()).not.toBeNull();
         const o = await h.svc.recordAutoBlocked(JOB_ID, "os-scheduler", SKIPPED);
         expect(o).toMatchObject({
@@ -1558,7 +1564,13 @@ describe("clsRunService OS 예약 (INT-003 T-01)", () => {
             message: TIME_LIMIT_CANCELED_TEXT,
         });
         expect(h.logs.some((l) => l.includes("reason=timeLimit"))).toBe(true);
-        const log = readFileSync(join(h.logsDir, readdirSync(h.logsDir)[0]!), "utf8");
+        const log = readFileSync(
+            join(
+                h.logsDir,
+                readdirSync(h.logsDir).find((n) => n.endsWith(".log"))!,
+            ),
+            "utf8",
+        );
         expect(log).toContain("# 취소 요청(시간 제한)");
     });
 

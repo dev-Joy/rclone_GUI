@@ -624,7 +624,7 @@ async function f_InitCore(): Promise<itfServices> {
     excludeStore.load();
     const remoteStore = new clsRemoteStore({ db });
     remoteStore.load();
-    // 지난번 비정상 종료로 남은 --exclude-from 임시 파일 정리
+    // 지난번 비정상 종료로 남은 --filter-from 임시 파일 정리
     const excludeFileDir = join(paths.userData, EXCLUDE_FILE_DIR);
     const leftover = await cleanupExcludeFiles(excludeFileDir);
     if (leftover > 0) logger.info(`남은 제외 패턴 파일 정리: ${leftover}개`);

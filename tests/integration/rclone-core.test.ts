@@ -34,6 +34,9 @@ const NEWER = new Date(OLD.getTime() + 10 * 60_000);
 const root = mkdtempSync(join(tmpdir(), "rclonegui-int-"));
 const conf = join(root, "rclone.conf");
 writeFileSync(conf, "");
+// 빌더가 --filter-from으로 넘길 파일(제외 패턴 *.tmp)
+const filterFile = join(root, "filter-tmp.txt");
+writeFileSync(filterFile, "- *.tmp\n");
 let src = "";
 let dst = "";
 let caseNo = 0;
@@ -58,7 +61,7 @@ function f_List(path: string) {
         buildLsjsonArgs({
             path,
             configPath: conf,
-            excludes: { patterns: ["*.tmp"], fromFile: null },
+            excludes: { filterFile },
             withHash: false,
             hashTypes: [],
             skipLinks: true,
@@ -77,7 +80,7 @@ function f_Transfer(mode: "copy" | "sync", dryRun: boolean, maxDelete: number | 
             source: src,
             destination: dst,
             configPath: conf,
-            excludes: { patterns: ["*.tmp"], fromFile: null },
+            excludes: { filterFile },
             options: { ...OPTIONS },
             scope: "files",
             dryRun,
@@ -192,7 +195,7 @@ describe.skipIf(!HAS_RCLONE)("rclone 실제 동작 (임시 폴더)", () => {
             buildLsjsonArgs({
                 path: join(root, "missing"),
                 configPath: conf,
-                excludes: { patterns: [], fromFile: null },
+                excludes: { filterFile: null },
                 withHash: false,
                 hashTypes: [],
                 skipLinks: true,

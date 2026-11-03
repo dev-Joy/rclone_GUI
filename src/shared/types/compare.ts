@@ -101,7 +101,7 @@ export interface itfCompareResult {
     dirChanges: itfDirChange[];
     warnings: string[];
     planToken: string;
-    /** 비교에 쓴 제외 패턴·전달 방식 해시. 실행 시점 값과 다르면 PLAN_STALE */
+    /** 비교에 쓴 제외 패턴·필터 파일 내용 해시. 실행 시점 값과 다르면 PLAN_STALE */
     excludeHash: string;
 }
 

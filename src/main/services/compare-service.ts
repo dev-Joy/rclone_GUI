@@ -9,7 +9,7 @@
  * - 자동 실행용 compareForAuto는 실행 서비스가 잡은 락 안에서 부른다: 락·캐시·진행 이벤트가 없고
  *   수동 비교 결과(planToken)를 건드리지 않는다. 취소는 넘겨받은 signal로 한다.
  * - 로그에는 작업 id·수·코드만 남기고 경로·파일 이름은 쓰지 않는다.
- * - 제외 패턴은 실행 문맥(ctx.excludes)만 쓴다. 파일 방식이면 --exclude-from 파일 1개를 만들어 두 lsjson이
+ * - 제외 패턴은 실행 문맥(ctx.excludes)만 쓴다. 패턴이 있으면 --filter-from 파일 1개를 만들어 두 lsjson이
  *   함께 쓰고 끝나면 지운다. 결과의 excludeHash가 지금 패턴과 다르면 get은 null, requirePlan은 PLAN_STALE
  *   (공용 패턴을 바꿔도 작업 rev는 그대로라 rev만으로는 막지 못한다).
  *
@@ -71,7 +71,7 @@ export interface itfCompareServiceDeps {
     activity: clsActivityLock;
     /** 공용 제외 패턴 조회 */
     excludes: Pick<clsExcludeStore, "patternsFor">;
-    /** --exclude-from 임시 파일 폴더(userData/exclude-files) */
+    /** --filter-from 임시 파일 폴더(userData/exclude-files) */
     excludeFileDir: string;
     logger: Pick<clsLogger, "info" | "warn">;
     /** 기본 runRclone */
@@ -342,7 +342,7 @@ export class clsCompareService {
         const ctx = await resolveJobContext(job, this.deps);
         const settingsKey = f_SettingsKey(ctx.settings);
         this.throwIfCanceled(active);
-        // 파일 방식이면 두 lsjson이 함께 쓸 제외 파일 1개를 만들고, 비교가 끝나면 지운다
+        // 패턴이 있으면 두 lsjson이 함께 쓸 필터 파일 1개를 만들고, 비교가 끝나면 지운다
         let file: itfExcludeFileHandle | null = null;
         try {
             if (ctx.excludes.fileContent !== null) {
@@ -352,10 +352,7 @@ export class clsCompareService {
                     "cmp",
                 );
             }
-            const excludeArgs: itfExcludeArgs = {
-                patterns: ctx.excludes.argPatterns,
-                fromFile: file?.path ?? null,
-            };
+            const excludeArgs: itfExcludeArgs = { filterFile: file?.path ?? null };
             return await this.executeWith(job, active, t0, ctx, settingsKey, excludeArgs);
         } finally {
             await file?.dispose();

@@ -1,5 +1,5 @@
 /**
- * --exclude-from 임시 파일 (INT-002 T-09). userData/exclude-files/ 안에만 만든다.
+ * --filter-from 임시 파일 (INT-002 T-09·INT-007). userData/exclude-files/ 안에만 만든다.
  *
  * - 이름은 excl-<cmp|run>-<UUID>.txt, flag "wx"로 새로 만든다(있던 파일을 덮어쓰지 않음).
  * - 쓴 뒤 다시 읽어 바이트가 같고 BOM(EF BB BF)이 없는지 확인한다(rclone-notes #19: BOM이면 첫 패턴이 깨짐).

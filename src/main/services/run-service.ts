@@ -29,8 +29,8 @@
  *   dry-run은 이력에만 남긴다.
  * - app.log에는 id·수·코드만 남긴다(경로·파일 이름은 실행 로그 파일에만).
  * - 제외 패턴은 실행 문맥(ctx.excludes)만 쓴다. 게이트는 비교 결과의 excludeHash와 지금 snapshotHash를
- *   맞춰 보고(다르면 PLAN_STALE), 자동 실행은 같은 실행 안 비교 결과와 맞춰 본다. 파일 방식이면 첫 rclone
- *   실행 전에 --exclude-from 파일 1개를 만들어 dry-run·사전 확인·실제 실행이 함께 쓰고 끝나면 지운다.
+ *   맞춰 보고(다르면 PLAN_STALE), 자동 실행은 같은 실행 안 비교 결과와 맞춰 본다. 패턴이 있으면 첫 rclone
+ *   실행 전에 --filter-from 파일 1개를 만들어 dry-run·사전 확인·실제 실행이 함께 쓰고 끝나면 지운다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -114,7 +114,7 @@ export interface itfRunServiceDeps {
     logsDir: string;
     /** 공용 제외 패턴 조회 */
     excludes: Pick<clsExcludeStore, "patternsFor">;
-    /** --exclude-from 임시 파일 폴더(userData/exclude-files) */
+    /** --filter-from 임시 파일 폴더(userData/exclude-files) */
     excludeFileDir: string;
     /** 백업 폴더 대상 remote의 저장소 기능(Move) 조회(INT-003 FR-36) */
     features: Pick<clsRemoteService, "features">;
@@ -180,7 +180,7 @@ interface itfActiveRun {
     done: Promise<void>;
     /** 마무리한 최종 이력 레코드 */
     final: typRunRecord | null;
-    /** 이 실행의 --exclude-from 파일 경로(파일 방식이 아니면 null) */
+    /** 이 실행의 --filter-from 파일 경로(패턴이 없으면 null) */
     excludeFile: string | null;
     /** 첫 취소 요청의 사유. 취소하지 않았으면 null */
     cancelReason: typCancelReason | null;
@@ -835,7 +835,7 @@ export class clsRunService {
         let outcome: itfRunOutcome;
         let file: itfExcludeFileHandle | null = null;
         try {
-            // 파일 방식이면 첫 rclone 실행 전에 만들어 dry-run·사전 확인·실제 실행이 함께 쓴다
+            // 패턴이 있으면 첫 rclone 실행 전에 만들어 dry-run·사전 확인·실제 실행이 함께 쓴다
             if (ctx.excludes.fileContent !== null) {
                 file = await writeExcludeFile(
                     this.deps.excludeFileDir,
@@ -971,7 +971,7 @@ export class clsRunService {
             source,
             destination,
             configPath: ctx.configPath,
-            excludes: { patterns: ctx.excludes.argPatterns, fromFile: active.excludeFile },
+            excludes: { filterFile: active.excludeFile },
             options: job.options,
             scope: job.scope,
             dryRun: !real,

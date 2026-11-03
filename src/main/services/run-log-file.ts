@@ -30,8 +30,8 @@ export function runLogFileName(at: Date, jobId: string, runId: string): string {
 }
 
 /**
- * 로그 머리말용 인자. "--" 뒤의 원본·대상과 --config·--exclude-from·--backup-dir 값을 가린다.
- * 제외 패턴·옵션 값은 그대로 둔다.
+ * 로그 머리말용 인자. "--" 뒤의 원본·대상과 --config·--filter-from·--backup-dir 값을 가린다.
+ * 제외 패턴은 명령 인자에 없으므로 로그에 남지 않는다. 옵션 값은 그대로 둔다.
  */
 export function maskArgsForLog(
     args: readonly string[],
@@ -45,7 +45,8 @@ export function maskArgsForLog(
             return a;
         }
         if (i > 0 && args[i - 1] === "--config") return MASK_CONFIG;
-        if (i > 0 && args[i - 1] === "--exclude-from") return MASK_EXCLUDE_FILE;
+        if (i > 0 && (args[i - 1] === "--filter-from" || args[i - 1] === "--exclude-from"))
+            return MASK_EXCLUDE_FILE;
         if (i > 0 && args[i - 1] === "--backup-dir") return MASK_BACKUP_DIR;
         if (a.startsWith("--config=")) return `--config=${MASK_CONFIG}`;
         return a;

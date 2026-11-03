@@ -40,7 +40,7 @@ export interface itfJobContext {
     binaryPath: string;
     /** --config로 넘길 경로. 없으면 null */
     configPath: string | null;
-    /** 적용할 제외 패턴과 전달 방식(job.excludes를 직접 쓰지 않는다) */
+    /** 적용할 제외 패턴과 필터 파일 내용(job.excludes를 직접 쓰지 않는다) */
     excludes: itfEffectiveExcludes;
 }
 

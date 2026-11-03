@@ -32,7 +32,7 @@ function f_Input(over: Partial<itfTransferArgsInput> = {}): itfTransferArgsInput
         source: "C:\\tmp\\src",
         destination: "test-remote:dst",
         configPath: "C:\\tmp\\rclone.conf",
-        excludes: { patterns: ["node_modules/**", "*.tmp"], fromFile: null },
+        excludes: { filterFile: null },
         options: { ...DEFAULT_OPTIONS },
         scope: "files",
         dryRun: false,
@@ -55,10 +55,6 @@ describe("buildTransferArgs", () => {
             "--ask-password=false",
             "--config",
             "C:\\tmp\\rclone.conf",
-            "--exclude",
-            "node_modules/**",
-            "--exclude",
-            "*.tmp",
             "--checkers",
             "8",
             "--transfers",
@@ -81,7 +77,7 @@ describe("buildTransferArgs", () => {
         const args = buildTransferArgs(
             f_Input({
                 configPath: null,
-                excludes: { patterns: [], fromFile: null },
+                excludes: { filterFile: null },
                 options: {
                     ...DEFAULT_OPTIONS,
                     fastList: false,
@@ -92,6 +88,7 @@ describe("buildTransferArgs", () => {
         );
         expect(args).not.toContain("--config");
         expect(args).not.toContain("--exclude");
+        expect(args).not.toContain("--filter-from");
         expect(args).not.toContain("--fast-list");
         expect(args).not.toContain("--skip-links");
         expect(args).toContain("--checksum");
@@ -140,7 +137,7 @@ describe("백업 폴더 --backup-dir (INT-003 T-03)", () => {
             f_Input({
                 mode: "sync",
                 configPath: null,
-                excludes: { patterns: [], fromFile: null },
+                excludes: { filterFile: null },
                 options: { ...DEFAULT_OPTIONS, ignoreErrors: true },
                 maxDelete: 2,
                 backupDir: BK,
@@ -237,7 +234,7 @@ describe("buildLsjsonArgs", () => {
     const base: itfLsjsonArgsInput = {
         path: "r:a",
         configPath: "C:\\c.conf",
-        excludes: { patterns: ["x/**"], fromFile: null },
+        excludes: { filterFile: "C:\\ud\\exclude-files\\excl-cmp-x.txt" },
         withHash: true,
         hashTypes: [],
         skipLinks: true,
@@ -256,8 +253,8 @@ describe("buildLsjsonArgs", () => {
             "--skip-links",
             "--config",
             "C:\\c.conf",
-            "--exclude",
-            "x/**",
+            "--filter-from",
+            "C:\\ud\\exclude-files\\excl-cmp-x.txt",
             "--",
             "r:a",
         ]);
@@ -491,7 +488,7 @@ describe("제외 패턴 전달 (INT-002 T-09)", () => {
     const lsBase: itfLsjsonArgsInput = {
         path: "r:a",
         configPath: "C:\\c.conf",
-        excludes: { patterns: ["#a", " b"], fromFile: "C:\\ud\\exclude-files\\excl-cmp-x.txt" },
+        excludes: { filterFile: "C:\\ud\\exclude-files\\excl-cmp-x.txt" },
         withHash: false,
         hashTypes: [],
         skipLinks: false,
@@ -499,47 +496,52 @@ describe("제외 패턴 전달 (INT-002 T-09)", () => {
         scope: "files",
     };
 
-    it("--config → --exclude(인자 패턴) → --exclude-from 순서, '--' 앞에만", () => {
+    it("--config → --filter-from 순서, '--' 앞에 정확히 한 번", () => {
         const args = buildLsjsonArgs(lsBase);
         const i = args.indexOf("--config");
-        expect(args.slice(i, i + 7)).toEqual([
+        expect(args.slice(i, i + 4)).toEqual([
             "--config",
             "C:\\c.conf",
-            "--exclude",
-            "#a",
-            "--exclude",
-            " b",
-            "--exclude-from",
+            "--filter-from",
+            "C:\\ud\\exclude-files\\excl-cmp-x.txt",
         ]);
-        expect(args.indexOf("--exclude-from")).toBeLessThan(args.indexOf("--"));
-        const t = buildTransferArgs(
-            f_Input({ excludes: { patterns: ["#a"], fromFile: "C:\\f.txt" } }),
-        );
-        expect(t.slice(t.indexOf("--exclude"), t.indexOf("--exclude") + 4)).toEqual([
-            "--exclude",
-            "#a",
-            "--exclude-from",
+        expect(args.filter((a) => a === "--filter-from")).toHaveLength(1);
+        expect(args.indexOf("--filter-from")).toBeLessThan(args.indexOf("--"));
+        const t = buildTransferArgs(f_Input({ excludes: { filterFile: "C:\\f.txt" } }));
+        expect(t.filter((a) => a === "--filter-from")).toHaveLength(1);
+        expect(t.slice(t.indexOf("--filter-from"), t.indexOf("--filter-from") + 2)).toEqual([
+            "--filter-from",
             "C:\\f.txt",
         ]);
     });
 
-    it("--filter·--filter-from·--include*는 만들지 않는다(파일 방식 포함)", () => {
+    it("--exclude·--exclude-from·--filter·--include*는 만들지 않는다", () => {
         const all = [
             buildLsjsonArgs(lsBase),
-            buildTransferArgs(f_Input({ excludes: { patterns: ["a"], fromFile: "C:\\f.txt" } })),
+            buildLsjsonArgs({ ...lsBase, excludes: { filterFile: null } }),
+            buildTransferArgs(f_Input({ excludes: { filterFile: "C:\\f.txt" } })),
             buildTransferArgs(
                 f_Input({
                     mode: "sync",
                     dryRun: true,
-                    excludes: { patterns: [], fromFile: "C:\\f.txt" },
+                    excludes: { filterFile: null },
                 }),
             ),
         ];
         for (const args of all) {
             const flags = args.slice(0, args.indexOf("--"));
-            expect(flags.some((a) => /^--(filter|include)/.test(a))).toBe(false);
+            expect(flags).not.toContain("--exclude");
+            expect(flags).not.toContain("--exclude-from");
+            expect(flags).not.toContain("--filter");
+            expect(flags.some((a) => a.startsWith("--include"))).toBe(false);
             expect(() => assertNoBlockedFlags(args)).not.toThrow();
         }
+        expect(buildLsjsonArgs({ ...lsBase, excludes: { filterFile: null } })).not.toContain(
+            "--filter-from",
+        );
+        expect(buildTransferArgs(f_Input({ excludes: { filterFile: null } }))).not.toContain(
+            "--filter-from",
+        );
     });
 
     it("차단 목록은 그대로다", () => {

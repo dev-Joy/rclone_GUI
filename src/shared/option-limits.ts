@@ -1,7 +1,7 @@
 /**
  * 옵션 길이·개수 한도 (INT-002 T-09).
  * 경로는 읽기·저장 입력 모두 4096자로 통일한다(깊은 UNC·확장 경로 보호, spec Q1 결정).
- * 제외 패턴 전달 방식(인자 / --exclude-from 파일)과 Windows 명령줄 길이 한도도 여기서 정한다.
+ * 제외 패턴은 --filter-from 파일로 넘기므로 개수 한도만 두고, Windows 명령줄 길이 한도도 여기서 정한다(INT-007).
  *
  * @author dev-Joy 2026-10-29
  */
@@ -30,12 +30,6 @@ export const REMOTE_BOOKMARKS_MAX = 200;
 export const LIST_DIR_MAX = 500;
 /** 폴더 탐색 화면에 한 번에 보여 줄 항목 수 */
 export const LIST_DIR_PAGE = 200;
-/** 패턴 수가 이보다 많으면 --exclude-from 파일을 쓴다 */
-export const EXCLUDE_FILE_MIN_COUNT = 64;
-/** 인자 길이 합(패턴마다 길이 + 12)이 이보다 크면 --exclude-from 파일을 쓴다 */
-export const EXCLUDE_FILE_MIN_CHARS = 8_000;
-/** 파일에 넣을 수 없는 패턴(인자로만 전달)의 길이 예산. 넘으면 저장을 막는다 */
-export const EXCLUDE_ARG_ONLY_BUDGET = 16_000;
 /** Windows CreateProcess 명령줄 최대 길이 */
 export const WIN_CMDLINE_MAX = 32_767;
 /** 명령줄 추정 오차 여유 */

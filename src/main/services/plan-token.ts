@@ -25,7 +25,7 @@ export interface itfPlanTokenInput {
     scope: typSyncScope;
     /** 백업 기준 경로(정규화, 실행별 하위 폴더 제외). copy이거나 없으면 null (INT-003 FR-27) */
     backupDir: string | null;
-    /** 적용한 제외 패턴(공용 + 작업 전용)·전달 방식 해시(resolveEffectiveExcludes) */
+    /** 적용한 제외 패턴(공용 + 작업 전용)·필터 파일 내용 해시(resolveEffectiveExcludes) */
     excludeSnapshotHash: string;
     options: Pick<
         typJobRunOptions,

@@ -709,7 +709,8 @@ describe("clsCompareService 캐시·requirePlan", () => {
             resolveEffectiveExcludes(f_Job({ excludePatternIds: [LIB_ID] }), h.excludes)
                 .snapshotHash,
         );
-        expect(h.procs[0]?.args).toContain("lib/**");
+        expect(h.procs[0]?.args).toContain("--filter-from");
+        expect(h.procs[0]?.args).not.toContain("--exclude");
         expect(h.svc.get(JOB_ID)).toBe(r);
         h.library.set(LIB_ID, "changed/**");
         expect(h.svc.get(JOB_ID)).toBeNull();
@@ -719,7 +720,7 @@ describe("clsCompareService 캐시·requirePlan", () => {
         expect(h.svc.get(JOB_ID)).toBeNull();
     });
 
-    it("패턴이 많으면 두 lsjson이 같은 --exclude-from 파일을 쓰고, #·; 패턴은 인자로, 끝나면 지운다", async () => {
+    it("패턴이 있으면 두 lsjson이 같은 --filter-from 파일을 쓰고, 모든 패턴(- 접두사)을 넣고 끝나면 지운다", async () => {
         const many = Array.from({ length: 70 }, (_v, i) => `p${i}/**`);
         const h = f_Harness({
             jobs: [f_Job({ excludes: [...many, "#a"], excludePatternIds: [LIB_ID] })],
@@ -727,16 +728,15 @@ describe("clsCompareService 캐시·requirePlan", () => {
         });
         const p = h.svc.run(JOB_ID);
         await h.waitProcs(2);
-        const files = h.procs.map((x) => x.args[x.args.indexOf("--exclude-from") + 1]);
+        const files = h.procs.map((x) => x.args[x.args.indexOf("--filter-from") + 1]);
         expect(files[0]).toBeDefined();
         expect(files[0]).toBe(files[1]);
         const content = readFileSync(files[0]!, "utf8");
-        expect(content).toBe(`lib/**\n${many.join("\n")}\n`);
+        expect(content).toBe(["lib/**", ...many, "#a"].map((x) => `- ${x}`).join("\n") + "\n");
         for (const x of h.procs) {
-            const i = x.args.indexOf("--exclude");
-            expect(x.args.slice(i, i + 2)).toEqual(["--exclude", "#a"]);
-            expect(x.args.filter((a) => a === "--exclude")).toHaveLength(1);
-            expect(x.args.indexOf("--exclude-from")).toBeLessThan(x.args.indexOf("--"));
+            expect(x.args).not.toContain("--exclude");
+            expect(x.args.filter((a) => a === "--filter-from")).toHaveLength(1);
+            expect(x.args.indexOf("--filter-from")).toBeLessThan(x.args.indexOf("--"));
         }
         for (const x of h.procs) x.finish(f_Lines([]));
         await p;
