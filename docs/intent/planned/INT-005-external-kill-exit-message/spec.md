@@ -2,9 +2,9 @@
 
 - Intent: [INT-005](intent.md) | Status: planned | 작성일: 2026-11-03
 
-> 기준 커밋 `41d3e3a`. intent의 결정(Q1~Q3)을 따른다. 종료 코드 값은 T-01 probe 실측으로 확정하며, 실측 전 값은 "가설"로 표기한다.
+> 기준 커밋 `41d3e3a`. intent의 결정(Q1~Q3)을 따른다. 종료 코드 값은 T-01 probe 실측(2026-11-03, rclone v1.75.1 Windows)으로 확정했다.
 >
-> **intent Q2 결정과 다른 점(2026-11-03, §10 Q-1·Q-4·Q-5 근거)**: rclone 소스(`lib/atexit`)와 Go 런타임 종료 경로를 보고 판별 규칙을 보완했다. ① Go 충돌은 대부분 exit 2로 끝나므로 충돌은 종료 코드가 아니라 stderr의 Go 충돌 표지로 판정한다. ② Windows에서 rclone이 Ctrl+C를 받으면 exit 1과 `Signal received:` 로그를 남기므로(가설, T-01 확인), exit 1이라도 이 표지가 있으면 외부 종료로 본다(intent 제약 "exit 1은 분류하지 않는다"를 좁힘). ③ `0xC000013A`는 rclone이 Ctrl+C를 직접 처리하므로 외부 종료 집합에서 뺀다(probe로 재현될 때만 추가). intent 문구 갱신은 T-01 결과가 나온 뒤 함께 한다.
+> **intent Q2 결정과 다른 점(2026-11-03, §10 Q-1·Q-4·Q-5 근거 + T-01 실측)**: rclone 소스(`lib/atexit`)와 Go 런타임 종료 경로를 보고 판별 규칙을 보완했고, `kill` 묶음 실측으로 아래를 확정했다. ① Go 충돌은 대부분 exit 2로 끝나므로 충돌은 종료 코드가 아니라 stderr의 Go 충돌 표지로 판정한다. ② Windows에서 rclone이 Ctrl+C를 받으면 exit 1 + `Signal received: interrupt` + `Exiting...` 로그로 끝난다(실측). exit 1이라도 이 표지가 있으면 외부 종료로 본다(intent 제약 "exit 1은 분류하지 않는다"를 좁힘). ③ `0xC000013A`는 재현되지 않아 외부 종료 집합에 넣지 않는다(FR-4a). ④ `Stop-Process -Force`·.NET `Process.Kill()`은 exit `4294967295`(int32 `-1`)로 오고, `taskkill /F`·`/T /F`는 exit 1, CIM `Terminate`(Reason 생략)는 exit 0이었다 — 외부 종료 집합 확정 값은 `-1`이다. exit 1·0으로 끝나는 외부 종료는 구분할 수 없다(R-1).
 
 ## 1. 개요
 
@@ -65,10 +65,10 @@ rclone 실제 전송·미리보기·사전 확인이 rclone 종료 코드(0~10)�
 - **FR-2** 종료 코드 표기: 정규화 값이 0 이상이면 숫자만 쓴다(`3`). 음수면 `-1 (0xFFFFFFFF)`처럼 부호 있는 값과 8자리 대문자 16진을 함께 쓴다. 알려진 NTSTATUS면 이름을 덧붙인다(`-1073741819 (0xC0000005 STATUS_ACCESS_VIOLATION)`).
 - **FR-3** 외부 종료 분류: 다음을 모두 만족하면 `status: "failed"`, `error.code: "RCLONE_KILLED"`로 끝낸다.
   - 취소가 아님
-  - 정규화 코드가 외부 종료 집합에 속함. 확정: `-1`(2026-11-03 실제 건). `0xC000013A`는 T-01에서 rclone 종료 코드로 재현될 때만 추가한다(Q-4)
+  - 정규화 코드가 외부 종료 집합에 속함. 확정: `-1`(2026-11-03 실제 건, T-01에서 `Stop-Process`·.NET `Kill()`로 재현). `0xC000013A`는 T-01에서 재현되지 않아 넣지 않는다(FR-4a, Q-4)
   - `errorLines`가 비어 있음
   - `stderrTail`에 Go 충돌 표지가 없음(FR-5)
-- **FR-3a** 신호 종료 분류(T-01 `kill-ctrl-c` 실측으로 확정. 재현되지 않으면 이 FR과 AC-17을 지운다): 취소가 아니고, 정규화 코드가 `1`이며, `stderrTail`에 신호 표지(FR-5a)가 있고 Go 충돌 표지가 없으면 `failed` + `RCLONE_KILLED`. 신호 표지는 rclone이 중단 신호를 받았다는 직접 기록이므로 `errorLines` 유무와 상관없이 적용한다(신호 뒤 진행 중 전송이 끊기며 남는 오류는 결과로 본다).
+- **FR-3a** 신호 종료 분류(T-01 `kill-ctrl-c` 실측으로 확정: exit 1 + `Signal received: interrupt` + `Exiting...`): 취소가 아니고, 정규화 코드가 `1`이며, `stderrTail`에 신호 표지(FR-5a)가 있고 Go 충돌 표지가 없으면 `failed` + `RCLONE_KILLED`. 신호 표지는 rclone이 중단 신호를 받았다는 직접 기록이므로 `errorLines` 유무와 상관없이 적용한다(신호 뒤 진행 중 전송이 끊기며 남는 오류는 결과로 본다).
 - **FR-4** 충돌 분류: 취소가 아니고 exit 0·3·7이 아닐 때, 다음 중 하나면 `failed` + `RCLONE_CRASHED`.
   - `stderrTail`에 Go 충돌 표지(FR-5)가 있음. 종료 코드와 상관없다. Go 런타임은 panic·`fatal error`(메모리 부족 포함)·Go가 잡은 Windows 예외를 모두 **exit 2**로 끝내며, 이 값은 rclone 사용법 오류(2)와 같아 코드만으로는 구분할 수 없다
   - 정규화 코드가 `0xC0000000` 이상 범위(int32로 음수 중 상위 2비트가 `11`)이고 외부 종료 집합에 없으며 `0xC000013A`가 아님. Go 처리기를 우회한 종료(예: `0xC0000409` fail-fast)만 이 값으로 나온다
@@ -96,8 +96,8 @@ rclone 실제 전송·미리보기·사전 확인이 rclone 종료 코드(0~10)�
   - `kill-taskkill-tf`: `taskkill /PID <pid> /T /F`(앱 `killProcessTree`와 같음, `copy-cancel-large`와 대조)
   - `kill-stop-process`: `powershell.exe -NoProfile -NonInteractive -Command Stop-Process -Id <pid> -Force`
   - `kill-dotnet-kill`: `[System.Diagnostics.Process]::GetProcessById(<pid>).Kill()`
-  - `kill-cim-terminate`: `Invoke-CimMethod`로 `Win32_Process.Terminate`(Reason 생략)
-  - `kill-ctrl-c`: 도우미 `powershell.exe`가 P/Invoke로 `FreeConsole` → `AttachConsole(<pid>)` → `SetConsoleCtrlHandler(null, true)`(도우미 자신은 무시) → `GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)`를 호출한다. `windowsHide`로 띄운 rclone도 숨긴 콘솔을 가지므로 붙을 수 있다. 확인할 것: 종료 코드(가설 1), stderr의 `Signal received: interrupt`·`Exiting...` 줄, `0xC000013A`가 나오는지(Q-4). 붙기에 실패하면 이유를 stdout에 남기고 이 방식만 건너뛴다
+  - `kill-cim-terminate`: `Invoke-CimMethod`로 `Win32_Process.Terminate`(Reason 생략). Terminate의 유일한 인자는 Reason이라 대상을 `Get-CimInstance`의 `-InputObject`로 준다. 실측 결과 exit 0이었다(성공과 구분 불가, R-1)
+  - `kill-ctrl-c`: 도우미 `powershell.exe`가 P/Invoke로 `FreeConsole` → `AttachConsole(<pid>)` → `SetConsoleCtrlHandler(null, true)`(도우미 자신은 무시) → `GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)`를 호출한다. `windowsHide`로 띄운 rclone도 숨긴 콘솔을 가지므로 붙을 수 있다. 실측: exit 1, `Signal received: interrupt`·`Exiting...`·`Removing failed copy` 로그, `0xC000013A`는 재현되지 않았다(Q-4). 붙기에 실패하면 이유를 stdout에 남기고 이 방식만 건너뛴다
   - 실행 파일은 `%SystemRoot%\System32\…` 절대 경로, `shell: false`, 인자에는 숫자 pid만 넣는다(안전 규칙 1의 정신).
   - 작업 관리자 "작업 끝내기"는 사람이 1회 수행하고 rclone-notes에만 기록한다(fixture 선택).
 - **FR-16** rclone-notes에 방식별 실측 코드, Ctrl+C 시 종료 코드·신호 표지, 표지 없는 exit 1 구분 불가 한계, 외부 종료 집합 확정 값, Go 충돌이 exit 2로 끝난다는 점(소스 근거)을 기록한다(#58~).
@@ -123,7 +123,7 @@ export function formatExitCodeForLog(code: number | null): string;
 export type typAbnormalExit = "killed" | "crash" | null;
 /** 코드만 본 분류. 오류 줄·Go 충돌 표지는 decideRunOutcome이 함께 판단한다 */
 export function classifyAbnormalExit(code: number | null): typAbnormalExit;
-/** 외부 종료로 볼 코드(int32). 확정: -1. 0xC000013A는 T-01에서 재현될 때만 추가 */
+/** 외부 종료로 볼 코드(int32). 확정: -1. 0xC000013A는 T-01에서 재현되지 않아 제외 */
 export const EXTERNAL_KILL_EXIT_CODES: readonly number[];
 ```
 
@@ -160,11 +160,13 @@ export interface itfRunOutcomeInput {
 | exit 7 | `failed` | `MAX_DELETE_EXCEEDED` |
 | exit 0 | `success`/`partial` | -/`RCLONE_FAILED` |
 | Go 충돌 표지 있음(코드 무관, 주로 exit 2) | `failed` | `RCLONE_CRASHED` |
-| exit 1 + 신호 표지 (FR-3a, T-01 확정 시) | `failed` | `RCLONE_KILLED` |
+| exit 1 + 신호 표지 (FR-3a, T-01 확정) | `failed` | `RCLONE_KILLED` |
 | 외부 종료 집합 + 오류 줄 없음 | `failed` | `RCLONE_KILLED` |
 | 외부 종료 집합 + 오류 줄 있음 | `failed` | `RCLONE_FAILED` |
 | 0xC0000000 이상(외부 종료 집합·`0xC000013A` 제외) | `failed` | `RCLONE_CRASHED` |
 | 그 밖(표지 없는 1·2·4~6·8~10, `0xC000013A`(집합에 없을 때), 기타·null) | `failed` | `RCLONE_FAILED` |
+
+exit 0은 위 표의 "exit 0" 행에서 성공/일부 실패로 끝난다. CIM `Terminate`처럼 exit 0으로 끝나는 외부 종료는 성공과 구분할 수 없다(R-1).
 
 ## 7. 예외 · 엣지 케이스
 
@@ -192,21 +194,21 @@ export interface itfRunOutcomeInput {
 - **AC-5** Given exit `0xC0000005`(원값 `3221225477`), Then `RCLONE_CRASHED`, message에 `STATUS_ACCESS_VIOLATION`.
 - **AC-6** Given exit `-1`·오류 줄 없음·stderrTail에 `panic: runtime error` 줄, Then `RCLONE_CRASHED`.
 - **AC-7** Given 취소 + exit 1, Then `CANCELED`. Given exit 1(취소 아님, 표지 없음), Then `RCLONE_FAILED`, message `exit 1` 표기 유지. Given exit 3/7/0, Then 기존 결과와 같다(기존 테스트 그대로 통과).
-- **AC-8** Given T-01 fixture(`kill-*.exit.txt`·`kill-*.stderr.txt`)의 각 쌍, When 단위 테스트가 그 종료 코드와 stderr로 `decideRunOutcome`을 호출, Then 방식마다 rclone-notes에 기록한 기대 분류와 같다(외부 종료 집합 → `RCLONE_KILLED`, Ctrl+C → `RCLONE_KILLED`(FR-3a 확정 시), 표지 없는 exit 1 → `RCLONE_FAILED`). 기대 분류는 테스트 안의 표로 둔다.
+- **AC-8** Given T-01 fixture(`kill-*.exit.txt`·`kill-*.stderr.txt`)의 각 쌍, When 단위 테스트가 그 종료 코드와 stderr로 `decideRunOutcome`을 호출, Then 방식마다 rclone-notes에 기록한 기대 분류와 같다(`kill-stop-process`·`kill-dotnet-kill` → `RCLONE_KILLED`, `kill-ctrl-c` → `RCLONE_KILLED`(FR-3a), `kill-taskkill-f`·`kill-taskkill-tf` → `RCLONE_FAILED`, `kill-cim-terminate`(exit 0) → `success`(구분 불가, R-1)). 기대 분류는 테스트 안의 표로 둔다.
 - **AC-15** Given exit 2·stderrTail에 `fatal error: out of memory` 줄(합성), Then `RCLONE_CRASHED`. Given exit 2·`Exception 0xc0000005 0x0 …` 줄(합성), Then `RCLONE_CRASHED`. Given exit 2·표지 없음, Then `RCLONE_FAILED`.
 - **AC-16** Given exit `3221225786`(0xC000013A)·외부 종료 집합에 없음, Then `RCLONE_FAILED`이고 message에 `STATUS_CONTROL_C_EXIT`. Given exit `0xC0000409`, Then `RCLONE_CRASHED`.
-- **AC-17** (FR-3a 확정 시) Given exit 1·stderrTail에 `{"level":"info","msg":"Signal received: interrupt",…}` 줄(T-01 `kill-ctrl-c` fixture), Then `RCLONE_KILLED`이고 신호 문구. Given 같은 stderr + 취소, Then `CANCELED`. Given JSON `msg`가 `… Signal received: …`처럼 중간에만 들어 있음, Then 표지가 아니다.
+- **AC-17** Given exit 1·stderrTail에 `{"level":"info","msg":"Signal received: interrupt",…}` 줄(T-01 `kill-ctrl-c` fixture), Then `RCLONE_KILLED`이고 신호 문구. Given 같은 stderr + 취소, Then `CANCELED`. Given JSON `msg`가 `… Signal received: …`처럼 중간에만 들어 있음, Then 표지가 아니다.
 - **AC-9** Given 자동 실행 결과 `RCLONE_KILLED`, When `autoOutcomeNotice`, Then message에 `rclone이 외부에서 종료된 것으로 보입니다.`가 들어간다.
 - **AC-10** Given 연속 실패 n = `FAILURE_WARN_COUNT`이고 마지막 실패 코드 `RCLONE_KILLED`, When `countFailure`, Then 외부 종료 반복 안내 문구로 1회 경고. 마지막 실패가 `RCLONE_FAILED`면 기존 문구. 집계 횟수는 두 경우 같다.
 - **AC-11** Given 실행이 외부 종료로 끝남, When 이력 레코드가 저장됨, Then `exitCode === -1`이고 실행 로그 끝 줄에 `exit=-1(0xFFFFFFFF)`.
 - **AC-12** Given `exitCode: 4294967295`인 예전 레코드, When 이력 상세를 연다, Then `rclone 종료 코드`가 `-1 (0xFFFFFFFF)`.
-- **AC-13** Given 빌드본(drive-app)에서 실제 copy 실행 중, When 바깥에서 `Stop-Process -Id <rclone pid> -Force`, Then 실행 결과·이력 목록 배지 title·이력 상세에 FR-8 문구가 보이고 renderer 콘솔 오류 0건. (`Stop-Process`가 -1이 아니라고 실측되면 외부 종료 집합에 드는 다른 방식으로 대체)
+- **AC-13** Given 빌드본(drive-app)에서 실제 copy 실행 중, When 바깥에서 `Stop-Process -Id <rclone pid> -Force`, Then 실행 결과·이력 목록 배지 title·이력 상세에 FR-8 문구가 보이고 renderer 콘솔 오류 0건. (`Stop-Process`는 T-01에서 -1로 실측됐다)
 - **AC-14** Given probe `--only=kill`, Then `tests/fixtures/rclone/kill-*.{exit,stderr,stdout}.txt`가 생기고 사용자 경로·임시 폴더 실제 경로가 가려져 있다.
 
 ## 9. 가정과 리스크
 
-- **R-1** exit 1 구분 불가(일부 해소): `taskkill /F`·작업 관리자는 exit 1로 예상되고(`taskkill /T /F`는 실측 1, `copy-cancel-large`), rclone 자체 오류(예: 없는 필터 파일, rclone-notes #21)도 exit 1이다. 이런 강제 종료는 rclone이 기록을 남길 틈이 없어 지금처럼 일반 오류로 보인다. 문서에 한계로 남긴다. Ctrl+C처럼 rclone이 직접 처리하는 신호는 `Signal received:` 기록이 남아 구분된다(FR-3a). 단 신호 처리기는 rclone이 `atexit.Register`를 한 번이라도 호출해야 켜지므로(`registerOnce`) copy·sync 경로에서 켜지는지는 T-01로만 확인할 수 있다.
-- **R-2** 가설 오류: `Stop-Process`/.NET `Kill()`이 -1이 아니면, 이번 건의 -1을 만든 주체는 다른 방식이다. 이번 건의 실제 값(-1)이 근거이므로 -1은 집합에 그대로 두고 probe 결과는 notes에 남긴다. `0xC000013A`는 probe로 재현될 때만 집합에 넣고, 재현되지 않으면 notes에 "미재현"으로 적고 FR-4a대로 둔다.
+- **R-1** exit 1·0 구분 불가(일부 해소): `taskkill /F`·`/T /F`(앱 중지)는 exit 1(T-01 실측), CIM `Terminate`(Reason 생략)는 exit 0(실측)이라 rclone 자체 오류·정상 종료와 구분할 수 없다. 이런 강제 종료는 rclone이 기록을 남길 틈이 없어 지금처럼 일반 오류/성공으로 보인다. `Stop-Process`·.NET `Kill()`은 exit -1로 와 구분된다(T-01). Ctrl+C처럼 rclone이 직접 처리하는 신호는 `Signal received:` 기록이 남아 구분된다(FR-3a, T-01 확정). 신호 처리기는 rclone이 `atexit.Register`를 한 번이라도 호출해야 켜지는데(`registerOnce`), copy 경로에서 켜지는 것을 T-01로 확인했다.
+- **R-2** 가설 검증 완료: `Stop-Process`/.NET `Kill()`은 둘 다 Node에서 `4294967295`(int32 `-1`)로 왔다(T-01). 이번 건의 -1을 만든 주체가 이 계열일 가능성이 높다. -1은 집합에 확정한다. `0xC000013A`는 T-01에서 재현되지 않아 집합에 넣지 않는다(FR-4a). `taskkill`은 exit 1, CIM `Terminate`(Reason 생략)는 exit 0이었다(R-1).
 - **R-2a** 근거 출처: Windows 신호 처리(`lib/atexit/atexit_other.go`: `exitSignals = {os.Interrupt}`, `exitCode` = `exitcode.UncategorizedError`(1), `atexit.go`: `fs.Infof("Signal received: %s")`)는 rclone master 소스를 읽은 것이다. 앱이 쓰는 rclone 버전에서 같은지는 T-01이 확인한다. Go 충돌이 exit 2로 끝난다는 점은 Go 런타임 동작이며, rclone으로 재현할 수 없어 합성 문자열로 테스트한다(R-5).
 - **R-3** 새 오류 코드의 하위 호환: 새 버전이 저장한 `RCLONE_KILLED` 레코드를 이전 버전 앱이 읽으면 `zAppErrorPayload` enum 파싱에 실패할 수 있다(다운그레이드에서만). 다운그레이드는 지원 범위 밖으로 보고 CHANGELOG에 적지 않는다. 확인함: `history-store.ts:68-75` `f_ParseRows`는 파싱 실패 행을 건너뛰고, 시작 때 읽을 수 없는 행이 있으면 알릴 뿐 지우지 않는다(`:88`). 이전 버전에서는 그 행만 안 보이고 데이터는 남는다.
 - **R-4** Go 충돌 출력이 stderr 끝부분 20 KiB를 넘어 앞부분 `panic:`이 잘릴 가능성. 긴 goroutine 덤프에서 생길 수 있으나 `RCLONE_KILLED` 오분류여도 상태·게이트는 같다(문구만 다름).

@@ -131,25 +131,141 @@ function f_SkippedOps(stderr) {
         .toSorted();
 }
 
+/** 실행 파일은 절대 경로로만 쓴다(안전 규칙 1의 정신). 인자에는 숫자 pid만 넣는다 */
+const SYSTEM_ROOT = process.env.SystemRoot ?? "C:\\Windows";
+const TASKKILL_EXE = `${SYSTEM_ROOT}\\System32\\taskkill.exe`;
+const POWERSHELL_EXE = `${SYSTEM_ROOT}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+
+/** execFile 래퍼(Promise). shell: false, windowsHide, 15초 제한 */
+function f_ExecFile(file, args) {
+    return new Promise((done) => {
+        execFile(
+            file,
+            args,
+            { shell: false, windowsHide: true, timeout: 15_000 },
+            (error, stdout, stderr) => {
+                done({
+                    error: error ?? null,
+                    stdout: String(stdout ?? ""),
+                    stderr: String(stderr ?? ""),
+                });
+            },
+        );
+    });
+}
+
+/** PowerShell -Command 실행(사용자 문자열 없이 숫자 pid만 들어간다) */
+async function f_PowerShell(command) {
+    return f_ExecFile(POWERSHELL_EXE, ["-NoProfile", "-NonInteractive", "-Command", command]);
+}
+
+/** killer 결과. ok=false면 f_ProbeKillOnTransfer가 taskkill로 정리하고 fixture를 저장하지 않는다 */
+function f_KillFail(reason) {
+    return { ok: false, reason };
+}
+
+/** taskkill /PID <pid> /F */
+async function f_KillTaskkillF(pid) {
+    const r = await f_ExecFile(TASKKILL_EXE, ["/PID", String(pid), "/F"]);
+    return r.error ? f_KillFail(`taskkill /F: ${r.error.message}`) : { ok: true };
+}
+
+/** taskkill /PID <pid> /T /F (앱 killProcessTree와 같음, 기본값) */
+async function f_KillTaskkillTree(pid) {
+    const r = await f_ExecFile(TASKKILL_EXE, ["/PID", String(pid), "/T", "/F"]);
+    return r.error ? f_KillFail(`taskkill /T /F: ${r.error.message}`) : { ok: true };
+}
+
+/** PowerShell Stop-Process -Force */
+async function f_KillStopProcess(pid) {
+    const r = await f_PowerShell(`Stop-Process -Id ${pid} -Force`);
+    return r.error ? f_KillFail(`Stop-Process: ${r.error.message}`) : { ok: true };
+}
+
+/** .NET Process.Kill() */
+async function f_KillDotnet(pid) {
+    const r = await f_PowerShell(`[System.Diagnostics.Process]::GetProcessById(${pid}).Kill()`);
+    return r.error ? f_KillFail(`Process.Kill: ${r.error.message}`) : { ok: true };
+}
+
+/** WMI/CIM Win32_Process.Terminate(Reason 생략). Terminate의 유일한 인자는 Reason이라 대상을 InputObject로 준다 */
+async function f_KillCimTerminate(pid) {
+    const r = await f_PowerShell(
+        `Invoke-CimMethod -InputObject (Get-CimInstance -ClassName Win32_Process -Filter 'ProcessId = ${pid}') -MethodName Terminate`,
+    );
+    return r.error ? f_KillFail(`CIM Terminate: ${r.error.message}`) : { ok: true };
+}
+
 /**
- * 실행 중 취소 실험: rclone을 띄우고 stats 줄의 bytes가 0보다 커지면(전송 시작) 앱과 같은 방식
- * (taskkill /PID <pid> /T /F)으로 프로세스 트리를 끝낸다. exit에는 종료 코드 또는 신호를 적는다.
+ * Ctrl+C 전달: P/Invoke 도우미가 FreeConsole → AttachConsole(pid) → SetConsoleCtrlHandler(null, true)
+ * (도우미 자신은 무시) → GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)을 호출한다. -EncodedCommand(UTF-16LE
+ * base64)로 넘겨 사용자 문자열이 명령줄에 나오지 않게 한다. 붙기에 실패하면 stdout에 이유를 남긴다.
  */
-async function f_ProbeKillOnTransfer(name, args) {
+async function f_KillCtrlC(pid) {
+    const script = [
+        "$src = @'",
+        "using System;",
+        "using System.Runtime.InteropServices;",
+        "public static class CtrlHelper {",
+        '    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool FreeConsole();',
+        '    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool AttachConsole(uint dwProcessId);',
+        '    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);',
+        '    [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);',
+        "}",
+        "'@",
+        "Add-Type -TypeDefinition $src",
+        "[CtrlHelper]::FreeConsole() | Out-Null",
+        `if (-not [CtrlHelper]::AttachConsole(${pid})) { Write-Output "attach-failed:AttachConsole"; exit 1 }`,
+        "[CtrlHelper]::SetConsoleCtrlHandler([IntPtr]::Zero, $true) | Out-Null",
+        'if (-not [CtrlHelper]::GenerateConsoleCtrlEvent(0, 0)) { Write-Output "attach-failed:GenerateConsoleCtrlEvent"; exit 1 }',
+        "Start-Sleep -Milliseconds 500",
+        "exit 0",
+    ].join("\r\n");
+    const encoded = Buffer.from(script, "utf16le").toString("base64");
+    const r = await f_ExecFile(POWERSHELL_EXE, [
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        encoded,
+    ]);
+    const out = r.stdout.trim();
+    if (out.includes("attach-failed:")) return f_KillFail(out);
+    return r.error ? f_KillFail(`ctrl-c: ${r.error.message}`) : { ok: true };
+}
+
+/**
+ * 실행 중 취소 실험: rclone을 띄우고 stats 줄의 bytes가 0보다 커지면(전송 시작) killer로 끝낸다.
+ * killer는 pid를 받아 { ok, reason? }를 돌려준다(기본: taskkill /PID <pid> /T /F, 앱과 같은 방식).
+ * killer가 실패하면 taskkill /T /F로 정리하고 fixture를 저장하지 않는다.
+ */
+async function f_ProbeKillOnTransfer(name, args, killer = f_KillTaskkillTree) {
     const child = spawn(rclone, args, { shell: false, windowsHide: true });
     let stdout = "";
     let stderr = "";
-    let killed = false;
+    let killing = null;
+    let skipReason = null;
+    let fallbackTimer = null;
+    const f_Taskkill = () =>
+        new Promise((done) => {
+            execFile(
+                TASKKILL_EXE,
+                ["/PID", String(child.pid), "/T", "/F"],
+                { shell: false, windowsHide: true, timeout: 15_000 },
+                () => done(),
+            );
+        });
     const f_Kill = () => {
-        if (killed) return;
-        killed = true;
-        const root = process.env.SystemRoot ?? "C:\\Windows";
-        execFile(
-            `${root}\\System32\\taskkill.exe`,
-            ["/PID", String(child.pid), "/T", "/F"],
-            { shell: false, windowsHide: true },
-            () => undefined,
-        );
+        if (killing) return;
+        killing = (async () => {
+            const r = await killer(child.pid);
+            if (!r.ok) {
+                skipReason = r.reason ?? "killer 실패";
+                await f_Taskkill();
+                return;
+            }
+            // 신호가 전달되지 않아 프로세스가 남으면 정리한다
+            fallbackTimer = setTimeout(() => void f_Taskkill(), 10_000);
+        })();
     };
     child.stdout.setEncoding("utf8").on("data", (d) => (stdout += d));
     child.stderr.setEncoding("utf8").on("data", (d) => {
@@ -165,6 +281,12 @@ async function f_ProbeKillOnTransfer(name, args) {
     const timer = setTimeout(f_Kill, 60_000); // 전송이 시작되지 않아도 끝낸다
     const [code, signal] = await new Promise((r) => child.once("exit", (c, sg) => r([c, sg])));
     clearTimeout(timer);
+    if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+    if (killing) await killing;
+    if (skipReason !== null) {
+        console.log(`[${name}] 건너뜀: ${skipReason}`);
+        return;
+    }
     f_Save(name, stdout, stderr, code ?? signal);
     console.log(`[${name}] exit=${code ?? signal}  rclone ${f_Sanitize(args.join(" "))}`);
 }
@@ -401,6 +523,32 @@ try {
             g,
         );
         console.log(`  대상 파일(다시 복사 뒤): ${f_ListFiles(largeDst).join(", ") || "(없음)"}`);
+    }
+
+    // INT-005 T-01: 외부 종료 방식별 rclone 종료 코드 실측(--only=kill일 때만 실행)
+    // 16 MiB 파일을 4 MiB/s로 복사하다 첫 stats(bytes > 0)에서 방식별로 끝낸다. 방식마다 임시 폴더를 새로 만든다.
+    if (only?.has("kill")) {
+        const killMethods = [
+            ["kill-taskkill-f", f_KillTaskkillF],
+            ["kill-taskkill-tf", f_KillTaskkillTree],
+            ["kill-stop-process", f_KillStopProcess],
+            ["kill-dotnet-kill", f_KillDotnet],
+            ["kill-cim-terminate", f_KillCimTerminate],
+            ["kill-ctrl-c", f_KillCtrlC],
+        ];
+        for (const [name, killer] of killMethods) {
+            const kSrc = join(work, `${name}-src`);
+            const kDst = join(work, `${name}-dst`);
+            mkdirSync(kSrc, { recursive: true });
+            mkdirSync(kDst, { recursive: true });
+            writeFileSync(join(kSrc, "big.bin"), Buffer.alloc(16 * 1024 * 1024, 7));
+            await f_ProbeKillOnTransfer(
+                name,
+                ["copy", ask, ...common, ...tx, ...mw, "--bwlimit", "4M", ...log, "--", kSrc, kDst],
+                killer,
+            );
+            await new Promise((r) => setTimeout(r, 500)); // 다음 방식 전에 파일 핸들 정리 대기
+        }
     }
 
     // INT-002 Phase 2: --exclude-from 파일 해석(주석·이스케이프·BOM·CRLF·공백·빈 줄)과 인자 방식 비교

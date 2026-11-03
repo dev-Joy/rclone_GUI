@@ -338,3 +338,32 @@ probe `filter` 묶음(`node scripts/probes/rclone-probes.mjs rclone --only=filte
 - 명령: `config redacted it-sftp --ask-password=false` (fixture `config-redacted`)
 - 결과: `type = sftp`만 보이고 `host`·`user`·`pass`는 `XXX`. 끝에 `### Double check the config for sensitive info before posting publicly`.
 - 영향: INT-006 FR-17. `Sensitive`(host·user)까지 가려지므로 수정 화면에서 채워지는 값은 비밀이 아닌 옵션뿐이다. providers 정의로 `XXX`를 한 번 더 걸러 `secretsSet`으로만 알린다.
+
+## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-005 T-01: 외부 종료 실측)
+
+`scripts/probes/rclone-probes.mjs --only=kill`로 임시 폴더에서 16 MiB 파일을 `--bwlimit 4M`로 복사하다 첫 stats(bytes > 0)에서 방식별로 끝냈다(fixture `kill-*`). 실행 파일은 `%SystemRoot%\System32` 절대 경로, 인자에는 숫자 pid만 넣었다.
+
+### 58. `taskkill /F`와 `/T /F`는 exit 1이다 — rclone 자체 오류와 구분할 수 없다
+- 명령: `taskkill /PID <pid> /F`(fixture `kill-taskkill-f`), `taskkill /PID <pid> /T /F`(fixture `kill-taskkill-tf`, 앱 `killProcessTree`와 같음)
+- 결과: 둘 다 exit 1. stderr에 `Signal received:`·오류 줄·Go 충돌 표지가 없다. 앱 중지(`copy-cancel-large`)와 같은 값이다.
+- 영향: exit 1만으로는 `taskkill`·작업 관리자 종료를 rclone 사용법 오류(exit 1)와 구분할 수 없다. 외부 종료 집합에 넣지 않는다(INT-005 R-1).
+
+### 59. `Stop-Process -Force`·.NET `Process.Kill()`은 exit 4294967295(int32 -1)다
+- 명령: `powershell.exe -NoProfile -NonInteractive -Command "Stop-Process -Id <pid> -Force"`(fixture `kill-stop-process`), `-Command "[System.Diagnostics.Process]::GetProcessById(<pid>).Kill()"`(fixture `kill-dotnet-kill`)
+- 결과: 둘 다 Node `exit` 이벤트의 종료 코드가 `4294967295`(부호 없는 DWORD 0xFFFFFFFF)다. stderr에 신호 표지·오류 줄이 없다. INT-005 발단이 된 29분 실행의 값과 같다.
+- 영향: 외부 종료 집합을 int32 `-1` 하나로 확정한다. Node 종료 코드는 부호 없는 값이므로 앱에서 int32로 정규화해 표기·저장해야 한다(INT-005 FR-1·FR-10).
+
+### 60. CIM `Win32_Process.Terminate`(Reason 생략)는 exit 0이다 — 정상 종료와 구분할 수 없다
+- 명령: `Invoke-CimMethod -InputObject (Get-CimInstance -ClassName Win32_Process -Filter 'ProcessId = <pid>') -MethodName Terminate`(fixture `kill-cim-terminate`). `Terminate`의 유일한 인자는 `Reason`이라 `-Arguments @{ ProcessId = … }`는 잘못된 매개 변수 오류가 난다.
+- 결과: exit 0. stderr에 신호 표지·오류 줄이 없고 로그가 중간에 끊긴다.
+- 영향: WMI/CIM로 끝내면 앱은 성공(또는 일부 실패)으로 본다. exit 0은 정상 완료와 구분할 수 없어 외부 종료로 분류하지 않는다(INT-005 R-1). 사용자가 보는 문구로는 알 수 없으므로 문서 한계로 남긴다.
+
+### 61. Ctrl+C는 exit 1 + `Signal received: interrupt` 로그로 끝난다 (0xC000013A 아님)
+- 명령: P/Invoke 도우미를 `-EncodedCommand`(UTF-16LE base64)로 실행해 `FreeConsole` → `AttachConsole(<pid>)` → `SetConsoleCtrlHandler(null, true)` → `GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)`(fixture `kill-ctrl-c`)
+- 결과: exit 1. stderr JSON 로그에 `{"level":"info","msg":"Signal received: interrupt","source":"atexit/atexit.go:51"}`, 이어서 `Removing failed copy`(`big.bin.<8hex>.partial`), `Exiting...`(`atexit/atexit.go:53`)가 남는다. `0xC000013A`(STATUS_CONTROL_C_EXIT)는 나오지 않았다.
+- 영향: rclone이 Ctrl+C를 직접 처리하므로(exitcode 1) 종료 코드만으로는 외부 종료를 알 수 없지만, `Signal received:` 로그로 구분할 수 있다(INT-005 FR-3a·AC-17). `0xC000013A`는 외부 종료 집합에서 뺀다(FR-4a).
+
+### 62. 외부 종료 집합 확정: -1. exit 1·0은 구분 불가, Go 충돌은 exit 2(소스 근거)
+- 명령: 위 58~61의 결과 정리
+- 결과: 외부 종료로 볼 코드는 `-1`(0xFFFFFFFF) 하나다. `taskkill`(1)은 rclone 자체 오류와, CIM `Terminate`(0)는 정상 완료와 구분할 수 없다. Go 런타임은 panic·`fatal error`(메모리 부족 포함)·Go가 잡은 Windows 예외를 exit 2로 끝내며(rclone 소스 `lib/atexit`의 `exitcode` 처리와 Go 런타임 동작), 이는 rclone 사용법 오류(2)와 같아 코드로 구분할 수 없다.
+- 영향: 충돌은 종료 코드가 아니라 stderr의 Go 충돌 표지(`panic: `·`fatal error: `·`Exception 0x` 줄 시작, JSON 로그가 아닌 줄)로 판정한다(INT-005 FR-4·FR-5). exit 2 + 표지 없음은 일반 실패로 둔다.
