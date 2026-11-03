@@ -114,7 +114,7 @@
 ### 18. `--exclude-from` 파일의 `#`·`;` 줄은 주석, `\#`는 이스케이프, 빈 줄은 무시, 줄 앞뒤 공백은 지운다
 - 명령: 임시 폴더(`#a`, `;a`, `a`, ` b `, `c`, `한글.txt`, `{p,q}`, `x/y`)에 `lsjson --recursive --files-only --no-mimetype --ask-password=false --config <conf> --exclude-from <파일> -- <폴더>` (fixture `excl-comment-file`·`excl-comment-arg`·`excl-escape-file`·`excl-blank-lines`·`excl-spaces`)
 - 결과: 파일 내용 `#a\n;a\n` → 아무것도 빠지지 않음(둘 다 주석). 같은 패턴을 인자 `--exclude "#a" --exclude ";a"`로 주면 두 파일이 빠진다. 파일의 `\#a`는 `#a`를 뺀다. 빈 줄은 무시된다. 파일 줄 `  a  `는 `a`를 뺀다(줄 앞뒤 공백을 지움). 모두 exit 0.
-- 영향: 라이브러리 패턴은 `#`·`;` 시작과 앞뒤 공백을 막는다(DB CHECK + zod). 작업 전용 패턴 중 `#`·`;`로 시작하거나 앞뒤 공백이 있는 것은 파일을 쓸 때도 항상 `--exclude` 인자로 넘긴다(`isFileSafePattern`). 파일에는 빈 줄을 쓰지 않는다.
+- 영향: 라이브러리 패턴은 `#`·`;` 시작과 앞뒤 공백을 막는다(DB CHECK + zod). **INT-007부터는 작업 전용 패턴도 모두 `--filter-from` 파일의 `- <패턴>` 줄로 넘기므로 이 제한에 걸리는 패턴을 인자로 따로 보내지 않는다**(#47·#55). 공용 라이브러리의 `#`·`;` 시작 금지는 유지하되 문구에서 "주석으로 읽힘"을 뺐다.
 
 ### 19. BOM이 있으면 첫 패턴이 깨진다, CRLF는 문제없다
 - 명령: 같은 폴더에 `--exclude-from`으로 `﻿a\nc\n`(fixture `excl-bom`)과 `a\r\nc\r\n`(fixture `excl-crlf`)
@@ -124,7 +124,7 @@
 ### 20. `--exclude`와 `--exclude-from`은 합쳐 적용되고, 200개 패턴은 인자와 파일 결과가 같다
 - 명령: `--exclude a --exclude-from <c만 든 파일>`(fixture `excl-arg-and-file`). 301개 파일 폴더에 패턴 200개(파일 이름 196개, `d3/**`, `*.tmp`, `{n290,n291}.dat`, `/n299.dat`)를 인자 200개(약 3,800자)와 파일 1개로 각각 `lsjson`(`excl-many-args-lsjson`·`excl-many-file-lsjson`)·`sync --dry-run`(`excl-many-args-sync`·`excl-many-file-sync`)
 - 결과: `a`·`c` 모두 빠진다(합집합). 200개는 lsjson 남은 항목 96개, sync dry-run 건너뛴 동작 103건이 두 방식에서 완전히 같다.
-- 영향: 패턴이 많으면(64개 초과 또는 인자 길이 약 8,000자 초과) 파일에 넣을 수 있는 패턴은 `--exclude-from` 파일로, 나머지는 인자로 함께 넘긴다. 비교와 실행이 같은 방식을 쓰도록 방식은 패턴만으로 정한다.
+- 영향: 패턴이 많으면(64개 초과 또는 인자 길이 약 8,000자 초과) 파일에 넣을 수 있는 패턴은 `--exclude-from` 파일로, 나머지는 인자로 함께 넘긴다. 비교와 실행이 같은 방식을 쓰도록 방식은 패턴만으로 정한다. **INT-007부터는 패턴이 하나라도 있으면 늘 `--filter-from` 파일 하나로 넘긴다**(#47·#48). 이 실측은 두 방식의 결과가 같다는 근거로 남긴다.
 
 ### 21. 없는 `--exclude-from` 파일은 exit 1로 실패한다
 - 명령: `lsjson ... --exclude-from <없는 파일> -- <폴더>` (fixture `excl-missing-file`)
@@ -298,6 +298,21 @@ probe `filter` 묶음(`node scripts/probes/rclone-probes.mjs rclone --only=filte
 - 명령: `--exclude a --filter-from <파일(- c)>` (fixture `filter-from-and-exclude-arg`)
 - 결과: `a`·`c` 모두 빠졌다. exit 0.
 - 영향: 전환 중이나 인자로 남는 패턴이 있어도 두 방식을 함께 쓸 수 있다(#20과 같음).
+
+### 55. `--filter-from` 파일 줄 끝의 공백 문자는 지워지고, `[<문자>]`로 쓰면 남는다
+- 명령: 파일 `- a<c>`·`- b[<c>]`(fixture `filter-space-file-dump`), 인자 `--exclude a<c>`(fixture `filter-space-arg-dump`). `<c>` = 공백, U+0009, U+000B, U+00A0, U+2003, U+202F, U+2028, U+3000, U+0085(NEL), U+FEFF
+- 결과: 파일에서 `<c>`가 공백·U+0009·U+000B·U+00A0·U+2003·U+202F·U+2028·U+3000·U+0085이면 `- a<c>`는 `(^|/)a$`로 지워지고 `- b[<c>]`는 `(^|/)b[<c>]$`로 남는다. U+FEFF는 지워지지 않아 `(^|/)a﻿$`다. 인자는 같은 인자를 여러 번 주면 첫 값만 뒤 공백이 남는 등 일관성이 없다(예: `--exclude trail ` 하나면 지워지고, `--exclude trail ` + `--exclude a `이면 `trail `는 남고 `a `는 지워짐). exit 0.
+- 영향: INT-007 FR-3. 앱은 패턴 끝의 공백 문자를 모두 `[<문자>]`로 바꾼다(집합은 Go `unicode.IsSpace`와 같게 명시, U+FEFF 제외). 인자 방식은 쓰지 않는다.
+
+### 56. `--filter-from`의 역슬래시·공백만 패턴·빈 파일·빈 줄 해석
+- 명령: 파일 `- a\ `·`- b\\ `·`- c\\[ ]`·`- [ ][ ]`(fixture `filter-backslash-space-dump`), 인자 `--exclude "  "`(fixture `filter-space-only-arg-dump`)·`--exclude ""`(fixture `filter-empty-arg-dump`), 빈 필터 파일(fixture `filter-empty-file`), `- ` 한 줄(fixture `filter-malformed-empty-line`)
+- 결과: `- a\ ` → `(^|/)a\$`(공백이 지워지고 남은 `\`가 `$`를 이스케이프), `- b\\ ` → `(^|/)b\\$`, `- c\\[ ]` → `(^|/)c\\[ ]$`, `- [ ][ ]` → `(^|/)[ ][ ]$`. 인자 `"  "` → `(^|/)  $`(지워지지 않음), `""` → 규칙 없음. 빈 필터 파일은 규칙 0개·exit 0(넘기지 않은 것과 같음). `- ` 한 줄은 exit 1 `malformed rule "-"`.
+- 영향: INT-007 FR-3·AC-3. 끝 공백 직전 역슬래시가 홀수면 하나 지우고 `[ ]`로 바꾼다. 패턴이 없으면 파일을 만들지 않는다(FR-2).
+
+### 57. rclone 1.65.0에서도 `--filter-from` 파일 해석이 같다 (T-05)
+- 명령: 1.75.1과 같은 probe `filter` 묶음을 rclone v1.65.0(windows-amd64, 공식 zip)으로 실행. fixture는 저장소를 덮어쓰지 않도록 저장소 밖 임시 폴더의 같은 구조에 썼다.
+- 결과: F1~F8의 파일 해석(`- ` 접두사, 끝 공백·`[c]`·U+FEFF, 역슬래시, CRLF, BOM·접두사 없는 줄)이 1.75.1과 같다. exit 코드도 같다. 차이는 두 가지다 — (1) `--exclude ""`는 1.75.1에서 규칙 0개, 1.65.0에서 `(^|/)$`(모든 항목) 규칙 1개. 앱은 빈 패턴을 저장하지 않으므로(`min(1)`) 해당 없음. (2) 잘못된 줄의 오류 문구가 `Failed to load filters: malformed rule "..."`(1.65.0)와 `CRITICAL: Failed to initialise global options: failed to reload "filter" options: malformed rule "..."`(1.75.1)로 다르다. 둘 다 exit 1이고 앱은 실행 전에 실패한다.
+- 영향: INT-007 T-05 완료. 최소 버전 1.65.0을 올리지 않아도 된다. 앱이 만드는 줄은 빈 패턴·잘못된 접두사가 없어 두 버전에서 같은 규칙이 된다.
 
 ## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-006 T-01: remote 설정 쓰기 실측)
 
