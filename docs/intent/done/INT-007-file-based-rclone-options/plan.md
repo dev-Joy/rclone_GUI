@@ -73,12 +73,26 @@
 
 AGENTS.md 6장과 Tier 3 기준.
 
-- [ ] `pnpm run check`(typecheck·oxlint·eslint·단위) 통과 — Phase마다
-- [ ] `pnpm run format:check` 통과 — Phase마다
-- [ ] `pnpm run test:int` 통과(rclone 1.75.1) — Phase 3 이후
-- [ ] `pnpm run test:e2e` 통과·콘솔 오류 0, `pnpm run build:win` 성공 — Phase 4
-- [ ] AC-1~AC-13 충족 표를 Phase 4 보고에 남긴다
-- [ ] `docs/CHANGELOG.md` 한 줄, `rclone-notes.md` 기록, `docs/works/` 기록
+- [x] `pnpm run check`(typecheck·oxlint·eslint·단위) 통과 — Phase마다
+- [x] `pnpm run format:check` 통과 — Phase마다
+- [x] `pnpm run test:int` 통과(rclone 1.75.1) — Phase 3 이후
+- [x] `pnpm run test:e2e` 통과·콘솔 오류 0, `pnpm run build:win` 성공 — Phase 4
+- [x] AC-1~AC-13 충족 표를 Phase 4 보고에 남긴다
+- [x] `docs/CHANGELOG.md` 한 줄, `rclone-notes.md` 기록, `docs/works/` 기록
+
+### 검증 결과 (2026-11-03)
+
+| AC | 검증 | 결과 |
+| :--- | :--- | :--- |
+| AC-1·AC-3·AC-3b·AC-6 | `tests/unit/exclude-patterns.test.ts` | 통과 |
+| AC-2·AC-5 | `tests/unit/command-builder.test.ts` | 통과 |
+| AC-4·AC-7 | `tests/unit/effective-excludes.test.ts` | 통과 |
+| AC-8·AC-9·AC-10 | `tests/integration/excludes-file.test.ts` (rclone 1.75.1) | 통과 |
+| AC-11 | `tests/unit/exclude-patterns.test.ts` (길이 예산 없음) | 통과 |
+| AC-12 | `tests/integration/run.gates.test.ts` (PLAN_STALE) | 통과 |
+| AC-13 | `pnpm run test:e2e`(15, 콘솔 오류 0)·`pnpm run build:win` | 통과 |
+
+명령: `pnpm run check`(단위 76파일 1,289)·`format:check`·`test:int` 77(+19 skip)·`test:e2e` 15·`build:win`.
 
 ## 5. 리스크 · 파급
 

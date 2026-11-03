@@ -1,7 +1,7 @@
 ---
 id: INT-007
 title: 제외 패턴을 --filter-from 파일로 전달해 명령줄 전용 패턴 제한과 뒤 공백 버그 해소
-status: planned
+status: done
 priority: P2
 created: 2026-11-03
 updated: 2026-11-03
@@ -49,11 +49,11 @@ updated: 2026-11-03
 - [x] MVP_SPEC "설정 파일" 기준 — "작업 옵션은 앱 DB에 저장하고, rclone에는 실행마다 만든 필터 파일과 최소 인자로 넘긴다. rclone에는 작업 설정 파일 기능이 없다"로 다시 쓴다(T-04)
 - [x] 파일 내용 로그·보관 — 남기지 않는다(패턴 수와 해시만)
 - [x] 패턴이 없을 때도 빈 필터 파일을 넘길지 — 넘기지 않는다. 빈 필터 파일은 규칙 0개·exit 0이라 넘기지 않은 것과 같다(spec §6.3·§10 Q-1)
-- [ ] 최소 버전 1.65.0에서 #47~#49와 spec §6.3 F7·F8이 같은지 — T-05
+- [x] 최소 버전 1.65.0에서 #47~#49와 spec §6.3 F7·F8이 같은지 — T-05(notes #57, 차이는 빈 패턴 인자와 오류 문구뿐)
 
 ## 작업 (Tasks)
 - [x] T-01 [P2] probe: 인자 파일, `--filter-from`의 `- ` 접두사·뒤 공백·`[ ]`·BOM·CRLF·접두사 없는 줄·인자와 합치기 (probe `filter` 묶음, fixture `filter-*`·`argfile-at`, rclone-notes #46~#50, v1.75.1)
-- [ ] T-02 [P2] 필터 파일 빌더: 모든 패턴을 `- <패턴>` 줄로(끝 공백 문자 → `[<문자>]`, 집합은 rclone이 지우는 Go `unicode.IsSpace`와 같게 — U+0085 포함, spec FR-3), 패턴이 있으면 늘 파일, `--exclude-from` → `--filter-from`, `+`·`!` 줄 금지, `snapshotHash` 버전 올림(계획 토큰 버전 `4` 유지). 단위 테스트(`#`·`;`·`!`·앞뒤 공백·`[`·유니코드 공백이 든 패턴)
-- [ ] T-03 [P2] 비교·미리보기·사전 확인·실제 전송·자동/OS 예약·폴더 탐색을 새 빌더로 전환, 게이트 불변 확인. 통합 테스트(뒤 공백 패턴이 실제로 그 이름만 빼는지 포함)
-- [ ] T-04 [P2] 제한 정리(`EXCLUDE_ARG_ONLY_BUDGET`·`EXCLUDE_FILE_MIN_*`·`isFileSafePattern` 제거, 저장 오류 문구), MVP_SPEC·rclone-notes #18·#20 영향·CHANGELOG 갱신, E2E
-- [ ] T-05 [P3] rclone 1.65.0에서 probe `filter` 묶음 재실행, 다르면 notes 기록과 대응
+- [x] T-02 [P2] 필터 파일 빌더: 모든 패턴을 `- <패턴>` 줄로(끝 공백 문자 → `[<문자>]`, 집합은 rclone이 지우는 Go `unicode.IsSpace`와 같게 — U+0085 포함, spec FR-3), 패턴이 있으면 늘 파일, `--exclude-from` → `--filter-from`, `+`·`!` 줄 금지, `snapshotHash` 버전 올림(계획 토큰 버전 `4` 유지). 단위 테스트(`#`·`;`·`!`·앞뒤 공백·`[`·유니코드 공백이 든 패턴)
+- [x] T-03 [P2] 비교·미리보기·사전 확인·실제 전송·자동/OS 예약·폴더 탐색을 새 빌더로 전환, 게이트 불변 확인. 통합 테스트(뒤 공백 패턴이 실제로 그 이름만 빼는지 포함)
+- [x] T-04 [P2] 제한 정리(`EXCLUDE_ARG_ONLY_BUDGET`·`EXCLUDE_FILE_MIN_*`·`isFileSafePattern` 제거, 저장 오류 문구), MVP_SPEC·rclone-notes #18·#20 영향·CHANGELOG 갱신, E2E
+- [x] T-05 [P3] rclone 1.65.0에서 probe `filter` 묶음 재실행, 다르면 notes 기록과 대응

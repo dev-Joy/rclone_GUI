@@ -261,3 +261,13 @@
 - 테스트: 단위 76파일 1,274(providers/redacted/rc 응답 파서, 이름, 비밀 가림, 서비스 인자·본문·삭제 순서, OAuth 질문·자동 답·취소·재인증, job-context), 통합 75(+19 skip: 임시 conf local/memory/alias/sftp·rcd 401/허용 경로/종료·예약 끄기), E2E 15(설정에서 추가·수정·삭제, 콘솔 오류 0)
 - 검증: `pnpm run check`, `format:check`, `test:int`, `test:e2e`, `build:win` 통과
 - 남은 것: OAuth 실제 계정 로그인 수동 확인(S1-2, 사람이 로그인), INT-006 done 이동
+
+[TASK_028] : (2026-11-03) INT-007 제외 패턴을 --filter-from 파일로 전달 (관련 Intent: INT-007, T-02~T-05)
+- 빌더: `src/shared/exclude-patterns.ts`에 `toFilterExcludeLine`(모든 줄 `- <패턴>`, 끝 공백 문자를 `[<문자>]`, 끝 공백 직전 연속 역슬래시가 홀수면 하나 제거, Go `unicode.IsSpace` 집합·U+FEFF 제외)·`buildFilterFileContent`(패턴 0개면 null) 추가. `itfExcludeTransport`·`isFileSafePattern`·`planExcludeTransport`·`f_ArgChars`·`ARG_OVERHEAD` 삭제, `excludesSaveIssue`는 합계 500개만, 공용 `#`·`;` 문구를 "공용 패턴은 #·;로 시작할 수 없습니다. 이 작업 전용 패턴으로 쓰세요."로 수정
+- 전달: `itfEffectiveExcludes { patterns, fileContent, snapshotHash }`·`HASH_VERSION=2`, 제어문자(`\u0000-\u001f\u007f`) 패턴은 `VALIDATION`, `itfExcludeArgs { filterFile }`와 `f_PushCommon`의 `--filter-from F` 하나(`--exclude`·`--exclude-from`·`--include*`·`--filter` 없음). `compare-service`·`run-service`의 파일 생성·수명주기는 그대로 두고 인자만 바꿈, 로그 가림은 `--filter-from`/`--exclude-from` 둘 다 `<제외 파일>`
+- 정리: `EXCLUDE_ARG_ONLY_BUDGET`·`EXCLUDE_FILE_MIN_COUNT`·`EXCLUDE_FILE_MIN_CHARS` 삭제, 주석·JSDoc(빌더·effective-excludes·exclude-file·compare/run·job-context·plan-token·compare 타입·index) 갱신
+- 테스트: 단위 exclude-patterns(AC-1·3·3b·6·11)·effective-excludes(파일 내용·해시 v1≠v2·VALIDATION·U+0085)·command-builder(AC-2·5, `--filter-from` 1회·위치)·compare-service(두 lsjson 같은 파일·끝나면 삭제)·run-service(사전 확인·실제 실행 같은 파일, 로그에 패턴 없음). 파일 쓰기 `await`가 늘어 기존 run-service 테스트의 프로세스 시작 가정을 `f_WaitProcs`로 보정. 통합 excludes-file(200개 동일성·특수 패턴 AC-8·끝 공백 dump AC-10), rclone-core는 임시 필터 파일 사용. E2E 공용 패턴 문구 갱신
+- probe: `filter` 묶음에 F7(끝 공백 10종·`[c]`·U+FEFF, 파일·인자)·F8(역슬래시·공백만·빈 패턴·빈 파일·`- ` 오류) 추가, fixture `filter-*` 21개. rclone 1.65.0으로 같은 묶음을 저장소 밖 임시 구조에서 실행해 파일 해석·exit가 같음을 확인(차이는 `--exclude ""`의 catch-all 규칙과 오류 문구) → rclone-notes #55~#57, #18·#20 "영향" 갱신
+- 문서: MVP_SPEC(제외 패턴 표·§7.2 lsjson·§8.1 매핑·미사용 목록), README(공용 패턴·임시 파일), CHANGELOG 1줄, intent T-02~T-05 완료·done 이동·INDEX 재작성, spec §6.3 F7 재측정 반영, plan DoD 체크
+- 검증: `pnpm run check`(단위 76파일 1,289), `format:check`, `test:int` 77(+19 skip), `test:e2e` 15(콘솔 오류 0), `build:win` 통과
+- 참고: 인자 `--exclude`는 같은 값을 여러 번 주면 첫 값만 뒤 공백이 남는 등 일관성이 없어(1.75.1 재측정) 파일 방식만 쓰는 근거가 됐다. 1.65.0의 빈 패턴 차이는 앱이 `min(1)`로 빈 패턴을 저장하지 않아 해당 없음

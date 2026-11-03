@@ -1,6 +1,6 @@
 # Spec: 제외 패턴을 --filter-from 파일로 전달해 명령줄 전용 패턴 제한과 뒤 공백 버그 해소
 
-- Intent: [INT-007](intent.md) | Status: planned | 작성일: 2026-11-03
+- Intent: [INT-007](intent.md) | Status: done | 작성일: 2026-11-03
 
 > 이 spec은 intent를 구현할 수 있는 수준으로 풀어 쓴 문서다. 내용이 서로 다르면 intent가 우선한다.
 > 심볼과 경로는 커밋 `d457138` 기준이다(작업 트리의 INT-006 미커밋 변경은 이 범위와 겹치지 않는다). rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #18~#21, #46~#50, 그리고 §6.3의 2026-11-03 사전 실측(v1.75.1).
@@ -121,7 +121,7 @@ export interface itfExcludeArgs {
 | U+0085 (NEL) | 지워짐 | 남음 |
 | U+FEFF | 남음 → `(^|/)a\ufeff$` | 남음 |
 
-- 지우는 집합은 Go `unicode.IsSpace`와 맞는다(FR-3). 파일과 인자 결과가 같다.
+- 지우는 집합은 Go `unicode.IsSpace`와 맞는다(FR-3). 파일이 기준이며, 인자는 같은 값을 여러 번 주면 첫 값만 뒤 공백이 남는 등 일관성이 없어 쓰지 않는다(2026-11-03 F7 재측정).
 - U+2028은 줄을 나누지 않는다(`b[\u2028]`가 규칙 하나로 남음).
 
 **F8 역슬래시·특수 경우**
