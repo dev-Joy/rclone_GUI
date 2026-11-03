@@ -19,3 +19,9 @@ export function fixtureLines(name: string): string[] {
         .split(/\r?\n/)
         .filter((l) => l.trim() !== "");
 }
+
+/** `<name>.exit.txt`를 정수로 읽는다. 정수가 아니면(신호 이름 등) null */
+export function readFixtureExitCode(name: string): number | null {
+    const text = readFixture(name, "exit").trim();
+    return /^-?\d+$/.test(text) ? Number(text) : null;
+}

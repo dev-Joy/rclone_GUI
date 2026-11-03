@@ -11,7 +11,7 @@ import {
 } from "@/main/parsers/run-output";
 import { checkPreflight } from "@/shared/run-plan";
 import type { typRunPlan } from "@/shared/schemas/run";
-import { fixtureLines, readFixture } from "./fixtures";
+import { fixtureLines, readFixture, readFixtureExitCode } from "./fixtures";
 
 function f_Collect(name: string, limit?: number) {
     const c = createDryRunCollector(limit);
@@ -145,7 +145,14 @@ describe("실제 실행 fixture의 stats", () => {
         expect(stats).toMatchObject({ transfers: 3, bytes: 24, errors: 0 });
         expect(readFixture("copy-real", "exit").trim()).toBe("0");
         expect(
-            decideRunOutcome({ canceled: false, exitCode: 0, stats, errorLines: [], hint: null }),
+            decideRunOutcome({
+                canceled: false,
+                exitCode: 0,
+                stats,
+                errorLines: [],
+                hint: null,
+                stderrTail: "",
+            }),
         ).toEqual({ status: "success", error: null });
     });
 
@@ -170,6 +177,7 @@ describe("실제 실행 fixture의 stats", () => {
             stats: f_LastStats("sync-maxdelete0"),
             errorLines: errorLines.slice(-5),
             hint: null,
+            stderrTail: readFixture("sync-maxdelete0", "stderr"),
         });
         expect(o.status).toBe("failed");
         expect(o.error?.code).toBe("MAX_DELETE_EXCEEDED");
@@ -184,6 +192,7 @@ describe("decideRunOutcome", () => {
         stats: null,
         errorLines: [],
         hint: null,
+        stderrTail: "",
     };
     const stats = normalizeStats({ errors: 2 })!;
 
@@ -218,6 +227,175 @@ describe("decideRunOutcome", () => {
         expect(decideRunOutcome({ ...base, exitCode: null }).error?.message).toContain(
             "알 수 없음",
         );
+    });
+});
+
+describe("decideRunOutcome 외부 종료·충돌 (INT-005)", () => {
+    const base: itfRunOutcomeInput = {
+        canceled: false,
+        exitCode: 0,
+        stats: null,
+        errorLines: [],
+        hint: null,
+        stderrTail: "",
+    };
+
+    it("AC-3: exit 4294967295·오류 줄 없음 → RCLONE_KILLED, 표기는 -1 (0xFFFFFFFF)", () => {
+        const o = decideRunOutcome({ ...base, exitCode: 4294967295 });
+        expect(o.status).toBe("failed");
+        expect(o.error?.code).toBe("RCLONE_KILLED");
+        expect(o.error?.message).toContain("-1 (0xFFFFFFFF)");
+        expect(o.error?.message).toContain("오류 기록 없음");
+        expect(o.error?.message).not.toContain("4294967295");
+        expect(o.error?.detail).toBeUndefined();
+    });
+
+    it("AC-4: 외부 종료 코드 + 오류 줄 → RCLONE_FAILED, 표기는 -1 (0xFFFFFFFF)", () => {
+        const o = decideRunOutcome({ ...base, exitCode: 4294967295, errorLines: ["boom"] });
+        expect(o.status).toBe("failed");
+        expect(o.error?.code).toBe("RCLONE_FAILED");
+        expect(o.error?.message).toContain("-1 (0xFFFFFFFF)");
+        expect(o.error?.detail).toBe("boom");
+    });
+
+    it("AC-5: exit 0xC0000005 → RCLONE_CRASHED, STATUS_ACCESS_VIOLATION", () => {
+        const o = decideRunOutcome({ ...base, exitCode: 3221225477 });
+        expect(o.status).toBe("failed");
+        expect(o.error?.code).toBe("RCLONE_CRASHED");
+        expect(o.error?.message).toContain("STATUS_ACCESS_VIOLATION");
+        expect(o.error?.message).toContain("rclone이 비정상 종료했습니다");
+    });
+
+    it("AC-6: exit -1·오류 줄 없음이어도 stderr에 panic 줄이 있으면 RCLONE_CRASHED", () => {
+        const o = decideRunOutcome({
+            ...base,
+            exitCode: -1,
+            stderrTail: "panic: runtime error: invalid memory address\n\ngoroutine 1 [running]:\n",
+        });
+        expect(o.error?.code).toBe("RCLONE_CRASHED");
+        expect(o.error?.message).toContain("-1 (0xFFFFFFFF)");
+    });
+
+    it("AC-7: 취소가 최우선, 표지 없는 exit 1은 RCLONE_FAILED(exit 1), 3·7·0은 기존 결과", () => {
+        expect(decideRunOutcome({ ...base, canceled: true, exitCode: 1 }).error?.code).toBe(
+            "CANCELED",
+        );
+        const failed = decideRunOutcome({
+            ...base,
+            exitCode: 1,
+            stderrTail: '{"level":"info","msg":"Copied (new)"}',
+        });
+        expect(failed.error?.code).toBe("RCLONE_FAILED");
+        expect(failed.error?.message).toContain("exit 1");
+        expect(decideRunOutcome({ ...base, exitCode: 3 }).error?.code).toBe("PATH_NOT_FOUND");
+        expect(decideRunOutcome({ ...base, exitCode: 7 }).error?.code).toBe("MAX_DELETE_EXCEEDED");
+        expect(decideRunOutcome({ ...base, exitCode: 0 }).status).toBe("success");
+    });
+
+    it("AC-8: T-01 fixture 방식별 기대 분류", () => {
+        /** 방식별 기대 분류(2026-11-03 실측, rclone-notes #58~#62) */
+        const cases: Array<{ name: string; code: string | null; status: string }> = [
+            { name: "kill-taskkill-f", code: "RCLONE_FAILED", status: "failed" },
+            { name: "kill-taskkill-tf", code: "RCLONE_FAILED", status: "failed" },
+            { name: "kill-stop-process", code: "RCLONE_KILLED", status: "failed" },
+            { name: "kill-dotnet-kill", code: "RCLONE_KILLED", status: "failed" },
+            // CIM Terminate(Reason 생략)는 exit 0이라 정상 종료와 구분할 수 없다(R-1)
+            { name: "kill-cim-terminate", code: null, status: "success" },
+            { name: "kill-ctrl-c", code: "RCLONE_KILLED", status: "failed" },
+        ];
+        for (const c of cases) {
+            const errorLines = fixtureLines(c.name)
+                .map((l) => parseLogLine(l))
+                .filter((p) => p.level === "error")
+                .map((p) => p.message);
+            const o = decideRunOutcome({
+                canceled: false,
+                exitCode: readFixtureExitCode(c.name),
+                stats: null,
+                errorLines,
+                hint: null,
+                stderrTail: readFixture(c.name, "stderr"),
+            });
+            expect({ name: c.name, status: o.status, code: o.error?.code ?? null }).toEqual({
+                name: c.name,
+                status: c.status,
+                code: c.code,
+            });
+        }
+    });
+
+    it("AC-15: exit 2 + Go 충돌 표지(합성)는 RCLONE_CRASHED, 표지 없으면 RCLONE_FAILED", () => {
+        // 실제 Go 충돌 출력을 rclone에서 재현할 수 없어 Go 런타임 형식의 합성 문자열을 쓴다(R-5)
+        for (const tail of [
+            "fatal error: out of memory\n\nruntime stack:\n",
+            "Exception 0xc0000005 0x0 0x1 0x2\n\tpc=0x1234\n",
+        ]) {
+            expect(decideRunOutcome({ ...base, exitCode: 2, stderrTail: tail }).error?.code).toBe(
+                "RCLONE_CRASHED",
+            );
+        }
+        expect(decideRunOutcome({ ...base, exitCode: 2, stderrTail: "" }).error?.code).toBe(
+            "RCLONE_FAILED",
+        );
+    });
+
+    it("AC-16: 0xC000013A는 외부 종료·충돌이 아니고(STATUS_CONTROL_C_EXIT), 0xC0000409는 충돌", () => {
+        const controlC = decideRunOutcome({ ...base, exitCode: 3221225786 });
+        expect(controlC.error?.code).toBe("RCLONE_FAILED");
+        expect(controlC.error?.message).toContain("STATUS_CONTROL_C_EXIT");
+        expect(decideRunOutcome({ ...base, exitCode: 3221226505 }).error?.code).toBe(
+            "RCLONE_CRASHED",
+        );
+    });
+
+    it("AC-17: exit 1 + 신호 표지 → RCLONE_KILLED(신호 문구), 취소는 CANCELED, 중간 문자열은 표지 아님", () => {
+        const signalTail =
+            '{"time":"2026-11-03T00:00:00Z","level":"info","msg":"Signal received: interrupt","source":"atexit/atexit.go:51"}\n' +
+            '{"time":"2026-11-03T00:00:00Z","level":"info","msg":"Exiting...","source":"atexit/atexit.go:53"}\n';
+        const o = decideRunOutcome({ ...base, exitCode: 1, stderrTail: signalTail });
+        expect(o.status).toBe("failed");
+        expect(o.error?.code).toBe("RCLONE_KILLED");
+        expect(o.error?.message).toContain("중단 신호");
+        expect(o.error?.message).toContain("종료 코드 1");
+        expect(
+            decideRunOutcome({ ...base, canceled: true, exitCode: 1, stderrTail: signalTail }).error
+                ?.code,
+        ).toBe("CANCELED");
+        // JSON msg 중간에만 들어 있으면 표지가 아니다
+        const middle = decideRunOutcome({
+            ...base,
+            exitCode: 1,
+            stderrTail: '{"level":"info","msg":"seen Signal received: interrupt before"}',
+        });
+        expect(middle.error?.code).toBe("RCLONE_FAILED");
+        // JSON이 아닌 줄(로그 메시지)에 같은 문자열이 있어도 신호 표지가 아니다
+        expect(
+            decideRunOutcome({
+                ...base,
+                exitCode: 1,
+                stderrTail: "Signal received: interrupt",
+            }).error?.code,
+        ).toBe("RCLONE_FAILED");
+    });
+
+    it("E-8c: JSON 로그 메시지 안의 panic 문자열은 충돌 표지가 아니다", () => {
+        const o = decideRunOutcome({
+            ...base,
+            exitCode: 2,
+            stderrTail: '{"level":"error","msg":"panic: user text is not a Go panic"}',
+        });
+        expect(o.error?.code).toBe("RCLONE_FAILED");
+    });
+
+    it("hint는 외부 종료·충돌 문구 뒤에 한 칸 공백으로 붙는다", () => {
+        const killed = decideRunOutcome({ ...base, exitCode: -1, hint: "안내입니다." });
+        expect(killed.error?.message.endsWith(" 안내입니다.")).toBe(true);
+        const crashed = decideRunOutcome({
+            ...base,
+            exitCode: 3221225477,
+            hint: "안내입니다.",
+        });
+        expect(crashed.error?.message.endsWith(" 안내입니다.")).toBe(true);
     });
 });
 

@@ -76,6 +76,7 @@ import type { clsActiveRunStore } from "@/main/services/run-recovery";
 import type { clsExcludeStore } from "@/main/store/exclude-store";
 import type { clsHistoryStore } from "@/main/store/history-store";
 import type { clsJobStore } from "@/main/store/job-store";
+import { formatExitCodeForLog, toInt32ExitCode } from "@/shared/exit-code";
 import { joinBackupPath } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, needsPreflight } from "@/shared/run-gates";
 import {
@@ -881,6 +882,7 @@ export class clsRunService {
                 result.stderrTail,
                 remoteNameOf(ctx.src) ?? remoteNameOf(ctx.dst),
             ),
+            stderrTail: result.stderrTail,
         });
     }
 
@@ -942,7 +944,7 @@ export class clsRunService {
             }
         }
         this.deps.logger.info(
-            `사전 확인: run=${runId} exit=${result.exitCode ?? "-"} result=${outcome ? outcome.status : "ok"}`,
+            `사전 확인: run=${runId} exit=${formatExitCodeForLog(result.exitCode)} result=${outcome ? outcome.status : "ok"}`,
         );
         active.snapshot.stats = null;
         if (outcome) return { result, outcome };
@@ -1088,9 +1090,9 @@ export class clsRunService {
             });
             const finished = this.deps.now();
             const finishedAt = finished.toISOString();
-            const exitCode = result?.exitCode ?? null;
+            const exitCode = toInt32ExitCode(result?.exitCode ?? null);
             active.logFile.write(
-                `# 종료: ${finishedAt} status=${outcome.status} exit=${exitCode ?? "-"}`,
+                `# 종료: ${finishedAt} status=${outcome.status} exit=${formatExitCodeForLog(exitCode)}`,
             );
             await active.logFile.close();
             const patch = {
@@ -1131,7 +1133,7 @@ export class clsRunService {
             }
             const s = active.snapshot.stats;
             this.deps.logger.info(
-                `실행 종료: run=${runId} job=${jobId} status=${outcome.status} code=${outcome.error?.code ?? "-"} exit=${exitCode ?? "-"} transfers=${s?.transfers ?? 0} errors=${s?.errors ?? 0}`,
+                `실행 종료: run=${runId} job=${jobId} status=${outcome.status} code=${outcome.error?.code ?? "-"} exit=${formatExitCodeForLog(exitCode)} transfers=${s?.transfers ?? 0} errors=${s?.errors ?? 0}`,
             );
         } catch (e) {
             this.warn(`실행 마무리 실패: run=${runId}`, e);

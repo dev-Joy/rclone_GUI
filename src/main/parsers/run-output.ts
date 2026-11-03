@@ -9,7 +9,8 @@
  */
 
 // ========== Internal imports ==========
-import type { itfParsedLogLine } from "@/main/parsers/log-parser";
+import { parseLogLine, type itfParsedLogLine } from "@/main/parsers/log-parser";
+import { classifyAbnormalExit, formatExitCode, toInt32ExitCode } from "@/shared/exit-code";
 import type { typAppErrorPayload, typRunStatus } from "@/shared/schemas/common";
 import type { typRunStats } from "@/shared/schemas/run";
 import { DRY_RUN_SAMPLE_LIMIT, type itfDryRunSummary } from "@/shared/types/run";
@@ -78,6 +79,7 @@ export function createDryRunCollector(sampleLimit = DRY_RUN_SAMPLE_LIMIT): itfDr
 export interface itfRunOutcomeInput {
     /** 사용자가 취소했거나 프로세스가 취소로 끝남 */
     canceled: boolean;
+    /** 원값(부호 없는 DWORD) 또는 정규화 값 모두 허용(내부에서 정규화) */
     exitCode: number | null;
     /** 마지막 stats (없으면 null) */
     stats: typRunStats | null;
@@ -85,6 +87,8 @@ export interface itfRunOutcomeInput {
     errorLines: readonly string[];
     /** 자주 나는 오류 안내(hintForRcloneError) */
     hint: string | null;
+    /** rclone stderr 끝부분(process.ts의 stderrTail). Go 충돌·신호 표지 확인용 */
+    stderrTail: string;
 }
 
 export interface itfRunOutcome {
@@ -100,9 +104,67 @@ function f_Error(
     return lines.length > 0 ? { code, message, detail: lines.join("\n") } : { code, message };
 }
 
-/** 종료 결과 → 상태. 취소 > exit 3 > exit 7 > exit 0(오류 수로 success/partial) > 그 밖의 실패 */
+function f_WithHint(message: string, hint: string | null): string {
+    return hint ? `${message} ${hint}` : message;
+}
+
+/** stderr 끝부분의 JSON이 아닌 줄이 Go 충돌 표지(`panic: `·`fatal error: `·`Exception 0x`)로 시작하는지 (FR-5) */
+function f_HasGoCrashMarker(stderrTail: string): boolean {
+    for (const line of stderrTail.split(/\r?\n/)) {
+        const p = parseLogLine(line);
+        if (!p.raw) continue;
+        if (
+            line.startsWith("panic: ") ||
+            line.startsWith("fatal error: ") ||
+            line.startsWith("Exception 0x")
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** stderr 끝부분의 JSON 로그 msg가 `Signal received: `로 시작하는지 (FR-5a) */
+function f_HasSignalMarker(stderrTail: string): boolean {
+    for (const line of stderrTail.split(/\r?\n/)) {
+        const p = parseLogLine(line);
+        if (p.raw) continue;
+        if (p.message.startsWith("Signal received: ")) return true;
+    }
+    return false;
+}
+
+/** 외부 종료(코드) 문구 (FR-8) */
+function f_KilledMessage(code: string, hint: string | null): string {
+    return f_WithHint(
+        `rclone이 외부에서 종료된 것으로 보입니다(종료 코드 ${code}, 오류 기록 없음). 다시 비교한 뒤 실행하면 아직 반영되지 않은 것만 처리합니다. 계속 반복되면 백신이나 다른 프로그램이 rclone을 끝내는지 확인하세요.`,
+        hint,
+    );
+}
+
+/** 중단 신호 종료 문구 (FR-8) */
+function f_SignalMessage(code: string, hint: string | null): string {
+    return f_WithHint(
+        `rclone이 중단 신호를 받고 종료했습니다(종료 코드 ${code}). 다시 비교한 뒤 실행하면 아직 반영되지 않은 것만 처리합니다. 계속 반복되면 다른 프로그램이 rclone에 중단 신호를 보내는지 확인하세요.`,
+        hint,
+    );
+}
+
+/** 충돌 문구 (FR-8) */
+function f_CrashedMessage(code: string, hint: string | null): string {
+    return f_WithHint(
+        `rclone이 비정상 종료했습니다(종료 코드 ${code}). 충돌일 수 있습니다. 다시 실행해도 반복되면 rclone 버전을 바꿔 보세요.`,
+        hint,
+    );
+}
+
+/**
+ * 종료 결과 → 상태. 취소 > exit 3 > exit 7 > exit 0(오류 수로 success/partial) > Go 충돌 표지 >
+ * exit 1 + 신호 표지 > 외부 종료 집합 > NTSTATUS 충돌 > 그 밖의 실패 (INT-005 FR-7, §6.4)
+ */
 export function decideRunOutcome(input: itfRunOutcomeInput): itfRunOutcome {
-    const { exitCode, stats, errorLines } = input;
+    const { stats, errorLines, hint } = input;
+    const exitCode = toInt32ExitCode(input.exitCode);
     if (input.canceled) {
         return {
             status: "canceled",
@@ -146,12 +208,40 @@ export function decideRunOutcome(input: itfRunOutcomeInput): itfRunOutcome {
         }
         return { status: "success", error: null };
     }
-    const code = exitCode === null ? "알 수 없음" : String(exitCode);
+    const shown = formatExitCode(exitCode);
+    // Go 충돌 표지는 종료 코드와 상관없이 충돌로 본다(주로 exit 2)
+    if (f_HasGoCrashMarker(input.stderrTail)) {
+        return {
+            status: "failed",
+            error: f_Error("RCLONE_CRASHED", f_CrashedMessage(shown, hint), errorLines),
+        };
+    }
+    // 중단 신호는 rclone이 직접 남긴 기록이므로 오류 줄과 상관없이 외부 종료로 본다(FR-3a)
+    if (exitCode === 1 && f_HasSignalMarker(input.stderrTail)) {
+        return {
+            status: "failed",
+            error: f_Error("RCLONE_KILLED", f_SignalMessage(shown, hint), errorLines),
+        };
+    }
+    const abnormal = classifyAbnormalExit(exitCode);
+    // 오류 줄이 있으면 원인을 단정하지 않고 일반 실패로 둔다(FR-6)
+    if (abnormal === "killed" && errorLines.length === 0) {
+        return {
+            status: "failed",
+            error: f_Error("RCLONE_KILLED", f_KilledMessage(shown, hint), errorLines),
+        };
+    }
+    if (abnormal === "crash") {
+        return {
+            status: "failed",
+            error: f_Error("RCLONE_CRASHED", f_CrashedMessage(shown, hint), errorLines),
+        };
+    }
     return {
         status: "failed",
         error: f_Error(
             "RCLONE_FAILED",
-            `rclone이 오류로 끝났습니다(exit ${code}).${input.hint ? ` ${input.hint}` : ""}`,
+            `rclone이 오류로 끝났습니다(exit ${shown}).${hint ? ` ${hint}` : ""}`,
             errorLines,
         ),
     };

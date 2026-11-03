@@ -461,6 +461,18 @@ describe("clsRunService 실제 copy", () => {
         expect(fin.dryRunSummary).toBeNull();
     });
 
+    it("AC-11: 외부 종료(4294967295) → 이력 exitCode -1, 로그 exit=-1(0xFFFFFFFF)", async () => {
+        const h = f_Harness({ script: { lines: [], over: { exitCode: 4294967295 } } });
+        await h.svc.start({ jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 0 });
+        const rec = await f_Done(h);
+        expect(rec.status).toBe("failed");
+        expect(rec.error?.code).toBe("RCLONE_KILLED");
+        expect(rec.exitCode).toBe(-1);
+        const text = readFileSync(join(h.logsDir, rec.logFile!), "utf8");
+        expect(text).toMatch(/# 종료: .* status=failed exit=-1\(0xFFFFFFFF\)/);
+        expect(h.logs.some((l) => l.includes("exit=-1(0xFFFFFFFF)"))).toBe(true);
+    });
+
     it("finished 이벤트를 받을 때는 락이 이미 풀려 있다", async () => {
         const h = f_Harness({ script: { lines: fixtureLines("copy-real") } });
         const lockAtFinish: unknown[] = [];
