@@ -288,6 +288,35 @@ describe("nextEta (FR-4~FR-7, FR-9)", () => {
         expect(jumped.etaSeconds).toBeCloseTo((expected - 181_000) / 1000, 6);
     });
 
+    it("남은 파일·바이트가 모두 0이면 평활과 관계없이 0초(FR-7)", () => {
+        const plan = f_Plan({ createFiles: 100, transferBytes: 100 });
+        const running = nextEta(
+            null,
+            f_Stats({
+                elapsedMs: 100_000,
+                bytes: 50,
+                totalBytes: 100,
+                transfers: 50,
+                totalTransfers: 100,
+            }),
+            plan,
+        );
+        expect(running.etaSeconds).toBeGreaterThan(0);
+
+        const done = nextEta(
+            running.state,
+            f_Stats({
+                elapsedMs: 101_000,
+                bytes: 100,
+                totalBytes: 100,
+                transfers: 100,
+                totalTransfers: 100,
+            }),
+            plan,
+        );
+        expect(done).toMatchObject({ etaSeconds: 0, etaPending: false });
+    });
+
     it("totalTransfers가 5초 그대로여야 계획 없는 실행이 확정된다(AC-13)", () => {
         let state: itfEtaState | null = null;
         let step = nextEta(null, f_Stats(), null);

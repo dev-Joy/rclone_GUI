@@ -150,6 +150,12 @@ export function nextEta(
     if (raw === "pending") {
         return { state, etaSeconds: null, etaPending: true };
     }
+    // FR-7: 다 옮겼으면 평활값과 관계없이 0초
+    if (raw === 0) {
+        state.totalMs = stats.elapsedMs;
+        state.atMs = stats.elapsedMs;
+        return { state, etaSeconds: 0, etaPending: false };
+    }
 
     const rawTotalMs = stats.elapsedMs + raw * 1000;
     if (state.totalMs === null) {
