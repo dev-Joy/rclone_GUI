@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-02 (INT-003 Phase 4 빈 폴더를 만들 수 없는 대상 구현 반영 표 추가)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-03 (INT-004 실행 화면 남은 시간 계산 반영 표 추가)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -151,6 +151,20 @@ INT-003 T-05(spec §4.4 FR-30~FR-33, NFR-6, §6.3, §7 E-12·E-13, AC-13)로 바
 | 편집기 경고 | - | IPC `remotes:features`(`{ path, configPath? }` → `{ canHaveEmptyDirs }`, 락 없음, 해석 실패·설정 없음·조회 실패는 `null`, 로컬·UNC는 `true`). 편집기는 범위 ‘전체’ + remote 대상일 때만 remote 루트가 400ms 그대로면 조회하고(`useEmptyDirSupport`), `false`면 범위 아래에 경고(`#job-scope-empty-dir-warning`)만 보인다. 저장은 막지 않는다(FR-32) |
 | 테스트 | - | AC-13 로컬 대용은 임시 conf의 이름 있는 `type = memory` remote(앱 경로 검사가 `:memory:`·연결 문자열을 거부, 결정 D-6). memory는 프로세스마다 비어 원본은 빈 폴더만 둔다(#33). 파일이 있는 noop은 통합 테스트에서 가짜 features로 확인. GCS는 수용 테스트(환경 변수 있을 때만)가 비교 값과 features 값이 같은지·false면 자동 noop인지 확인 |
 | 범위 밖 | - | 편집기의 Move 미지원 미리 경고(D-10, `itfRemoteFeatures`에 나중에 추가), 앱 실행 중 rclone.conf의 `directory_markers` 변경 반영(캐시가 재시작까지 남음, D-9), 연결 문자열 remote의 앱 수준 확인(D-12). **R-4 GCS 실측 대기**: GCS 키가 없어 `CanHaveEmptyDirectories`를 그대로 믿는다(키가 생기면 gcs-acceptance AC-13 케이스가 판정을 검증) |
+
+### 구현 반영 (INT-004 — 작은 파일이 많은 실행의 남은 시간, 2026-11-03)
+
+INT-004(spec FR-1~FR-11, AC-1~AC-13)로 실행 화면의 "남은 시간" 계산이 바뀌었다. 표시 전용 변경이며 실행·게이트·명령 인자는 그대로다(AC-12).
+
+| 항목 | 이전 | 실제 구현 |
+| :--- | :--- | :--- |
+| 남은 시간 계산 | rclone stats의 `eta`를 `etaSeconds`로 그대로 표시 | main의 `run-eta.ts`가 stats마다 계산해 `etaSeconds`를 덮어쓴다. 분모는 계획(`createFiles+updateFiles`, `transferBytes`)과 rclone `totalTransfers`/`totalBytes` 중 큰 쪽, 계획이 없으면 `checks >= totalChecks` 또는 `totalTransfers` 5초 불변으로 확정한다. 완료 파일은 `transfers + partialFiles`(진행 중 `transferring[].bytes/size` 합, 이름 버림), 완료 바이트는 `bytes`. 파일 기준·바이트 기준 누적 평균 중 긴 쪽을 쓴다(FR-2~FR-5) |
+| "계산 중" | 없음 | 경과 10초·완료 파일 5개 또는 바이트 5%·분모 확정 전에는 `etaPending=true`, `etaSeconds=null`(FR-4). 화면은 "계산 중"을 보여 준다 |
+| 평활 | 없음 | 원시 남은 시간이 아니라 예상 총 소요(`경과 + 원시 남은 시간`)에 τ=30초 지수 평균을 건다. 같은 경과의 stats는 갱신하지 않고, 완료하면 평활과 관계없이 0초다(FR-6·FR-7) |
+| 단계 구분 | 단계마다 rclone 경과가 0부터 시작 | `spawnTransfer`마다 계산 상태를 새로 만든다(사전 확인 dry-run과 실제 실행을 잇지 않음, FR-9) |
+| 화면·이력 | `etaSeconds` null이면 "-" | `RunStatsGrid`의 `live`가 true(진행 중)일 때만 "계산 중"/계산값을, 끝난 실행·이력은 "-"를 보인다(FR-10). main에서 계산해 화면과 이력 값이 같다(FR-11) |
+| 스키마 | - | `zRunStats`에 `partialFiles`(기본 0)·`etaPending`(기본 false) 추가 — 예전 이력은 기본값으로 읽는다(AC-10) |
+| 테스트 | - | Drive 중단(안정성)·완료(정확도) stats fixture 2개를 경로·이름을 가려 추가. AC-8b는 실측 재생에서 초반 19개 지점이 하한 1/3을 넘어(최소 0.314배) spec §10 Q-4에 따라 하한만 1/4로 넓혔다. rclone 동작 근거는 `docs/knowhow/rclone-notes.md` #37·#38 |
 
 ---
 
