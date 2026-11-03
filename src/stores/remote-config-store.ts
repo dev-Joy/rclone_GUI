@@ -75,7 +75,7 @@ export const useRemoteConfigStore = create<itfRemoteConfigState>((set, get) => (
         if (oauth) set({ auth: { phase: "starting", name: input.name } });
         const r = await getApi().remoteConfig.create(input);
         if (!r.ok) {
-            if (oauth) {
+            if (oauth && r.error.code !== "CANCELED") {
                 set({ auth: { phase: "failed", name: input.name, message: r.error.message } });
             }
             return r;
@@ -88,7 +88,9 @@ export const useRemoteConfigStore = create<itfRemoteConfigState>((set, get) => (
     reconnect: async (name) => {
         set({ auth: { phase: "starting", name } });
         const r = await getApi().remoteConfig.reconnect({ name });
-        if (!r.ok) set({ auth: { phase: "failed", name, message: r.error.message } });
+        if (!r.ok && r.error.code !== "CANCELED") {
+            set({ auth: { phase: "failed", name, message: r.error.message } });
+        }
         return r;
     },
     answer: async (state, result) => {

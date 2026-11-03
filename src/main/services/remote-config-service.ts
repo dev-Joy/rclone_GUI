@@ -222,7 +222,11 @@ export class clsRemoteConfigService {
                 this.auth = null;
                 if (result.phase !== "done") {
                     throw new clsAppError(
-                        result.phase === "timeout" ? "AUTH_TIMEOUT" : "RCLONE_FAILED",
+                        result.phase === "timeout"
+                            ? "AUTH_TIMEOUT"
+                            : result.phase === "canceled"
+                              ? "CANCELED"
+                              : "RCLONE_FAILED",
                         result.message ?? "리모트 인증을 마치지 못했습니다.",
                     );
                 }
@@ -418,7 +422,11 @@ export class clsRemoteConfigService {
             this.auth = null;
             if (result.phase !== "done") {
                 throw new clsAppError(
-                    result.phase === "timeout" ? "AUTH_TIMEOUT" : "RCLONE_FAILED",
+                    result.phase === "timeout"
+                        ? "AUTH_TIMEOUT"
+                        : result.phase === "canceled"
+                          ? "CANCELED"
+                          : "RCLONE_FAILED",
                     result.message ?? "재인증을 마치지 못했습니다.",
                 );
             }
