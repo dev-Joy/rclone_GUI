@@ -10,6 +10,7 @@ import {
     deleteDirSamples,
     deleteSamples,
     dryRunHeadline,
+    etaText,
     progressPercent,
     realRunConfirmText,
     runStatusText,
@@ -332,6 +333,18 @@ describe("progressPercent", () => {
         expect(progressPercent(normalizeStats({ transfers: 1, totalTransfers: 3 }))).toBe(33);
         expect(progressPercent(normalizeStats({}))).toBeNull();
         expect(progressPercent(normalizeStats({ bytes: 9, totalBytes: 4 }))).toBe(100);
+    });
+});
+
+describe("etaText (INT-004 FR-10)", () => {
+    it("진행 중이고 계산 대기면 '계산 중', 값이 있으면 기간, 끝난 실행은 '-'", () => {
+        const pending = normalizeStats({ elapsedTime: 3, eta: 10 })!;
+        expect(pending.etaPending).toBe(false); // rclone 값은 parser가 그대로 둔다
+        expect(etaText({ ...pending, etaPending: true }, true)).toBe("계산 중");
+        expect(etaText({ ...pending, etaSeconds: 3723 }, true)).toBe("1시간 2분 3초");
+        expect(etaText({ ...pending, etaSeconds: null }, true)).toBe("-");
+        expect(etaText({ ...pending, etaSeconds: 3723 }, false)).toBe("-");
+        expect(etaText(null, true)).toBe("-");
     });
 });
 

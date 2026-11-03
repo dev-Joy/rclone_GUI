@@ -131,6 +131,10 @@ function f_SyncCompare(over: Partial<itfCompareSummary> = {}): itfCompareResult 
     return f_Compare({ mode: "sync", summary: f_Summary({ destFiles: 100, ...over }) });
 }
 
+function f_StatsLine(stats: Record<string, unknown>): string {
+    return JSON.stringify({ level: "info", msg: "", stats });
+}
+
 function f_Res(over: Partial<itfProcessResult> = {}): itfProcessResult {
     return {
         exitCode: 0,
@@ -1709,5 +1713,65 @@ describe("clsRunService 백업 폴더 (INT-003 T-03)", () => {
         expect(h.featureCalls).toEqual(["gd:"]);
         expect(f_BackupArg(h.procs[1]!.args)).toBe(f_BackupArg(h.procs[0]!.args));
         expect(h.begun[0]!.backupDir).toBe(f_BackupArg(h.procs[1]!.args));
+    });
+});
+
+describe("clsRunService 남은 시간(INT-004)", () => {
+    const RUN_INPUT = { jobId: JOB_ID, dryRun: false, planToken: TOKEN, confirmedDeletes: 2 };
+
+    it("미리보기 stats에 rclone eta 대신 앱 계산값을 넣는다(FR-11)", async () => {
+        const h = f_Harness({
+            script: {
+                lines: [
+                    f_StatsLine({
+                        bytes: 100,
+                        totalBytes: 1000,
+                        transfers: 20,
+                        totalTransfers: 100,
+                        elapsedTime: 11,
+                        eta: 5000,
+                    }),
+                ],
+            },
+        });
+        await h.svc.start({ jobId: JOB_ID, dryRun: true });
+        const rec = await f_Done(h);
+        expect(rec.stats).toMatchObject({ etaPending: false });
+        // 파일 기준 44초, 바이트 기준 99초 중 긴 쪽
+        expect(rec.stats?.etaSeconds).toBeCloseTo(99, 5);
+    });
+
+    it("사전 확인에서 숫자가 나와도 실제 실행은 새 계산 상태로 시작한다(FR-9)", async () => {
+        const preflightStats = f_StatsLine({
+            bytes: 500,
+            totalBytes: 1000,
+            transfers: 4,
+            totalTransfers: 100,
+            deletes: 2,
+            elapsedTime: 100,
+        });
+        const realStats = f_StatsLine({
+            bytes: 10,
+            totalBytes: 1000,
+            transfers: 1,
+            totalTransfers: 100,
+            deletes: 2,
+            elapsedTime: 11,
+        });
+        const h = f_Harness({
+            job: f_SyncJob(),
+            compare: f_SyncCompare(),
+            scripts: [
+                { lines: [...fixtureLines("sync-dryrun"), preflightStats] },
+                { lines: [realStats] },
+            ],
+        });
+        const { runId } = await h.svc.start(RUN_INPUT);
+        const rec = await f_Done(h);
+        expect(rec.preflight?.etaPending).toBe(false);
+        expect(rec.preflight?.etaSeconds).toBeGreaterThan(0);
+        expect(rec.stats).toMatchObject({ etaPending: true, etaSeconds: null });
+        expect(rec.stats?.elapsedMs).toBe(11_000);
+        expect(runId).toBe(rec.id);
     });
 });

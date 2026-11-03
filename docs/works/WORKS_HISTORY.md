@@ -226,3 +226,14 @@
 - (2026-10-29) E2E 설정 화면 제목 셀렉터(`getByRole("heading", { name: "설정" })`)가 'rclone 설정'과 겹쳐 strict mode 위반 → `exact: true` [TASK_012 해결]
 - (2026-10-29) 기존 rcloneGUI 0.1.0 설치로 installer-smoke 사전 확인 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행, 15건 통과 [TASK_012 해결]
 - (2026-11-02) Drive 수용 첫 실측에서 sync 삭제·전체 범위 sync가 대량 삭제 게이트(SAFETY_BLOCKED)로 실패 — 테스트 도우미가 `confirmLargeDeletes`를 넘기지 않음 → 수정 후 14/14 [TASK_023 해결]
+
+[TASK_024] : (2026-11-03) INT-004 작은 파일이 많은 실행에서도 믿을 수 있는 남은 시간 표시 (관련 Intent: INT-004, T-01~T-03)
+- fixture(T-01): 2026-11-03 중단 실행 로그 2,302초·667/1,815에서 stats만 남기고 `msg`·`transferring[].name`·`srcFs`/`dstFs`를 가려 `drive-small-files-progress-partial.stderr.txt`(486줄). 테스트 remote에 작은 파일 200개 + 30MB 1개를 copy해 492.9초·201/201·오류 0으로 끝낸 로그를 같은 방식으로 가리고 30초 뒤 5초 간격으로 줄여 `drive-small-files-progress.stderr.txt`(124줄). 두 파일 모두 remote 이름·사용자 경로·원래 파일 이름 0건 확인
+- 계산(T-02): `run-eta.ts`에 `etaTotals`(계획+stats max, 계획 없으면 checks 완료 또는 totalTransfers 5초 불변으로 확정)·`rawEtaSeconds`(완료 파일=transfers+partialFiles, 완료 바이트=bytes, 10초·5개/5%·분모 확정 전 pending, 파일·바이트 누적 평균 중 긴 쪽)·`nextEta`(예상 총 소요에 τ=30초 지수 평활, Δt≤0이면 갱신 안 함, 완료 시 0초). `zRunStats`에 `partialFiles`·`etaPending` 기본값 추가(예전 이력 호환), 파서가 `transferring[].bytes/size`만 읽어 `min(bytes/size, 0.999)` 합을 내고 이름은 버림
+- 연결·화면(T-03): run-service가 rclone 단계마다 `etaState=null`로 초기화하고 `onLine`에서 stats마다 계산값을 덮어써 snapshot·batcher에 넣음(화면·이력 동일 값). `RunStatsGrid`에 `live` prop(기본 false), `etaText`가 진행 중 pending이면 "계산 중", 아니면 `formatDuration`, 끝난 실행·이력은 "-". `RunView`만 live 전달
+- 테스트: AC-2~AC-8b, AC-10~AC-13 단위 테스트, 파서 AC-1·깨진 `transferring` 케이스, run-service 계산값 전달·사전 확인→실제 실행 초기화, `etaText` 표시 규칙. AC-12는 `command-builder.ts`·게이트·`spawnTransfer` 시작 조건 diff 0으로 확인
+- 측정: 완료 fixture는 초반 10초에 30MB와 작은 파일 10여 개가 끝나 바이트 98%가 된 뒤 Drive 속도 제한으로 초당 0.3~0.5개로 느려졌다. 재생 결과 11~29초 19개 지점이 실제 남은 시간의 0.314~0.330배, 30초 이후는 1/3~3배, 인접 비율 최대 1.11배. 분모·부분 진행률·평활 결함이 아니라 누적 평균의 알려진 한계(FR-5)로 진단해 AC-8b 하한만 1/4로 넓히고 spec §10 Q-4에 근거 기록
+- 문서: CHANGELOG 1줄, rclone-notes #37(`totalChecks` 0·`totalBytes` 실행 중 증가)·#38(Drive 초반 폭주→속도 제한, rclone eta 0초, AC-8b 하한 근거), spec AC-8b/Q-4, plan DoD 체크, intent T-01~T-03 완료·active 이동, INDEX 재작성
+- 검증: `pnpm run check`(단위 71파일 1,217), `format:check`, `test:int` 71 통과(+19 skip: GCS 9·Drive 10), `test:e2e` 14(콘솔 오류 0), `build:win` 통과
+- 특이: 완료 fixture 첫 시도는 실행 중이던 다른 앱 rclone과 같은 Drive remote를 동시에 써 20분간 진행이 멈췄다(로그 0바이트). 두 프로세스를 정리하고 테스트 폴더를 지운 뒤 다시 실행해 8분 만에 완료했다. 생성한 테스트 폴더는 purge로 정리
+- 남은 것: 사용자 완료 확인 후 INT-004 done 이동

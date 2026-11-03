@@ -217,3 +217,16 @@
 - 명령: 삭제 뒤 `lsf -R --drive-trashed-only <대상>`(`f_LogTrash`, 기록만)
 - 결과: sync 삭제 뒤 휴지통 파일 1개(지운 파일 있음). 전체 범위 sync(폴더 삭제) 뒤 1개. 백업 폴더 sync 뒤 0개 — 지운 파일이 백업으로 이동했기 때문. 테스트 정리(purge)도 기본 설정이라 휴지통으로 간다.
 - 영향: Drive 대상 sync 삭제는 기본(`use_trash` 기본값)에서 휴지통으로 되돌릴 수 있다. 앱은 conf를 읽지 않으므로(안전 규칙 6) 사용자 remote의 휴지통 설정을 확인할 수 없어 안내 문구에 휴지통 복구를 약속하지 않는다. 이 remote는 rclone 공용 client_id를 써서 실행마다 "2026년 중 중단" NOTICE가 stderr에 나온다.
+
+## 2026-11-03 · rclone v1.75.1 · Windows 11 x64 (INT-004 T-01: Google Drive 실행 stats)
+
+공통 명령: `rclone copy <임시 원본> <drive remote>:rclonegui-test-it/rclonegui-it-<시각>-<난수>/ --config <conf> --use-json-log --stats 1s --log-level INFO --log-file <로그> --transfers 4 --checkers 8 --fast-list`. 원본은 작은 파일 200개(약 0.6MB) + 30MB 파일 1개(총 201개, 32,037,140바이트). fixture는 `drive-small-files-progress.stderr.txt`(stats 493줄 중 5초 간격으로 줄인 124줄, 경로·이름 가림).
+
+### 37. 대상에 같은 파일이 없는 copy는 `totalChecks`가 끝까지 0이고, `totalBytes`는 실행 중에도 늘어난다
+- 결과: 첫 stats부터 `totalTransfers` 201, `totalChecks` 0. 마지막까지 `checks` 0. `totalBytes`는 32,037,140에서 시작해 실행 중 32,117,659까지 80,519바이트 늘었다(원본 변화 또는 재시도 추정, 원인 미확인). `transferring[]` 항목은 `bytes: 0`으로 나오는 순간이 있고, `size`는 파일 크기다.
+- 영향: 계획 없는 copy에서 확인(checks)만으로 분모를 확정할 수 없다 — 앱은 `totalTransfers`가 5초 동안 그대로일 때 확정한다(FR-2). 분모 바이트는 `max(계획, rclone)`으로 키워 진행률이 100%를 넘지 않게 한다. `transferring[].bytes/size`로 부분 진행률을 계산하되 `bytes`가 없으면 0으로 센다(FR-1).
+
+### 38. Drive는 초반에 몰아서 올린 뒤 속도 제한으로 느려지고, 그 구간 rclone `eta`는 0초를 낸다
+- 결과: 201개를 492.9초에 완료(오류 0). 첫 10초에 30MB 파일과 작은 파일 10여 개가 끝나 `bytes`가 98%가 되었고, 이후 작은 파일은 초당 0.3~0.5개로 떨어졌다(172초 91개, 272초 147개, 493초 201개). `transferring`은 항상 4개 안팎이었다. 대부분의 stats에서 rclone `eta`는 0초다(남은 바이트가 거의 없어서).
+- 영향: 파일 수 누적 평균은 초반 폭주를 미래 속도로 외삽해 초반 남은 시간을 낮게 낸다. 실측 재생에서 "계산 중"이 풀린 11~29초의 19개 지점이 실제 남은 시간의 0.314~0.330배(최대 3.18배 과소)였고, 30초 이후에는 1/3~3배 안이었다. spec AC-8b의 하한을 1/3 → 1/4로 넓힌 근거다(spec §10 Q-4). 상한 3배·인접 2배는 그대로다.
+- fixture: 가림은 `msg`를 비우고 `transferring[].name`을 `file-NNNN`, `srcFs`·`dstFs`를 `<SRC>`·`<DST>`로 바꾸는 방식. 30초 이후는 5초 간격으로 줄였다(용량 500KB 제한).

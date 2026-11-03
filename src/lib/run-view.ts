@@ -8,7 +8,7 @@
 
 // ========== Internal imports ==========
 import { compareStaleReason } from "@/lib/compare-view";
-import { formatBytes } from "@/shared/format";
+import { formatBytes, formatDuration } from "@/shared/format";
 import { checkRunPaths } from "@/shared/path-utils";
 import { checkPlanSafety, isLargeDelete, type typDeleteThresholds } from "@/shared/run-gates";
 import { hasPlannedChanges, planFromCompare } from "@/shared/run-plan";
@@ -156,6 +156,13 @@ export function progressPercent(stats: typRunStats | null): number | null {
     else if (stats.totalTransfers > 0) ratio = stats.transfers / stats.totalTransfers;
     if (ratio === null || !Number.isFinite(ratio)) return null;
     return Math.min(100, Math.max(0, Math.floor(ratio * 100)));
+}
+
+/** 남은 시간 칸 문구(INT-004 FR-10). 진행 중일 때만 "계산 중"·계산값을 보여 준다 */
+export function etaText(stats: typRunStats | null, live: boolean): string {
+    if (!live || !stats) return "-";
+    if (stats.etaPending) return "계산 중";
+    return stats.etaSeconds === null ? "-" : formatDuration(stats.etaSeconds * 1000);
 }
 
 /** 로그 tail 뒤에 줄을 붙이고 최근 max줄만 남긴다(새 배열) */

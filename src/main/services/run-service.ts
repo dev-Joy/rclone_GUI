@@ -69,6 +69,7 @@ import {
     type itfJobContext,
 } from "@/main/services/job-context";
 import type { clsRemoteService } from "@/main/services/remote-service";
+import { nextEta, type itfEtaState } from "@/main/services/run-eta";
 import { clsRunEventBatcher, type itfBatcherTimers } from "@/main/services/run-events";
 import { clsRunLogFile, maskArgsForLog, runLogFileName } from "@/main/services/run-log-file";
 import type { clsActiveRunStore } from "@/main/services/run-recovery";
@@ -185,6 +186,8 @@ interface itfActiveRun {
     cancelReason: typCancelReason | null;
     /** 이 실행의 --backup-dir(실행별 하위 폴더 포함). 백업 폴더가 없거나 copy면 null */
     backupDir: string | null;
+    /** rclone 단계(미리보기·사전 확인·실제 실행)마다 새로 만드는 남은 시간 계산 상태(INT-004 FR-9) */
+    etaState: itfEtaState | null;
 }
 
 /** 자동 실행 결과(스케줄러가 예약·알림에 쓴다). recorded가 false면 이력에 없다(noop 등) */
@@ -586,6 +589,7 @@ export class clsRunService {
             excludeFile: null,
             cancelReason: null,
             backupDir: null,
+            etaState: null,
         };
     }
 
@@ -956,6 +960,8 @@ export class clsRunService {
         active: itfActiveRun,
         batcher: clsRunEventBatcher,
     ): Promise<itfProcessResult> {
+        // rclone 프로세스마다 경과 시간이 0부터 다시 시작하므로 남은 시간 계산 상태도 새로 만든다
+        active.etaState = null;
         const { job } = ctx;
         const source = ctx.src.normalized;
         const destination = ctx.dst.normalized;
@@ -1029,8 +1035,16 @@ export class clsRunService {
         active.logFile.write(line);
         const p = parseLogLine(line);
         if (p.stats) {
-            active.snapshot.stats = p.stats;
-            batcher.pushStats(p.stats);
+            // 화면에 보내는 값과 이력에 남는 값이 같도록 main에서 남은 시간을 계산한다(FR-11)
+            const step = nextEta(active.etaState, p.stats, active.record.plan);
+            active.etaState = step.state;
+            const stats: typRunStats = {
+                ...p.stats,
+                etaSeconds: step.etaSeconds,
+                etaPending: step.etaPending,
+            };
+            active.snapshot.stats = stats;
+            batcher.pushStats(stats);
             return;
         }
         active.collector?.push(p);

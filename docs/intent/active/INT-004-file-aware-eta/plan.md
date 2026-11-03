@@ -93,14 +93,15 @@
 
 - Tier 2 기본: 영향 모듈 단위 테스트와 타입 검사 통과(`pnpm run check`).
 - 프로젝트 완료 기준(AGENTS 6장)에 따른 추가 항목:
-  - [ ] `pnpm run check` 통과
-  - [ ] `pnpm run format:check` 통과
-  - [ ] 파서를 바꿨으므로 테스트를 추가하고 `pnpm run test:int` 통과(rclone 실측 진행 stats 경로 회귀 확인)
-  - [ ] 화면을 바꿨으므로 `pnpm run test:e2e` 통과(콘솔 오류 0), `pnpm run build:win` 성공
-  - [ ] `docs/CHANGELOG.md` 한 줄
-  - [ ] 새로 알게 된 rclone 동작은 `docs/knowhow/rclone-notes.md`에 기록
-  - [ ] `docs/works/` 기록
+  - [x] `pnpm run check` 통과 (2026-11-03: 71파일 1,217)
+  - [x] `pnpm run format:check` 통과
+  - [x] 파서를 바꿨으므로 테스트를 추가하고 `pnpm run test:int` 통과(rclone 실측 진행 stats 경로 회귀 확인 — 71 통과, 19 skip)
+  - [x] 화면을 바꿨으므로 `pnpm run test:e2e` 통과(콘솔 오류 0, 14 통과), `pnpm run build:win` 성공
+  - [x] `docs/CHANGELOG.md` 한 줄
+  - [x] 새로 알게 된 rclone 동작은 `docs/knowhow/rclone-notes.md`에 기록
+  - [x] `docs/works/` 기록
 - 수용 기준: spec AC-1~AC-13. AC-8a·AC-8b는 Phase 1 fixture로, AC-9는 E2E 또는 drive-app 확인으로, AC-12는 diff로 확인한다.
+  - AC-8b는 실측 fixture 재생에서 11~29초 구간이 하한 1/3을 넘어(최소 0.314배) spec §10 Q-4에 따라 하한만 1/4로 넓혔다.
 
 ## 5. 리스크 · 파급
 

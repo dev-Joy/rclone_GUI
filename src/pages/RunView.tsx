@@ -91,7 +91,7 @@ export default function RunView(props: itfRunViewProps) {
                                 : RUNNING_NOTE[mine.mode]}
                     </p>
                 </div>
-                <RunStatsGrid stats={mine.stats} dryRun={mine.dryRun} />
+                <RunStatsGrid stats={mine.stats} dryRun={mine.dryRun} live />
                 <RunLogTail lines={mine.tail} dropped={dropped} logFile={mine.logFile} />
             </div>
         );

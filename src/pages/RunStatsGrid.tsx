@@ -5,7 +5,7 @@
  */
 
 // ========== Internal imports ==========
-import { progressPercent } from "@/lib/run-view";
+import { etaText, progressPercent } from "@/lib/run-view";
 import { formatBytes, formatDuration } from "@/shared/format";
 import type { typRunStats } from "@/shared/schemas/run";
 import styles from "./RunStatsGrid.module.css";
@@ -15,14 +15,20 @@ export interface itfRunStatsGridProps {
     stats: typRunStats | null;
     /** 미리보기면 "복사 예정"으로 표시한다 */
     dryRun: boolean;
+    /** 진행 중 실행이면 남은 시간을 계산값("계산 중" 포함)으로 보여 준다 */
+    live?: boolean;
 }
+
+const propsDefault = {
+    live: false,
+} satisfies Partial<itfRunStatsGridProps>;
 
 function f_Count(n: number): string {
     return n.toLocaleString("ko-KR");
 }
 
 export default function RunStatsGrid(props: itfRunStatsGridProps) {
-    const { stats, dryRun } = props;
+    const { stats, dryRun, live = propsDefault.live } = props;
 
     // ========== 내부 변수 (_V) ==========
     const percent = progressPercent(stats);
@@ -44,7 +50,7 @@ export default function RunStatsGrid(props: itfRunStatsGridProps) {
         ["삭제", f_Count(stats.deletes)],
         ["오류", f_Count(stats.errors)],
         ["속도", stats.speedBps === null ? "-" : `${formatBytes(stats.speedBps)}/s`],
-        ["남은 시간", stats.etaSeconds === null ? "-" : formatDuration(stats.etaSeconds * 1000)],
+        ["남은 시간", etaText(stats, live)],
         ["경과", formatDuration(stats.elapsedMs)],
     ];
 
