@@ -219,6 +219,10 @@
 - 검증: `pnpm run check`(단위 1198), `format:check`, `test:int` 71(+19 skip), Drive 수용 14/14
 - 남은 것: GCS `directory_markers` 반영 여부(R-4) 미검증. `gdrive-test`가 rclone 공용 client_id를 써서 2026년 중 중단 예정(개인 client_id 권장)
 
+[TASK_030] : (2026-11-04) AGENTS.md 지침 최적화 — 2장 실행 환경 문구를 실제와 맞춤(WSL에도 node v24·pnpm이 있고 이 체크아웃의 node_modules는 linux-x64 바이너리: 설치한 환경에서 실행, Windows GUI·작업 스케줄러 명령만 PowerShell), 2·3·4장 중복 정리(GCS·Drive 수용 규칙은 4.8로, scripts/dev·playwright 설명은 2장·10장 참조, 도구가 강제하는 포맷·import·접두사는 10장 참조, E2E 빌드 선행 문구는 test:e2e가 빌드 포함으로 수정), 강조 표기 제거. 165 → 163줄, 안전 규칙(1장) 원문 유지
+
+[TASK_031] : (2026-11-04) 공통 자산 인덱스 재생성 — docs/code-asset-index/COMPONENTS.md 355 → 449건(UI 10·훅 5·유틸 190·서비스 21·타입 223, ZBCTabs·useDebouncedValue·useVirtualRows 등 신규 반영), 정의 파일 링크를 출력 위치 기준 상대경로(../../src/…)로 변경, 링크 88개 모두 존재 확인
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
