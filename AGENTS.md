@@ -7,7 +7,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 - 답변은 한국어로 한다.
 - 같은 내용을 반복하지 않는다. 반복하게 되면 멈추고 다시 진행한다.
-- 실행 환경(Windows Command, Windows PowerShell, Linux)을 확인하고 그에 맞게 실행한다. 프로젝트 명령은 2장을 따른다.
+- 실행 환경(Windows Command, Windows PowerShell, Linux/WSL)을 확인하고 그에 맞게 실행한다. 프로젝트 명령은 2장을 따른다.
 
 ## 1. 안전 규칙 (예외 없음)
 
@@ -20,17 +20,17 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ## 2. 명령
 
-- Node·pnpm은 Windows에 설치되어 있다. 아래 명령은 Windows PowerShell에서 실행한다 (WSL에는 node가 없다).
+- Node·pnpm은 Windows와 WSL 양쪽에 있다. `node_modules`는 설치한 OS용 바이너리(Electron·oxlint·oxfmt·rolldown)를 받으므로 `pnpm install`한 환경에서 명령을 실행한다. Windows GUI·작업 스케줄러가 필요한 명령(`test:e2e`, `build:win`, `smoke:installer`, schtasks 프로브)은 Windows PowerShell에서 실행한다.
 - 패키지 매니저는 pnpm이다 (`pnpm-lock.yaml`). npm · yarn · bun으로 설치하지 않는다.
 - `pnpm install` — 의존성 설치. 끝나면 `postinstall`이 Electron 실행 파일을 내려받는다
 - `pnpm run dev` — 개발 실행
 - `pnpm run check` — typecheck + lint(oxlint, eslint) + 단위 테스트 (커밋 전 필수, 포맷 검사는 포함 안 됨)
 - `pnpm run format` — oxfmt로 포맷 (`pnpm run format:check`는 검사만)
 - `pnpm run test:int` — 실제 rclone으로 통합 테스트 (rclone이 없으면 이유를 출력하고 건너뜀)
-  - GCS 수용 테스트는 `RCLONEGUI_TEST_GCS_CONFIG`·`RCLONEGUI_TEST_GCS_REMOTE`·`RCLONEGUI_TEST_GCS_BUCKET`이 모두 있을 때만 돈다(없으면 이유 출력 후 skip, 이름이 `rclonegui-test-`로 시작하지 않으면 거부)
-  - Google Drive 수용 테스트는 `RCLONEGUI_TEST_DRIVE_REMOTE`(type = drive인 remote 이름)를 실행 명령에서 줄 때만 돈다(없으면 이유 출력 후 skip, 영구 등록하지 않음). `RCLONEGUI_TEST_DRIVE_CONFIG`는 선택(없으면 rclone 기본 conf). Drive 최상위 `rclonegui-test-it/` 아래 실행별 폴더만 쓰고 그 폴더만 지운다
+  - GCS 수용 테스트: `RCLONEGUI_TEST_GCS_CONFIG`·`RCLONEGUI_TEST_GCS_REMOTE`·`RCLONEGUI_TEST_GCS_BUCKET`이 모두 있을 때만 돈다(없으면 이유 출력 후 skip). 규칙은 4.8
+  - Google Drive 수용 테스트: `RCLONEGUI_TEST_DRIVE_REMOTE`를 실행 명령에서 줄 때만 돈다(영구 등록하지 않음). `RCLONEGUI_TEST_DRIVE_CONFIG`는 선택(없으면 rclone 기본 conf). 규칙은 4.8
   - `RCLONEGUI_TEST_RCLONE` — 테스트에 쓸 rclone 경로, `RCLONEGUI_TEST_WSL=1` — WSL 경로 테스트 실행
-- `pnpm run test:e2e` — `out/` 빌드 + Playwright Electron E2E. Windows GUI 세션이 필요하고, rclone이 없으면 비교·복사 테스트만 건너뜀
+- `pnpm run test:e2e` — `out/` 빌드 후 Playwright Electron E2E. Windows GUI 세션이 필요하고, rclone이 없으면 비교·복사 테스트만 건너뜀
 - `pnpm run build` — `out/`에 빌드, `pnpm start`로 빌드본 실행
 - `pnpm run build:win` — Windows 설치 파일(NSIS x64, 사용자 단위)을 `dist/`에 만든다. 설정은 `electron-builder.yml`
 - `pnpm run dist` — `build:win`과 같음(호환용 이름)
@@ -53,29 +53,27 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 - `src/pages` — 페이지·레이아웃 컴포넌트와 `*.module.css`
 - `src/stores`, `src/lib` — 화면 상태(zustand)와 화면용 도우미
 - `src/shared` — 타입·IPC 계약·zod 스키마 (Node·DOM 의존 금지)
-- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone·schtasks 출력. `tests/integration/gcs-acceptance.test.ts`는 외부 GCS 수용 테스트(4.8), `drive-acceptance.test.ts`는 Google Drive 수용 테스트(4.8), `remote-acceptance.ts`는 외부 remote 수용 테스트 도우미
-- `playwright.config.ts` — Electron E2E 설정(`tests/e2e/**/*.spec.ts`, 임시 userData·`RCLONEGUI_E2E=1`)
+- `tests/unit`, `tests/integration`, `tests/e2e`, `tests/fixtures` — fixtures는 실험 스크립트로 받은 실제 rclone·schtasks 출력. `tests/integration/gcs-acceptance.test.ts`·`drive-acceptance.test.ts`는 외부 remote 수용 테스트, `remote-acceptance.ts`는 그 도우미(4.8)
+- `playwright.config.ts` — Electron E2E 설정(10장)
 - `docs/guide` — 신규 파일 작성 가이드 (`File.tsx.guide`, `File.module.css.guide`)
 - `docs/knowhow/rclone-notes.md`, `docs/knowhow/windows-task-scheduler-notes.md`, `docs/CHANGELOG.md`, `docs/works/`
 - `docs/specs/MVP_SPEC.md` — 설계 기준과 구현 반영 표, `docs/intent/` — intent·spec·plan, `docs/code-asset-index/` — 공통 자산 인덱스
-- `scripts/probes` — rclone·작업 스케줄러 동작 실험, `scripts/dev/drive-app.mjs` — 빌드본·개발 서버·설치본을 임시 프로필로 띄워 조작하는 확인 도구
-- `scripts/dev/installer-smoke.mjs` — 설치본 무인 설치·실행·제거 확인, `scripts/dev/make-icon.mjs` — 앱 아이콘 생성
+- `scripts/probes` — rclone·작업 스케줄러 동작 실험, `scripts/dev` — 확인·설치 스모크·아이콘 도구(2장)
 - `@/`는 어느 프로세스에서나 `src`를 가리킨다 (`electron.vite.config.mts`, `tsconfig.*.json`, `vitest.config.mts`)
 
 ## 4. 코드 컨벤션
 
 ### 4.1 공통
 
-- TypeScript strict, `any` 금지. 외부 입력은 `unknown`으로 받아 zod로 파싱한다.
-- 들여쓰기는 공백 4칸. 문자열은 큰따옴표("")가 기본이고, 작은따옴표('')·백틱(``)은 필요할 때만 쓴다.
-- import는 `@/`를 쓴다. 같은 폴더와 하위 폴더만 `./`를 쓴다 (예: `./sub/x`). 상위 폴더 상대 경로(`../`)는 금지.
+- TypeScript strict. 외부 입력은 `unknown`으로 받아 zod로 파싱한다.
+- 포맷(공백 4칸·큰따옴표)과 import 규칙(`@/`, `../` 금지)은 10장의 도구가 강제한다. 같은 폴더와 하위 폴더만 `./`를 쓴다 (예: `./sub/x`).
 - 파일명 kebab-case, 컴포넌트 `PascalCase.tsx`, 훅 `useXxx`, 단위·통합 테스트 `*.test.ts`, E2E `*.spec.ts`.
 - 식별자와 커밋 타입은 영어, 주석·UI 문구·문서는 한국어.
 - UI 문구는 일어날 일을 쓴다: "동기화" 대신 "대상에 12개 복사, 3개 삭제".
 
 ### 4.2 이름 접두사
 
-- type은 `typ`, interface는 `itf`, class는 `cls` 접두사 (예: `typRow`, `itfProps`, `clsRunner`).
+- type `typ`, interface `itf`, class `cls` 접두사(예: `typRow`, `itfProps`, `clsRunner`)는 ESLint가 강제한다.
 - `f_`는 파일·함수 안에서만 쓰는 함수에 붙인다 (예: `f_ParseLine()`). export하는 함수와 클래스 메서드에는 붙이지 않는다.
 - 이벤트 핸들러는 `h_` 접두사 (예: `h_Submit()`).
 - React 훅(`use*`)과 컴포넌트는 React 규칙을 따른다.
@@ -110,7 +108,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ### 4.7 E2E (`tests/e2e/`)
 
-- `@playwright/test`의 `_electron`으로 `out/` 빌드본을 띄운다. 실행 전 `pnpm run build`가 필요하다.
+- `@playwright/test`의 `_electron`으로 `out/` 빌드본을 띄운다(`pnpm run test:e2e`가 빌드까지 한다).
 - 임시 userData(`RCLONEGUI_USER_DATA`)·임시 `RCLONE_CONFIG`·`RCLONEGUI_E2E=1`을 쓰고, 실제 사용자 폴더·remote에 접근하지 않는다.
 - 화면 조작은 역할·이름·id(`#job-name` 등)로 하고, 확인 창은 `getByRole("dialog")`로 범위를 좁힌다.
 - 테스트마다 renderer 콘솔 오류 0건을 확인한다. rclone이 필요한 테스트는 없으면 이유와 함께 skip한다.
@@ -118,7 +116,7 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 ### 4.8 통합·수용 테스트 (`tests/integration/`)
 
 - 실행 환경은 `run-harness.ts`(`makeEnv`·`waitFinished`)를 재사용한다.
-- 외부 remote 테스트는 환경 변수로 받은 저장소 밖 테스트 전용 rclone.conf와 `rclonegui-test-`로 시작하는 remote·버킷만 쓴다. 실행마다 고유 하위 경로를 쓰고 afterAll에서 정리하며, 버킷 루트는 지우지 않는다.
+- 외부 remote 테스트는 환경 변수로 받은 저장소 밖 테스트 전용 rclone.conf와 `rclonegui-test-`로 시작하는 remote·버킷만 쓴다(그 외 이름은 거부). 실행마다 고유 하위 경로를 쓰고 afterAll에서 정리하며, 버킷 루트는 지우지 않는다.
 - 예외: Google Drive 수용 테스트(`drive-acceptance.test.ts`)는 `RCLONEGUI_TEST_DRIVE_REMOTE`로 명시한 drive 형식 remote 하나와 기본 rclone.conf를 쓸 수 있다. 시작할 때 remote 종류가 drive인지 확인하고, 쓰기·삭제는 `rclonegui-test-it/rclonegui-it-<시각>-<난수>/` 아래만 하며 정확히 그 형식인 경로만 지운다(`rclonegui-test-it`과 Drive 루트는 지우지 않음).
 - 출력·테스트 이름·fixture에 remote·버킷 이름과 키·conf 경로를 남기지 않는다.
 
@@ -139,8 +137,8 @@ rclone을 감싼 Windows용 폴더 비교·동기화 데스크톱 앱. Electron 
 
 ## 7. 작업 내역 (`docs/works/`)
 
-- **`WORKS.md`** — 일일 요약. 하루 작업을 `[YYYY-MM-DD] : 요약` 한 줄로 기록. 새 요청 시 **가장 먼저 읽어** 맥락을 파악한다 (답변 본문에는 출력하지 않음).
-- **`WORKS_HISTORY.md`** — 상세 기록. `[TASK_NNN] : (YYYY-MM-DD) [변경 요약]` 형식. 같은 기능을 다시 고치면 이전 기록을 갱신한다.
+- `WORKS.md` — 일일 요약. 하루 작업을 `[YYYY-MM-DD] : 요약` 한 줄로 기록. 새 요청 시 먼저 읽어 맥락을 파악한다 (답변 본문에는 출력하지 않음).
+- `WORKS_HISTORY.md` — 상세 기록. `[TASK_NNN] : (YYYY-MM-DD) [변경 요약]` 형식. 같은 기능을 다시 고치면 이전 기록을 갱신한다.
 - 오류는 `WORKS_HISTORY.md` Error 섹션에 기록하고, 해결하면 작업 ID와 연결한다. 3개 이상 쌓이면 요약해 압축한다.
 
 ## 8. 커밋
