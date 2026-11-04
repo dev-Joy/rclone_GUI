@@ -50,3 +50,6 @@ Desktop.ini
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# agent
+.zagentset/
