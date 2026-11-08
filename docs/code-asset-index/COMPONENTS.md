@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-04 16:54:25
+- 생성일시: 2026-11-08 16:33:36
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 449 건
+- 총 인덱싱 자산: 463 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -82,6 +82,12 @@
 | `jobListItem` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | jobListItem(job: typJob, opts: { showStatus: boolean }) - 작업 목록 한 줄의 문구 |
 | `missingRemoteNames` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | missingRemoteNames(...) - 기본 conf를 쓰는 작업이 가리키는 remote 중 목록에 없는 이름(FR-25). remotes가 null이면(아직 못 읽음) 표시하지 않는다. 작업별 conf를 쓰는 작업도 확인하지 않는다. |
 | `scheduleSummary` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | scheduleSummary(job: Pick<typJob, "autoSync">) - 자동 실행 요약. 꺼져 있으면 null, 켜져 있으면 "30분마다 · 다음 11-02 10:30", "매일 09:00 · 다음 …", "매주 월·수 09:00 · 다음 …". |
+| `freshPreview` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | freshPreview(...) - 지금 비교 결과 뒤에 끝난 이 작업의 미리보기(없으면 null). startedAt >= compare.createdAt |
+| `jobSteps` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | jobSteps(i: itfJobStepsInput) - ① 비교 → ② 미리보기 → ③ 실행. "current"·"running"은 합쳐 최대 1개 |
+| `previewNotice` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | previewNotice(...) - 계획 패널의 미리보기 한 줄. 비교 결과가 없으면 null. 진행 중 → info "미리보기 중(파일은 바꾸지 않음)" |
+| `relativeTimeText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | relativeTimeText(iso: string, nowMs: number) - "방금"(<1분) / "N분 전"(<60분) / formatLocalDateTime |
+| `runBarText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | runBarText(...) - 하단 실행 막대 문장. 비교 결과 있음 → headline = realRunConfirmText(" (총 …)" 없이), |
+| `workMainPanel` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | workMainPanel(...) - 오른쪽 열에 무엇을 그릴지. 우선순위: 이 작업 실제 실행 진행 중 → "run" / 이 작업 비교 진행 중 → "compare" / |
 | `pathKindBadge` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | pathKindBadge(raw: string) - 입력 원문의 배지. 빈 값은 null, 형식 오류는 { text: "형식 오류", kind: null } |
 | `shortenPath` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | shortenPath(path: string, max = 36) - 긴 경로를 가운데를 "…"로 줄여 앞뒤를 남긴다(작업 목록 표시용). max 이하면 그대로. 앞 ceil((max-1)/2)자, 뒤 floor((max-1)/2)자를 남긴다. |
 | `browserChild` | [`src/lib/remote-browser.ts`](../../src/lib/remote-browser.ts) | browserChild(...) - 현재 경로 아래 폴더 이름 하나를 덧붙인 경로. 이름이 안전하지 않거나 기준 밖이면 null |
@@ -292,6 +298,14 @@
 | `typIntervalUnit` | [`src/lib/job-form.ts`](../../src/lib/job-form.ts) | type typIntervalUnit - 자동 실행 간격 입력 단위 |
 | `typJobFormField` | [`src/lib/job-form.ts`](../../src/lib/job-form.ts) | type typJobFormField - 타입 별칭 정의 |
 | `itfJobListItem` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | interface itfJobListItem - 인터페이스 정의 |
+| `itfJobStep` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfJobStep - 인터페이스 정의 |
+| `itfJobStepsInput` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfJobStepsInput - 인터페이스 정의 |
+| `itfPlanNotice` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfPlanNotice - 인터페이스 정의 |
+| `itfRunBarText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfRunBarText - 인터페이스 정의 |
+| `itfStepLastRun` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfStepLastRun - 이 작업의 마지막으로 끝난 실행(run-store last 중 필요한 것) |
+| `typJobStepId` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typJobStepId - 타입 별칭 정의 |
+| `typJobStepState` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typJobStepState - 타입 별칭 정의 |
+| `typNoticeTone` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typNoticeTone - 타입 별칭 정의 |
 | `itfPathKindBadge` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | interface itfPathKindBadge - 인터페이스 정의 |
 | `itfActivityStop` | [`src/lib/run-view.ts`](../../src/lib/run-view.ts) | interface itfActivityStop - 작업 화면의 공통 중지 컨트롤(INT-002 T-08). 이 작업의 비교·미리보기·실행 중 하나만 멈춘다 |
 | `itfCanStartRunInput` | [`src/lib/run-view.ts`](../../src/lib/run-view.ts) | interface itfCanStartRunInput - 인터페이스 정의 |
