@@ -84,7 +84,7 @@ test("목록에서 지금 실행: 비교 → 삭제 확인(취소·확인) → �
         await dialog.locator("#delete-confirm-large").check();
         await dialog.getByRole("button", { name: "1개 삭제 포함 실행" }).click();
         await expect(
-            page.locator("#job-tabs-panel-run").getByText("동기화 완료", { exact: true }),
+            page.locator("#job-run-panel").getByText("동기화 완료", { exact: true }),
         ).toBeVisible({ timeout: 60_000 });
         expect(existsSync(join(destination, "extra.txt"))).toBe(false);
         expect(existsSync(join(destination, "keep.txt"))).toBe(true);
@@ -128,7 +128,7 @@ test("전체 범위 복사는 원본의 빈 폴더를 대상에 만든다 (AC-9)
         await expect(dialog).toContainText("빈 폴더 2개 생성");
         await dialog.getByRole("button", { name: "복사 실행", exact: true }).click();
         await expect(
-            page.locator("#job-tabs-panel-run").getByText("복사 완료", { exact: true }),
+            page.locator("#job-run-panel").getByText("복사 완료", { exact: true }),
         ).toBeVisible({ timeout: 60_000 });
         expect(existsSync(join(destination, "a.txt"))).toBe(true);
         expect(existsSync(join(destination, "empty", "inner"))).toBe(true);

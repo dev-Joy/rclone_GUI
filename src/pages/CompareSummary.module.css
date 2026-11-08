@@ -64,5 +64,26 @@
             color: var(--muted);
             font-size: 12px;
         }
+
+        /* 세로 배치: 카드를 패널 폭에 맞추고 크기는 오른쪽에 둔다 */
+        &[data-layout="column"] {
+            flex-direction: column;
+            flex-wrap: nowrap;
+
+            .card {
+                flex-direction: row;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 8px;
+                width: 100%;
+                min-width: 0;
+            }
+
+            .bytes {
+                flex: 0 0 auto;
+                font-family: var(--font-mono);
+                text-align: right;
+            }
+        }
     }
 }

@@ -4,7 +4,7 @@
  * 실제 실행은 compare-store의 비교 결과(planToken·삭제 예정 수)와 대량 삭제 확인을 함께 보낸다.
  * 실제 실행이 끝나면 main이 비교 결과를 버리므로 비교 화면을 다시 불러온다.
  * 사전 확인이 비교 결과와 달라 막히면(PLAN_DRIFT) driftNotice로 알린다(PlanDriftModal).
- * "다시 비교"(recompareDrift)는 막힌 작업을 선택하고 비교 탭으로 옮긴 뒤 비교한다(설정·편집 변경 확인을 거친다).
+ * "다시 비교"(recompareDrift)는 막힌 작업을 선택하고 작업 화면으로 옮긴 뒤 비교한다(설정·편집 변경 확인을 거친다).
  * 자동 실행(trigger scheduler)의 결과는 main이 app:notify로 알리므로 여기서 토스트를 띄우지 않는다.
  *
  * @author dev-Joy 2026-10-28
@@ -48,15 +48,15 @@ interface itfRunState {
     last: itfFinishedRun | null;
     /** run:start 응답을 기다리는 작업 */
     startingJobId: string | null;
-    /** 마지막 시작 실패(작업별 표시용) */
-    error: { jobId: string; payload: typAppErrorPayload } | null;
+    /** 마지막 시작 실패(작업·종류별 표시용). dryRun = 미리보기 시작 실패, at = 실패 시각(ISO) */
+    error: { jobId: string; dryRun: boolean; at: string; payload: typAppErrorPayload } | null;
     /** 사전 확인 불일치(PLAN_DRIFT)로 막힌 실행. 사용자가 닫을 때까지 */
     driftNotice: typRunRecord | null;
     /** 미리보기(dryRun) 또는 실제 실행 시작. confirm은 삭제 확인 모달의 대량 삭제 확인. 시작했으면 true */
     start: (jobId: string, dryRun: boolean, confirm?: itfRunConfirm) => Promise<boolean>;
     dismissDrift: () => void;
     /**
-     * PLAN_DRIFT 안내의 "다시 비교": 안내를 닫고, 막힌 작업을 선택·작업 화면 비교 탭으로 옮긴 뒤 비교한다.
+     * PLAN_DRIFT 안내의 "다시 비교": 안내를 닫고, 막힌 작업을 선택·작업 화면으로 옮긴 뒤 비교한다.
      * 설정 화면이나 다른 작업에 저장하지 않은 변경이 있으면 버리기 확인(leaveSettings·guard)을 거친다.
      */
     recompareDrift: () => void;
@@ -171,7 +171,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
             const r = await f_Call(getApi().run.start(f_Input(jobId, dryRun, confirm)));
             set({ startingJobId: null });
             if (r.ok) return true;
-            set({ error: { jobId, payload: r.error } });
+            set({ error: { jobId, dryRun, at: new Date().toISOString(), payload: r.error } });
             useToastStore
                 .getState()
                 .push(r.error.code === "BUSY" ? "warning" : "error", r.error.message);
@@ -194,7 +194,7 @@ export const useRunStore = create<itfRunState>((set, get) => {
                 useJobEditorStore.getState().guard(() => {
                     useJobsStore.getState().select(jobId);
                     ui.setView("job");
-                    ui.setTab("compare");
+                    ui.setPane("work");
                     void useCompareStore.getState().run(jobId);
                 }),
             );

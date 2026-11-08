@@ -1,5 +1,5 @@
 /**
- * 실제 실행 확인 흐름 공용 훅 (INT-002 T-04, spec Q7). 작업 화면 헤더와 작업 목록이 같이 쓴다.
+ * 실제 실행 확인 흐름 공용 훅 (INT-002 T-04, spec Q7). 작업 화면 실행 막대와 작업 목록이 같이 쓴다.
  *
  * - ask: 화면에 있는 그 작업의 비교 결과로 확인 창을 연다(작업 화면의 실행 버튼).
  * - compareThenAsk: 작업을 선택하고 비교한 뒤 확인 창을 연다(작업 목록의 "지금 실행").
@@ -37,12 +37,12 @@ export interface itfRunFlowPending {
 
 export interface itfRunFlow {
     pending: itfRunFlowPending | null;
-    /** 화면의 비교 결과로 확인 창(작업 화면 헤더) */
+    /** 화면의 비교 결과로 확인 창(작업 화면 실행 막대) */
     ask: (jobId: string) => void;
     /** 선택 → 비교 → 확인 창(작업 목록) */
     compareThenAsk: (jobId: string) => void;
     cancel: () => void;
-    /** 실행 탭으로 옮기고 수동 실제 실행을 시작한다 */
+    /** 작업 화면으로 옮기고 수동 실제 실행을 시작한다(진행·결과는 같은 화면 오른쪽 열) */
     confirm: (confirm?: itfRunConfirm) => void;
 }
 
@@ -133,7 +133,7 @@ export function useRunFlow(): itfRunFlow {
             useJobEditorStore.getState().guard(() => {
                 useJobsStore.getState().select(jobId);
                 ui.setView("job");
-                ui.setTab("compare");
+                ui.setPane("work");
                 void f_CompareThenAsk(jobId);
             }),
         );
@@ -143,7 +143,7 @@ export function useRunFlow(): itfRunFlow {
         const id = pendingJobId;
         setPendingJobId(null);
         if (id === null) return;
-        useUiStore.getState().setTab("run");
+        useUiStore.getState().setPane("work");
         void useRunStore.getState().start(id, false, c);
     };
 

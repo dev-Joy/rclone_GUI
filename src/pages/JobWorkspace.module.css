@@ -43,6 +43,15 @@
             white-space: nowrap;
         }
 
+        .headerRow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-width: 0;
+        }
+
         .actions {
             display: flex;
             flex-wrap: wrap;
@@ -50,31 +59,56 @@
             gap: 6px;
         }
 
-        .spacer {
-            flex: 1 1 auto;
+        /* ⋯ 메뉴(복제·삭제): 네이티브 details 디스클로저. summary가 list-item이 아니라 표식은 안 보인다 */
+        .more {
+            position: relative;
         }
 
-        /* 단계 묶음(1단계 비교·미리보기 → 2단계 실행) */
-        .step {
-            display: flex;
+        .moreButton {
+            display: inline-flex;
             align-items: center;
-            gap: 6px;
-            min-width: 0;
-            margin: 0;
-            padding: 0;
-            border: 0;
+            justify-content: center;
+            min-width: 32px;
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-weight: 600;
+            line-height: 1.5;
+            list-style: none;
+            cursor: pointer;
+
+            &:hover {
+                border-color: var(--accent);
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: 1px;
+            }
         }
 
-        .arrow {
-            color: var(--muted);
+        .more[open] > .moreButton {
+            background: var(--accent-weak);
         }
 
-        .reason {
-            display: block;
-            margin: 0;
-            color: var(--muted);
-            font-size: 12px;
-            text-align: right;
+        .moreMenu {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 120px;
+            padding: 6px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+
+            :global(.zbcButton) {
+                justify-content: flex-start;
+            }
         }
 
         .panel {

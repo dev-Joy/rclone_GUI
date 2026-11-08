@@ -1,6 +1,7 @@
 /**
  * Electron 스모크 E2E. 임시 userData로 앱을 띄워 창·preload API·온보딩 셸을 확인하고,
  * 새 작업을 저장한 뒤 앱을 다시 띄워 작업과 설정 화면이 유지되는지 본다.
+ * 작업이 없을 때 빈 화면의 ‘새 작업 만들기’로 저장하면 작업 설정에 머무는지 본다.
  * 실제 사용자 데이터·remote는 쓰지 않는다.
  *
  * @author dev-Joy 2026-10-29
@@ -100,6 +101,31 @@ test("앱을 다시 띄워도 저장한 작업과 설정 화면이 열린다", a
         await expect(page.getByText("로그 보관 일수")).toBeVisible();
         await nav.getByRole("button", { name: "작업" }).click();
         await expect(page.locator("#job-name")).toHaveValue(JOB_NAME);
+
+        expectNoConsoleErrors(harness.consoleErrors);
+    } finally {
+        await harness.close();
+    }
+});
+
+test("작업이 없을 때 빈 화면의 새 작업 만들기로 저장하면 작업 설정에 머문다", async () => {
+    // 앞 테스트가 root를 지우므로 이 테스트의 원본·대상은 앱 임시 폴더 안에 만든다
+    const harness = await launchApp();
+    try {
+        const { page } = harness;
+        const firstSource = join(harness.paths.root, "source");
+        const firstDestination = join(harness.paths.root, "destination");
+        mkdirSync(firstSource, { recursive: true });
+        mkdirSync(firstDestination, { recursive: true });
+        await waitForApp(page);
+        await page.getByRole("button", { name: "새 작업 만들기", exact: true }).click();
+        await page.locator("#job-name").fill("E2E 첫 작업");
+        await page.locator("#job-source").fill(firstSource);
+        await page.locator("#job-destination").fill(firstDestination);
+        await page.getByRole("button", { name: "저장", exact: true }).click();
+        await expect(page.getByText("작업을 저장했습니다.")).toBeVisible();
+        await expect(page.locator("#job-back")).toBeVisible();
+        await expect(page.locator("#job-name")).toHaveValue("E2E 첫 작업");
 
         expectNoConsoleErrors(harness.consoleErrors);
     } finally {

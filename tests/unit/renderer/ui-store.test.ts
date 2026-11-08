@@ -49,3 +49,13 @@ describe("ui-store 로그인 시 시작 안내 (INT-002 T-06)", () => {
         expect(f_Ui().loginHintShown).toBe(true);
     });
 });
+
+describe("ui-store 작업 화면 안 화면(pane)", () => {
+    it("처음에는 작업 화면이고, setPane으로 이력·작업 설정을 연다", () => {
+        expect(f_Ui().pane).toBe("work");
+        f_Ui().setPane("history");
+        expect(f_Ui().pane).toBe("history");
+        f_Ui().setPane("edit");
+        expect(f_Ui().pane).toBe("edit");
+    });
+});

@@ -48,7 +48,7 @@ export default function JobSidebar() {
     const settings = useSettingsStore((s) => s.settings);
     const view = useUiStore((s) => s.view);
     const setView = useUiStore((s) => s.setView);
-    const setTab = useUiStore((s) => s.setTab);
+    const setPane = useUiStore((s) => s.setPane);
     const leaveSettings = useUiStore((s) => s.leaveSettings);
     const compareActive = useCompareStore((s) => s.active);
     const compareRunningJobId = useCompareStore((s) => s.runningJobId);
@@ -75,7 +75,7 @@ export default function JobSidebar() {
                 select(null);
                 openNew(settings);
                 setView("job");
-                setTab("edit");
+                setPane("edit");
             }),
         );
     };
@@ -92,6 +92,7 @@ export default function JobSidebar() {
             guard(() => {
                 select(id);
                 setView("job");
+                setPane("work");
             }),
         );
     };

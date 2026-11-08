@@ -1,5 +1,5 @@
 /**
- * 화면 전환 상태 (zustand): 작업 화면 / 설정 화면, 작업 화면의 탭.
+ * 화면 전환 상태 (zustand): 작업 화면 / 설정 화면, 작업 화면 안 화면(작업·이력·작업 설정).
  * 라우터 없이 이 값으로 전환한다. 메모리에만 둔다(재시작 시 작업 화면).
  * 설정 화면에 저장하지 않은 변경이 있으면 화면을 떠나기 전에 확인한다(leaveSettings).
  * 로그인 시 시작 안내(자동 실행을 처음 켤 때)는 세션당 한 번만 보인다(loginHintShown).
@@ -11,12 +11,13 @@
 import { create } from "zustand";
 
 export type typAppView = "job" | "settings";
-export type typJobTab = "compare" | "run" | "history" | "edit";
+/** 작업 화면 안의 화면: 작업(비교·미리보기·실행) / 이력 / 작업 설정 */
+export type typJobPane = "work" | "history" | "edit";
 
 interface itfUiState {
     view: typAppView;
-    /** 작업 화면 탭. 새 작업에서는 compare·run·history 대신 edit로 보인다 */
-    tab: typJobTab;
+    /** 작업 화면 안 화면. 새 작업에서는 항상 edit로 보인다 */
+    pane: typJobPane;
     /** 설정 화면에 저장하지 않은 변경이 있는지 (SettingsPage가 알려 준다) */
     settingsDirty: boolean;
     /** 설정 변경 버리기 확인 대기 중인 이동 */
@@ -24,7 +25,7 @@ interface itfUiState {
     /** 이번 세션에 로그인 시 시작 안내를 보였는지 */
     loginHintShown: boolean;
     setView: (v: typAppView) => void;
-    setTab: (t: typJobTab) => void;
+    setPane: (p: typJobPane) => void;
     setSettingsDirty: (dirty: boolean) => void;
     /** 설정 화면에서 떠나는 이동: 변경이 있으면 보관(확인 모달), 아니면 즉시 실행 */
     leaveSettings: (action: () => void) => void;
@@ -36,12 +37,12 @@ interface itfUiState {
 
 export const useUiStore = create<itfUiState>((set, get) => ({
     view: "job",
-    tab: "edit",
+    pane: "work",
     settingsDirty: false,
     pendingLeave: null,
     loginHintShown: false,
     setView: (view) => set({ view }),
-    setTab: (tab) => set({ tab }),
+    setPane: (pane) => set({ pane }),
     setSettingsDirty: (settingsDirty) => set({ settingsDirty }),
     leaveSettings: (action) => {
         const s = get();

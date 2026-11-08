@@ -29,7 +29,7 @@ test.afterAll(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-test("요일 지정 예약 저장 → 목록 표시·로그인 안내, 단계 탭 순서와 중지 버튼", async () => {
+test("요일 지정 예약 저장 → 목록 표시·로그인 안내, 단계 막대 순서와 중지 버튼", async () => {
     const source = join(root, "source");
     const destination = join(root, "destination");
     mkdirSync(source, { recursive: true });
@@ -76,14 +76,16 @@ test("요일 지정 예약 저장 → 목록 표시·로그인 안내, 단계 �
         await expect(row).toContainText("매주 월·수 09:00");
         await expect(page.getByText("자동 · 매주 월·수 09:00")).toBeVisible();
 
-        // 단계 탭 순서, 대기 중에는 중지 버튼 없음, 워크스페이스에 "…취소" 버튼 없음
+        // 단계 막대 순서, 보조 화면 버튼, 대기 중에는 중지 버튼 없음, 워크스페이스에 "…취소" 버튼 없음
         const section = page.locator("section[aria-labelledby='job-title']");
-        await expect(section.getByRole("tab")).toHaveText([
-            "비교·미리보기",
-            "실행",
-            "결과·이력",
-            "작업 설정",
-        ]);
+        await section.locator("#job-back").click();
+        const steps = section.getByRole("list", { name: "진행 단계" }).getByRole("listitem");
+        await expect(steps).toHaveCount(3);
+        await expect(steps.nth(0)).toContainText("비교");
+        await expect(steps.nth(1)).toContainText("미리보기");
+        await expect(steps.nth(2)).toContainText("실행");
+        await expect(section.locator("#job-open-history")).toBeVisible();
+        await expect(section.locator("#job-open-edit")).toBeVisible();
         await expect(page.locator("#job-stop")).toHaveCount(0);
         await expect(
             section.getByRole("button", { name: /^(비교|미리보기|실행) 취소$/ }),

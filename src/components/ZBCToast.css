@@ -7,7 +7,8 @@
 .zbcToast {
     position: fixed;
     right: 16px;
-    bottom: 16px;
+    /* 하단 고정 막대(작업 화면 실행 막대 등)가 있으면 그 화면이 값을 올려 버튼을 가리지 않게 한다 */
+    bottom: var(--zbc-toast-bottom, 16px);
     z-index: 1000;
     display: flex;
     flex-direction: column;

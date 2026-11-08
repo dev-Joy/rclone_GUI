@@ -217,11 +217,13 @@ export function dryRunHeadline(s: itfDryRunSummary): string {
  * 실제 실행 확인 문구(비교 결과 기준). 예: "대상에 3개 복사, 1개 덮어씀 (총 1.2 MB)".
  * 전체 범위면 "빈 폴더 N개 생성", sync면 "폴더 N개 삭제"도 붙인다.
  * 대상이 빈 폴더를 만들 수 없으면(false) "빈 폴더 N개는 만들 수 없음"으로 쓴다(INT-003 FR-31).
+ * withTotal이 false면 " (총 …)" 꼬리를 붙이지 않는다(작업 화면 하단 실행 막대).
  */
 export function realRunConfirmText(
     s: itfCompareSummary,
     mode: typRunMode,
     destCanHaveEmptyDirs: boolean | null = null,
+    withTotal = true,
 ): string {
     const parts: string[] = [];
     if (s.createFiles > 0) parts.push(`대상에 ${s.createFiles}개 복사`);
@@ -236,6 +238,7 @@ export function realRunConfirmText(
     }
     if (mode === "sync" && s.deleteDirs > 0) parts.push(`폴더 ${s.deleteDirs}개 삭제`);
     if (parts.length === 0) return "바뀌는 파일이 없습니다.";
+    if (!withTotal) return parts.join(", ");
     return `${parts.join(", ")} (총 ${formatBytes(s.transferBytes)})`;
 }
 

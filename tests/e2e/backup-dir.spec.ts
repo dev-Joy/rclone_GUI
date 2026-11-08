@@ -133,7 +133,7 @@ test("실행: 오류 무시 + 백업 폴더 → 삭제 확인 창 안내 → 지
         await dialog.locator("#delete-confirm-large").check();
         await dialog.getByRole("button", { name: "1개 삭제 포함 실행" }).click();
 
-        const runPanel = page.locator("#job-tabs-panel-run");
+        const runPanel = page.locator("#job-run-panel");
         await expect(runPanel.getByText("동기화 완료", { exact: true })).toBeVisible({
             timeout: 60_000,
         });

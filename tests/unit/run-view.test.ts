@@ -409,6 +409,12 @@ describe("문구", () => {
         expect(realRunConfirmText(s, "copy", false)).not.toContain("빈 폴더 2개 생성");
         expect(realRunConfirmText(s, "copy", null)).toContain("빈 폴더 2개 생성");
     });
+
+    it("realRunConfirmText: withTotal=false면 ‘(총 …)’ 꼬리를 붙이지 않는다", () => {
+        expect(realRunConfirmText(f_Summary(), "copy", null, false)).toBe(
+            "대상에 1개 복사, 1개 덮어씀",
+        );
+    });
 });
 
 function f_RunSnap(over: Record<string, unknown> = {}) {

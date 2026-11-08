@@ -102,7 +102,7 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 | 동기화 범위 (§8.1) | 파일만 | 작업 `scope`: `files`(기본, `lsjson --files-only`) / `all`(폴더 포함 목록, copy·sync·dry-run에 `--create-empty-src-dirs`). 비교 결과 `createDirs`·`deleteDirs`·`dirChanges`, 실행 입력 `confirmedDeleteDirs`, 계획 토큰 v3에 scope·폴더 수. `--max-delete`는 파일 삭제 수만(rclone이 폴더를 세지 않음), 폴더 삭제는 확인 수·사전 확인(`remove directory`·`deletedDirs`)으로 맞춤. 자동 실행의 삭제 조건은 파일+폴더 합산 |
 | 스케줄러 (§10) | 균등 interval | `autoSync.kind`: `interval`(분)·`daily`(HH:MM)·`weekly`(요일 마스크 + HH:MM), 로컬 시각·DST(`src/shared/schedule.ts`). 시작 즉시 `nextOccurrence`로 다음 예약 선기록, 끝나면 `nextAfterFinish`(daily·weekly 성공 시 1시간 안 정시 건너뜀). 놓친 예약은 시작·재개 60초 뒤 1회. 게이트·`startAuto`는 그대로 |
 | 종료·로그인 안내 | - | 트레이 `종료`에서만 다음 예약 경고(실행 중이면 기존 확인 창만), 자동 실행을 켤 때 로그인 시 시작이 꺼져 있으면 안내 |
-| 화면 (§13) | 비교·실행·이력 탭 | 탭 `비교·미리보기` → `실행` → `결과·이력` → `작업 설정`, 공통 중지 막대(`JobActivityBar`, 버튼 하나). 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
+| 화면 (§13) | 비교·실행·이력 탭 | 탭 없음. 작업 화면(`JobWorkView`): 위쪽 단계 막대(`JobStepBar`, ① 비교 → ② 미리보기 → ③ 실행, `@/lib/job-steps`), 왼쪽 ‘대상에 일어날 일’ 패널(`ComparePlanPanel`: 요약 카드·안내·미리보기 일치 한 줄·비교 방식), 오른쪽 파일 목록(`CompareView`) 또는 실제 실행 진행·결과(`RunView real`), 하단 고정 실행 막대(`JobRunBar`). 이력·작업 설정은 헤더 버튼으로 여는 보조 화면(`ui-store` `pane`), 복제·삭제는 ‘⋯’. 공통 중지(`JobActivityBar`, 버튼 하나)는 작업 화면은 실행 막대 안, 보조 화면은 헤더 아래 한 곳. 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
 | 이력 (§11.1) | `history.json` | SQLite `run_records` |
 | cron (§2.2) | Post-MVP | 매일·요일 예약은 구현, cron 표현은 계속 미지원 |
 | 패키징 (§17) | - | NSIS 설치본 하나, portable exe 없음(실행 파일 위치가 바뀌면 로그인 항목·예약 경로가 깨짐) |

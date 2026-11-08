@@ -63,6 +63,7 @@ export default function HomePage(props: itfHomePageProps) {
     const editorOpen = useJobEditorStore((s) => s.open);
     const openNew = useJobEditorStore((s) => s.openNew);
     const view = useUiStore((s) => s.view);
+    const setPane = useUiStore((s) => s.setPane);
     const subscribeCompare = useCompareStore((s) => s.subscribe);
     const showCompare = useCompareStore((s) => s.show);
     const subscribeRun = useRunStore((s) => s.subscribe);
@@ -129,7 +130,9 @@ export default function HomePage(props: itfHomePageProps) {
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_New = () => {
-        if (settings) openNew(settings);
+        if (!settings) return;
+        openNew(settings);
+        setPane("edit");
     };
 
     let content;

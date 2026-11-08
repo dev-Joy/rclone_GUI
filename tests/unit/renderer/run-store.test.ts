@@ -170,13 +170,19 @@ describe("run-store start", () => {
     it("실패하면 error(작업별)와 토스트, BUSY는 경고", async () => {
         fake.setRunStartResult({ ok: false, error: { code: "BUSY", message: "바쁨" } });
         expect(await f_S().start(J1, true)).toBe(false);
-        expect(f_S().error).toEqual({ jobId: J1, payload: { code: "BUSY", message: "바쁨" } });
+        expect(f_S().error).toMatchObject({
+            jobId: J1,
+            dryRun: true,
+            payload: { code: "BUSY", message: "바쁨" },
+        });
+        expect(Number.isNaN(Date.parse(f_S().error?.at ?? ""))).toBe(false);
         expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ level: "warning" });
         fake.setRunStartResult({
             ok: false,
             error: { code: "PLAN_REQUIRED", message: "먼저 비교" },
         });
         await f_S().start(J1, false);
+        expect(f_S().error).toMatchObject({ jobId: J1, dryRun: false });
         expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ level: "error" });
     });
 });
@@ -390,22 +396,22 @@ describe("run-store recompareDrift (다시 비교)", () => {
         error: { code: "PLAN_DRIFT", message: "바뀜" },
     });
 
-    /** 막힌 작업 J1과 지금 보고 있는 작업 J2(작업 설정 탭) */
+    /** 막힌 작업 J1과 지금 보고 있는 작업 J2(작업 설정 화면) */
     function f_Setup() {
         const j1 = makeJob({ id: J1, name: "작업" });
         const j2 = makeJob({ id: J2, name: "다른 작업" });
         useJobsStore.setState({ jobs: [j1, j2], selectedJobId: J2 });
         useJobEditorStore.getState().openJob(j2);
-        useUiStore.setState({ view: "job", tab: "edit" });
+        useUiStore.setState({ view: "job", pane: "edit" });
         useRunStore.setState({ driftNotice: DRIFT });
     }
 
-    it("다른 작업을 보고 있어도 막힌 작업을 선택하고 비교 탭으로 옮긴 뒤 그 작업을 비교한다", () => {
+    it("다른 작업을 보고 있어도 막힌 작업을 선택하고 작업 화면으로 옮긴 뒤 그 작업을 비교한다", () => {
         f_Setup();
         f_S().recompareDrift();
         expect(f_S().driftNotice).toBeNull();
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
-        expect(useUiStore.getState()).toMatchObject({ view: "job", tab: "compare" });
+        expect(useUiStore.getState()).toMatchObject({ view: "job", pane: "work" });
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });
 
@@ -416,7 +422,7 @@ describe("run-store recompareDrift (다시 비교)", () => {
         expect(f_S().driftNotice).toBeNull();
         expect(useJobEditorStore.getState().pendingAction).not.toBeNull();
         expect(useJobsStore.getState().selectedJobId).toBe(J2);
-        expect(useUiStore.getState().tab).toBe("edit");
+        expect(useUiStore.getState().pane).toBe("edit");
         expect(f_CompareRuns()).toEqual([]);
         useJobEditorStore.getState().cancelDiscard();
         expect(useJobEditorStore.getState().draft?.name).toBe("편집 중");
@@ -426,7 +432,7 @@ describe("run-store recompareDrift (다시 비교)", () => {
         f_S().recompareDrift();
         useJobEditorStore.getState().confirmDiscard();
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
-        expect(useUiStore.getState().tab).toBe("compare");
+        expect(useUiStore.getState().pane).toBe("work");
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });
 
@@ -437,7 +443,7 @@ describe("run-store recompareDrift (다시 비교)", () => {
         expect(useUiStore.getState().pendingLeave).not.toBeNull();
         expect(f_CompareRuns()).toEqual([]);
         useUiStore.getState().confirmLeave();
-        expect(useUiStore.getState()).toMatchObject({ view: "job", tab: "compare" });
+        expect(useUiStore.getState()).toMatchObject({ view: "job", pane: "work" });
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });

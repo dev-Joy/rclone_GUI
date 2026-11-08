@@ -145,12 +145,13 @@ export async function createJob(page: Page, job: itfJobInput): Promise<void> {
     await expect(page.getByText("작업을 저장했습니다.")).toBeVisible();
 }
 
-/** 작업 목록에서 이름으로 작업을 고른다 */
+/** 작업 목록에서 이름으로 작업을 고르고 작업 설정을 연다 */
 export async function openJob(page: Page, name: string): Promise<void> {
     await page
         .locator('nav[aria-labelledby="jobs-title"]')
         .getByRole("button", { name: new RegExp(name) })
         .click();
+    await page.locator("#job-open-edit").click();
     await expect(page.locator("#job-name")).toHaveValue(name);
 }
 

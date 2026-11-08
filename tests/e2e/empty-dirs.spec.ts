@@ -67,6 +67,7 @@ test("빈 폴더를 만들 수 없는 대상: 편집기 경고, 비교 안내, �
         await expect(warning).toBeVisible({ timeout: 15_000 });
 
         const workspace = page.locator("section[aria-labelledby='job-title']");
+        await workspace.locator("#job-back").click();
         const compareButton = workspace.getByRole("button", { name: "비교", exact: true });
         await expect(compareButton).toBeEnabled();
         await compareButton.click();

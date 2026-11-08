@@ -62,6 +62,8 @@ test("비교 요약을 확인하고 복사한 뒤 이력이 남는다", async ()
         await expect(page.locator("#job-scope-empty-dir-warning")).toHaveCount(0);
 
         const workspace = page.locator("section[aria-labelledby='job-title']");
+        // 새 작업은 저장 뒤에도 작업 설정에 머문다 → 작업 화면으로 옮겨 비교한다
+        await workspace.locator("#job-back").click();
         await workspace.getByRole("button", { name: "비교", exact: true }).click();
 
         await expect(page.getByRole("list", { name: "비교 요약" })).toBeVisible();
@@ -77,7 +79,7 @@ test("비교 요약을 확인하고 복사한 뒤 이력이 남는다", async ()
         await expect(dialog).toBeVisible();
         await dialog.getByRole("button", { name: "복사 실행", exact: true }).click();
 
-        const runPanel = page.locator("#job-tabs-panel-run");
+        const runPanel = page.locator("#job-run-panel");
         await expect(runPanel.getByText("복사 완료", { exact: true })).toBeVisible({
             timeout: 60_000,
         });
@@ -88,7 +90,7 @@ test("비교 요약을 확인하고 복사한 뒤 이력이 남는다", async ()
         // 복사 모드는 대상에만 있는 파일을 지우지 않는다
         expect(readFileSync(join(destination, "extra.txt"), "utf8")).toBe("keep me");
 
-        await page.getByRole("tab", { name: "이력" }).click();
+        await workspace.getByRole("button", { name: "이력", exact: true }).click();
         const history = page.getByRole("table", { name: "실행 이력" });
         await expect(history).toBeVisible();
         const first = history.locator("tbody tr").first();

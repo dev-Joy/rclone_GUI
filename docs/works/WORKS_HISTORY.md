@@ -223,6 +223,14 @@
 
 [TASK_031] : (2026-11-04) 공통 자산 인덱스 재생성 — docs/code-asset-index/COMPONENTS.md 355 → 449건(UI 10·훅 5·유틸 190·서비스 21·타입 223, ZBCTabs·useDebouncedValue·useVirtualRows 등 신규 반영), 정의 파일 링크를 출력 위치 기준 상대경로(../../src/…)로 변경, 링크 88개 모두 존재 확인
 
+[TASK_032] : (2026-11-08) 작업 화면 탭 제거 — 단계 막대·계획 패널·하단 실행 막대 워크벤치(Stitch 「rcloneGUI - 비교·미리보기 (세부 규격 반영)」 구현, renderer 전용)
+- 화면: `JobWorkspace`의 탭(비교·미리보기/실행/결과·이력/작업 설정)을 없애고 헤더(이력·작업 설정·⋯ 메뉴에 복제·삭제) + `JobWorkView`(`JobStepBar` ① 비교 → ② 미리보기 → ③ 실행, 왼쪽 `ComparePlanPanel` ‘대상에 일어날 일’ 세로 카드·안내·비교 방식, 오른쪽 파일 목록 또는 실제 실행 `RunView real`, 하단 고정 `JobRunBar` 일어날 일 문장·다시 비교·미리보기·실행 / 활동 중이면 진행·중지)로 재구성. 이력·작업 설정은 `pane`(work·history·edit) 보조 화면과 `#job-back`
+- 로직: 신규 `src/lib/job-steps.ts`(`jobSteps`·`previewNotice`·`runBarText`·`workMainPanel`·`freshPreview`·`relativeTimeText`), `ui-store` `tab`→`pane`(사용처 JobSidebar·HomePage·use-run-flow·run-store 갱신), run-store `error`에 `dryRun`·`at`(미리보기 오류는 ‘미리보기 자세히’, 실제 실행 시작 오류는 오른쪽 실행 패널), `realRunConfirmText` `withTotal` 인자, `CompareSummary` `layout` prop, `JobActivityBar` 진행률 %. 토스트가 하단 막대를 가리지 않게 `ZBCToast.css` `--zbc-toast-bottom` + `JobRunBar` 높이 측정(ResizeObserver, 언마운트 시 제거). 안전 게이트(canStartCompare/canStartRun·useRunFlow·RunConfirmModals·PlanDriftModal·삭제 확인)와 main·preload·shared 변경 0건. Stitch의 ‘목록|폴더’ 전환은 폴더 보기 기능이 없어 만들지 않음
+- 테스트: 단위 `job-steps.test.ts` 신규, run-store·ui-store·run-view 갱신; E2E 탭 셀렉터 → `#job-back`·`#job-run-panel`·단계 막대, smoke에 빈 화면 새 작업 저장 후 작업 설정 유지 케이스 추가
+- 문서: CHANGELOG 1줄, MVP_SPEC 105행, `tsconfig.node.json`에 job-steps 등록
+- 검증(Windows 클론 D:\dev-Joy\rcloneGUI-workbench): `pnpm run check` 1,352 통과, `format:check`, `test:e2e` 16(콘솔 오류 0), `build:win` 통과. 정합성 게이트 필수(하드)① 2-pass + 재판정 PASS. WSL에서 `path-service.test.ts` 4건 실패는 HEAD에서도 같은 환경 문제(Windows 통과)
+- 참고: D:\dev-Joy\rcloneGUI에 미커밋 TASK_030(2026-11-04 비교 화면 외형 정리, 이 저장소의 TASK_030과 번호 겹침)이 있어 건드리지 않았고 통합은 미정
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]

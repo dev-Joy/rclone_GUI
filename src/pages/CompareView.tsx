@@ -1,33 +1,25 @@
 /**
- * 작업 화면의 "비교·미리보기" 탭 본문. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과.
- * 비교 중지는 작업 화면의 공통 중지 막대(JobActivityBar)에 있다.
- * 결과: 안내 배너(낡음·형식 충돌·경고) → 비교 방식 → 폴더 변화 → (대상이 빈 폴더를 못 만들면) 빈 폴더 안내
- * (INT-003 FR-31) → 요약 카드 → 도구 막대 → 가상 목록 표.
+ * 작업 화면 오른쪽 "파일 목록" 열. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과(도구 막대 → 가상 목록 표).
+ * 요약 카드·안내 배너·비교 방식·폴더 변화는 왼쪽 ‘대상에 일어날 일’ 패널(ComparePlanPanel)에 있고,
+ * 비교 중지는 하단 실행 막대의 공통 중지(JobActivityBar)에 있다.
  * 비교는 원본·대상 목록을 읽기만 하고 파일은 바꾸지 않는다.
  *
  * @author dev-Joy 2026-10-28
  */
 
 // ========== External imports ==========
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 // ========== Internal imports ==========
 import {
-    compareStaleReason,
-    dirSummaryText,
-    emptyDirsUnsupportedText,
     selectRowIndexes,
     type itfCompareViewState,
-    type typCompareFilterStatus,
     type typCompareSortKey,
 } from "@/lib/compare-view";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
-import { formatDuration, formatLocalDateTime } from "@/shared/format";
 import type { typJob } from "@/shared/schemas/job";
-import type { itfCompareActive, itfCompareResult } from "@/shared/types/compare";
+import type { itfCompareActive } from "@/shared/types/compare";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
-import { useSettingsStore } from "@/stores/settings-store";
-import CompareSummary from "./CompareSummary";
 import CompareTable from "./CompareTable";
 import CompareToolbar from "./CompareToolbar";
 import styles from "./CompareView.module.css";
@@ -37,8 +29,6 @@ export interface itfCompareViewProps {
     job: typJob;
 }
 
-/** 낡음 판정을 다시 하는 간격 */
-const STALE_TICK_MS = 30_000;
 const SEARCH_DEBOUNCE_MS = 150;
 
 function f_PhaseText(a: itfCompareActive): string {
@@ -52,20 +42,6 @@ function f_PhaseText(a: itfCompareActive): string {
     }
 }
 
-function f_MethodText(r: itfCompareResult): string {
-    const parts = [
-        r.method.checkHashes
-            ? "비교 방식: 크기+해시"
-            : `비교 방식: 크기+수정시간(허용 ${r.method.modtimeToleranceMs / 1000}초)`,
-    ];
-    if (r.method.checkHashes && r.summary.hashUnavailableFiles > 0) {
-        parts.push(`해시 없음 ${r.summary.hashUnavailableFiles}개(크기만 비교)`);
-    }
-    parts.push(`${formatLocalDateTime(r.createdAt)} 비교, ${formatDuration(r.durationMs)} 걸림`);
-    if (r.scope === "files") parts.push("파일만 비교(빈 폴더 차이는 표시하지 않습니다)");
-    return parts.join(" · ");
-}
-
 export default function CompareView(props: itfCompareViewProps) {
     const { job } = props;
 
@@ -77,15 +53,7 @@ export default function CompareView(props: itfCompareViewProps) {
     const error = useCompareStore((s) => s.error);
     const view = useCompareStore((s) => s.view);
     const setView = useCompareStore((s) => s.setView);
-    const maxAgeMinutes = useSettingsStore((s) => s.settings?.safety.compareMaxAgeMinutes ?? 10);
-    const [nowMs, setNowMs] = useState(() => Date.now());
     const query = useDebouncedValue(view.query, SEARCH_DEBOUNCE_MS);
-
-    // ========== Effect (부수 효과) ==========
-    useEffect(() => {
-        const timer = setInterval(() => setNowMs(Date.now()), STALE_TICK_MS);
-        return () => clearInterval(timer);
-    }, []);
 
     // ========== 내부 변수 (_V) ==========
     const shown = result && result.jobId === job.id ? result : null;
@@ -96,16 +64,8 @@ export default function CompareView(props: itfCompareViewProps) {
         const v: itfCompareViewState = { status, hideEqual, sortKey, sortDir, query };
         return selectRowIndexes(shown.entries, v);
     }, [shown, status, hideEqual, sortKey, sortDir, query]);
-    const stale = shown ? compareStaleReason(shown, job, maxAgeMinutes, nowMs) : null;
-    const dirText = shown
-        ? dirSummaryText(shown.summary, shown.mode, shown.destCanHaveEmptyDirs)
-        : null;
-    const emptyText = shown
-        ? emptyDirsUnsupportedText(shown.summary, shown.destCanHaveEmptyDirs)
-        : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const h_Pick = (filter: typCompareFilterStatus) => setView({ status: filter });
     const h_Sort = (key: typCompareSortKey) =>
         setView(
             key === sortKey
@@ -158,44 +118,7 @@ export default function CompareView(props: itfCompareViewProps) {
     }
 
     return (
-        <div className={styles.CompareView}>
-            {stale && (
-                <p className={styles.banner} data-level="warning" data-kind="stale">
-                    {stale}
-                </p>
-            )}
-            {shown.summary.conflictFiles > 0 && (
-                <p className={styles.banner} data-level="danger">
-                    파일과 폴더 이름이 겹치는 항목 {shown.summary.conflictFiles}개는 직접 정리해야
-                    합니다.
-                </p>
-            )}
-            {shown.warnings.map((w) => (
-                <p key={w} className={styles.banner} data-level="warning">
-                    {w}
-                </p>
-            ))}
-            <p className={styles.method}>{f_MethodText(shown)}</p>
-            {dirText && (
-                <p className={styles.method} data-kind="dirs">
-                    폴더: {dirText}
-                </p>
-            )}
-            {emptyText && (
-                <p
-                    className={styles.method}
-                    data-kind="emptyDirsUnsupported"
-                    id="compare-empty-dirs-unsupported"
-                >
-                    {emptyText}
-                </p>
-            )}
-            <CompareSummary
-                summary={shown.summary}
-                mode={shown.mode}
-                active={status}
-                onPick={h_Pick}
-            />
+        <section className={styles.CompareView} aria-label="파일 목록">
             <CompareToolbar
                 view={view}
                 onChange={setView}
@@ -210,6 +133,6 @@ export default function CompareView(props: itfCompareViewProps) {
                 sortDir={sortDir}
                 onSort={h_Sort}
             />
-        </div>
+        </section>
     );
 }
