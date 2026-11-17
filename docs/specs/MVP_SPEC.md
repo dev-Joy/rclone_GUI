@@ -1,7 +1,7 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/planned/INT-006-in-app-remote-config/intent.md`, `docs/intent/planned/INT-008-rcloud-ui-parity/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/done/INT-006-in-app-remote-config/intent.md`, `docs/intent/done/INT-008-rcloud-ui-parity/intent.md`
 - 작성일: 2026-10-27
 - 최종 수정일: 2026-11-17 (INT-008 Phase 2·3 비교 트리·파일 줄 메뉴·작업 그룹 반영, §12·§13 갱신)
 - 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1~3 반영 (2026-11-17), 아래 "구현 반영" 참고**
