@@ -1,6 +1,6 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-08 16:33:36
+- 생성일시: 2026-11-17 15:47:35
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
 - 총 인덱싱 자산: 463 건
