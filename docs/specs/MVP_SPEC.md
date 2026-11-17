@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/done/INT-006-in-app-remote-config/intent.md`, `docs/intent/done/INT-008-rcloud-ui-parity/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/done/INT-006-in-app-remote-config/intent.md`, `docs/intent/done/INT-008-rcloud-ui-parity/intent.md`, `docs/intent/planned/INT-009-compare-file-diff/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-17 (INT-008 Phase 2·3 비교 트리·파일 줄 메뉴·작업 그룹 반영, §12·§13 갱신)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1~3 반영 (2026-11-17), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-17 (INT-009 비교 결과 파일 내용 diff 반영)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1~3 반영 (2026-11-17), INT-009 반영 (2026-11-17), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -192,6 +192,18 @@ INT-008 Phase 2(비교 목록 트리·파일 줄 메뉴)와 Phase 3(작업 그�
 | 파일 줄 메뉴 | 없음(경로 복사 수단 없음) | 파일 행 우클릭·키보드 메뉴 키(Shift+F10)로 `FileRowMenu`의 `경로 복사`를 연다. 복사 값은 원본 기준 상대 경로(`entry.path`)이며 `app:copyText`로 클립보드에만 넣는다. Escape·바깥 클릭으로 닫히고 rclone은 실행하지 않는다. `이번 동기화에서 빼기`는 가져오지 않는다 |
 | 작업 그룹 | 평평한 목록만 | 저장 구조 v3: `groups` 표(이름·position·시각)+`jobs.group_id` 열(`ON DELETE SET NULL`). v1·v2 데이터는 `PRAGMA user_version` 마이그레이션으로 자동 이관하며 바꾸기 전 `db-backups\`에 `pre-v3` 백업을 남기고, 더 낮은 버전 앱은 더 새 데이터를 거부한다(기존 규칙 유지). IPC `groups:list`·`groups:save`·`groups:delete`·`jobs:setGroup`과 `groups:changed` 이벤트. 목록은 그룹 머리글(이름·작업 수·접기)과 `그룹 없음` 묶음으로 보이고 그룹이 없으면 평평한 목록이다. 하단 `+ 새 그룹`, 머리글에서 이름 바꾸기·지우기(지워도 작업은 `그룹 없음`으로 남음), 접힘 상태는 세션 안에서만 유지한다. 작업 편집 모달의 `그룹` select로 지정하고, 그룹 지정은 작업 rev를 올리지 않아 비교 계획이 무효가 되지 않는다 |
 | 테스트 | - | `compare-tree` 단위 테스트(폴더 집계·접힘·대소문자 구분), 그룹 저장소·v2→v3 이관과 `pre-v3` 백업 단위 테스트, E2E(트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지). Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 21(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. 안전 3파일(`run-service`·`plan-token`·`command-builder`) diff 0줄, 의존성 변경 없음 |
+
+### 구현 반영 (INT-009 — 비교 결과 파일 내용 diff, 2026-11-17)
+
+비교 결과에서 변경된 파일의 내용 차이를 동기화 전에 읽기 전용으로 본다. 비교 판정·계획 토큰·삭제 확인 흐름은 바뀌지 않는다(읽기 전용, 쓰기 명령 없음).
+
+| 항목 | 이전 | 실제 구현 |
+| :--- | :--- | :--- |
+| 진입 | 파일 행에 동작 없음(우클릭 메뉴는 `경로 복사`만) | `modified`·`onlySource`·`onlyDest` 행 **더블클릭** 또는 파일 줄 메뉴의 `원본·대상 내용 비교`(맨 위 항목)로 연다. `equal`은 "같은 파일이라 비교할 내용이 없음", `typeConflict`는 "파일과 폴더가 섞여 내용을 비교할 수 없음"으로 비활성. 키보드는 기존 Shift+F10·메뉴 키 |
+| 내용 읽기 | 없음 | 새 IPC `compare:fileDiff`(입력 `{ jobId, path }` zod `.strict()`). main은 캐시된 비교 결과에서 항목을 찾아 **각 쪽 `source.path`/`dest.path`**를 루트에 결합한 경로로 `rclone cat`을 실행한다(renderer가 준 경로를 파일 경로로 쓰지 않음). 파일당 2 MiB 상한(목록 `size`로 사전 판정, 실행은 `maxStdoutBytes = 상한+1`로 잘림 감지), 앞 8000바이트 NUL이면 바이너리, UTF-8 BOM 제거 후 엄격 UTF-8 디코딩 실패 시 EUC-KR로 다시 읽고 "인코딩: EUC-KR로 읽음" 표시, `cat` 시간 제한 60초 |
+| 화면 | 없음 | `FileDiffModal`(`ZBCModal` wide) — 왼쪽 원본·오른쪽 대상 2열, 줄 번호·가상 스크롤, 추가(초록)·삭제(빨강)·변경(노랑), 요약 `n줄 추가, m줄 삭제, k줄 변경`. 한쪽만 있으면 있는 쪽만 보이고 반대편에 "대상에 없음 — 동기화하면 새로 복사됨"/"원본에 없음 — 동기화(sync)하면 대상에서 삭제됨"(copy는 "copy는 대상에서 지우지 않음"). 줄바꿈·BOM만 다르면 그 사실만, 편집 거리 2000 초과면 "차이가 너무 많아 줄 단위 비교를 생략함"과 함께 원문만 보여 준다. 바이너리·상한 초과·읽기 실패는 그 열에 이유 문구 |
+| 안전 | - | `rclone cat`은 허용 명령 목록에 추가하고 `buildCatArgs` 한 곳에서만 만든다(`--ask-password=false`, `--config` 경로, 경로는 `--` 뒤). 차단 목록·실제 전송 경로(`spawnTransfer`)·계획 토큰은 그대로이며, 캐시 결과가 없거나 항목이 없으면 `PLAN_STALE`·`NOT_FOUND`로 응답한다 |
+| 테스트 | - | 단위: 줄 diff(Myers·좌우 짝짓기·상한·5만 줄 성능), `joinRootRelative`(local·UNC·remote `name:`), `buildCatArgs`·허용 목록 스냅샷, 서비스(상한 사전 판정 cat 0회·바이너리·잘림·EUC-KR·`PLAN_STALE`·`VALIDATION`). 통합: 실제 rclone으로 텍스트·바이너리·0바이트 읽기(rclone 없으면 skip). E2E: 더블클릭·메뉴 진입·한쪽 미리보기·`equal` 비활성·콘솔 오류 0. 의존성 추가 없음 |
 
 ---
 

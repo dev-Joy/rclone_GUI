@@ -25,6 +25,7 @@
         "src/lib/compare-tree.ts",
         "src/lib/compare-view.ts",
         "src/lib/exclude-view.ts",
+        "src/lib/file-diff-view.ts",
         "src/lib/form-utils.ts",
         "src/lib/history-view.ts",
         "src/lib/job-form.ts",

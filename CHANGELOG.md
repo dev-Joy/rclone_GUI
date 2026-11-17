@@ -2,6 +2,12 @@
 
 이 파일은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따르며, `z_skill_git_commit`·`z_skill_git_to_merge`가 `main`/`master` 반영 시 실제 변경 내역을 기록합니다.
 
+## [0.1.82] - 2026-11-18
+
+### Fixed
+
+- fix(compare): 내용 비교 문구를 원인별로 바로잡고 표시 판정을 분리한다
+
 ## [0.1.81] - 2026-11-17
 
 ### Added
