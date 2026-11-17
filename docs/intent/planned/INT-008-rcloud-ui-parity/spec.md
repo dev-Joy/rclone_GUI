@@ -21,7 +21,7 @@
   - 파일 줄 우클릭 메뉴: `경로 복사`만(`rcloud/src/pages/ItemMenu.tsx:6`)
   - 비교 결과 트리 보기·모두 펼치기/접기(`rcloud/src/lib/file-tree.ts:102`, `rcloud/src/pages/JobFileTree.tsx:236`)
   - 작업 그룹: 만들기·이름 바꾸기·지우기·접기/펼치기, 편집 모달의 그룹 선택(`rcloud/src/pages/JobEditorDialog.tsx:428`), 목록 하단 `+ 새 작업`·`+ 새 그룹`(`rcloud/src/pages/JobListPane.tsx:274`)
-  - rcloneGUI 전용 화면 편입: remote 설정·북마크·rclone 설정·제외 패턴 라이브러리·기본 옵션·기록 지우기·테마 선택은 설정 모달의 섹션으로, OS 예약·remote 없음·저장 안 됨 배지는 header 배지로, 온보딩은 작업 화면 위 안내로 옮긴다.
+  - rcloneGUI 전용 화면 편입: remote 설정·북마크·rclone 설정·제외 패턴 라이브러리·기본 옵션·기록 지우기·테마 선택은 설정 모달의 섹션으로, OS 예약·remote 없음 배지는 header 배지로 옮긴다. 저장 안 됨 상태는 header 배지가 아니라 작업 목록 항목(`새 작업(저장 안 됨)`)과 편집 모달에서 보인다. 온보딩은 작업 화면 위 안내로 옮긴다.
 - Out-of-scope
   - rcloud 용량 줄(`rcloud/src/pages/JobPage.tsx:500`). rcloneGUI에 용량 IPC가 없다.
   - 연쇄 실행 표시, 건너뛴 항목 목록, 파일 줄 `이번 동기화에서 빼기`(`rcloud/src/pages/JobPage.tsx:416`, 작업 skip을 바꾸는 동작 기능)
@@ -64,7 +64,7 @@
 - **FR-3 글꼴·밀도**: 본문 13px/1.5, mono `Consolas, "D2Coding", monospace`. Button 기본 padding `6px 14px`·radius 6px, `small`은 `3px 10px`·12px. Badge는 radius 4px·11px이다.
 - **FR-4 상단 막대**: 브랜드 `rcloneGUI`, rclone 상태 알약(문제 있으면 위험 색, 누르면 설정 모달), `설정` 단추를 둔다. 다음 자동 실행 표시는 알약 옆 muted 글로 둔다.
 - **FR-5 작업 목록**: 왼쪽 250px 고정이다. 항목은 상태 점(ZBCDot)·이름·`원본 → 대상`·mode 배지·하위 문구(마지막 결과 또는 예약)로 이루어지고, 선택 항목은 `inset 3px` accent 왼쪽 막대(`rcloud/src/pages/JobListPane.module.css:51`)다. 하단에 `+ 새 작업`·`+ 새 그룹` 단추가 있다. remote 없음·OS 예약 배지는 하위 문구 줄에 둔다.
-- **FR-6 작업 header·toolbar**: 제목·mode 배지·상태 배지(저장 안 됨·OS 예약 미등록·remote 없음)와 `편집`·`복제`·`삭제`·`⋯` 단추를 둔다. 아래에 경로 줄(mono, accent 화살표)이 온다. toolbar는 `비교`·`동기화`이고 `중지`는 실행 배너에 둔다(AC-6, rcloneGUI 기존 동작). 동기화 단추 문구는 `동기화: 대상에 N개 복사, N개 덮어씀, N개 삭제`(`rcloud/src/pages/JobPage.tsx:142`)이고, 비교 전에는 `동기화 — 먼저 [비교]를 누르세요`로 꺼진다. 문구는 `runBarText`를 재사용한다.
+- **FR-6 작업 header·toolbar**: 제목·mode 배지·상태 배지(OS 예약 미등록·remote 없음)와 `편집`·`복제`·`삭제`·`⋯` 단추를 둔다. 저장 안 됨 상태는 작업 목록 항목(`새 작업(저장 안 됨)`)과 편집 모달에서 보인다. 아래에 경로 줄(mono, accent 화살표)이 온다. toolbar는 `비교`·`동기화`이고 `중지`는 실행 배너에 둔다(AC-6, rcloneGUI 기존 동작). 동기화 단추 문구는 `동기화: 대상에 N개 복사, N개 덮어씀, N개 삭제`(`rcloud/src/pages/JobPage.tsx:142`)이고, 비교 전에는 `동기화 — 먼저 [비교]를 누르세요`로 꺼진다. 문구는 `runBarText`를 재사용한다.
 - **FR-7 ⋯ 메뉴**: `비교 명령 복사`·`동기화 명령 복사`를 담는다. 지금 ⋯ 메뉴의 복제·삭제는 header 단추로 옮긴다.
 - **FR-8 탭**: 밑줄 탭 `파일 목록 | 기록`(`role="tablist"`)이다. `기록` 탭은 표 열 `시작·종류·결과·건수·걸린 시간·내용`과 행마다 `목록·정보·로그` 링크를 둔다(`rcloud/src/pages/JobHistoryTable.tsx:57`). `정보`는 지금 HistoryDetail 모달을 연다.
 - **FR-9 실행 중 표시**: 실행 중에는 toolbar 아래 실행 배너(단계·진행률·남은 시간)와 `진행 글 보기` 체크를 둔다. 배너 영역은 `#job-run-panel` id를 유지한다.

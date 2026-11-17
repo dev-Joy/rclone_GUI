@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-17 15:47:35
+- 생성일시: 2026-11-17 21:23:58
 - 감지된 환경: React / TypeScript
-- 스캔 대상 디렉터리: `src/components`, `src/pages`, `src/stores`, `src/lib`, `src/main/lib`, `src/main/services`, `src/main/store`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 474 건
+- 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
+- 총 인덱싱 자산: 480 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -17,6 +17,7 @@
 | `ZBCBadge` | [`src/components/ZBCBadge.tsx`](../../src/components/ZBCBadge.tsx) | ZBCBadge(props: itfZBCBadgeProps) - UI 컴포넌트 |
 | `ZBCButton` | [`src/components/ZBCButton.tsx`](../../src/components/ZBCButton.tsx) | ZBCButton(props: itfZBCButtonProps) - UI 컴포넌트 |
 | `ZBCCheckbox` | [`src/components/ZBCCheckbox.tsx`](../../src/components/ZBCCheckbox.tsx) | ZBCCheckbox(props: itfZBCCheckboxProps) - UI 컴포넌트 |
+| `ZBCDot` | [`src/components/ZBCDot.tsx`](../../src/components/ZBCDot.tsx) | ZBCDot(props: itfZBCDotProps) - UI 컴포넌트 |
 | `ZBCField` | [`src/components/ZBCField.tsx`](../../src/components/ZBCField.tsx) | ZBCField(props: itfZBCFieldProps) - UI 컴포넌트 |
 | `ZBCInput` | [`src/components/ZBCInput.tsx`](../../src/components/ZBCInput.tsx) | ZBCInput(props: itfZBCInputProps) - UI 컴포넌트 |
 | `ZBCModal` | [`src/components/ZBCModal.tsx`](../../src/components/ZBCModal.tsx) | ZBCModal(props: itfZBCModalProps) - UI 컴포넌트 |
@@ -24,13 +25,6 @@
 | `ZBCTabs` | [`src/components/ZBCTabs.tsx`](../../src/components/ZBCTabs.tsx) | ZBCTabs<T extends string>(props: itfZBCTabsProps<T>) - UI 컴포넌트 |
 | `ZBCTextarea` | [`src/components/ZBCTextarea.tsx`](../../src/components/ZBCTextarea.tsx) | ZBCTextarea(props: itfZBCTextareaProps) - UI 컴포넌트 |
 | `ZBCToast` | [`src/components/ZBCToast.tsx`](../../src/components/ZBCToast.tsx) | ZBCToast(props: itfZBCToastProps) - UI 컴포넌트 |
-| `ZBCDot` | [`src/components/ZBCDot.tsx`](../../src/components/ZBCDot.tsx) | ZBCDot(props: itfZBCDotProps) - 작업 상태 점(tone: none·running·success·failed…) |
-| `ItemMenu` | [`src/pages/ItemMenu.tsx`](../../src/pages/ItemMenu.tsx) | ItemMenu(iProps: itfItemMenuProps) - 화면 좌표에 뜨는 메뉴(키보드 이동·Escape·바깥 클릭 닫힘, `zbcXxx` 스타일) |
-| `CompareHead` | [`src/pages/CompareHead.tsx`](../../src/pages/CompareHead.tsx) | CompareHead(props: itfCompareHeadProps) - 비교 결과 표 6열 머리글(정렬 단추) |
-| `CompareRow` | [`src/pages/CompareRow.tsx`](../../src/pages/CompareRow.tsx) | CompareRow(iProps: itfCompareRowProps) - 파일 행 하나(평면 표·트리 공용, 우클릭·Shift+F10 줄 메뉴) |
-| `CompareTree` | [`src/pages/CompareTree.tsx`](../../src/pages/CompareTree.tsx) | CompareTree(props: itfCompareTreeProps) - 비교 결과 트리 표(30px 고정 행 가상화, 폴더 접기/펼치기) |
-| `FileRowMenu` | [`src/pages/FileRowMenu.tsx`](../../src/pages/FileRowMenu.tsx) | FileRowMenu(props: itfFileRowMenuProps) - 파일 행 우클릭 메뉴(`경로 복사`) |
-| `GroupNameDialog` | [`src/pages/GroupNameDialog.tsx`](../../src/pages/GroupNameDialog.tsx) | GroupNameDialog(props: itfGroupNameDialogProps) - 새 그룹·그룹 이름 바꾸기 대화상자 |
 
 ## 2. Custom Hooks
 
@@ -49,16 +43,17 @@
 | `errorText` | [`src/lib/api.ts`](../../src/lib/api.ts) | errorText(e: unknown) - 사용자에게 보일 오류 문구 |
 | `getApi` | [`src/lib/api.ts`](../../src/lib/api.ts) | getApi() - 공통 함수/유틸리티 |
 | `unwrap` | [`src/lib/api.ts`](../../src/lib/api.ts) | unwrap<T>(pending: Promise<typApiResult<T>>) - 실패 envelope를 clsApiError로 바꾼다 |
+| `buildTreeRows` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | buildTreeRows(...) - rows(필터·정렬된 entries 인덱스)를 폴더 트리로 접고, expanded 폴더의 하위만 펼쳐 1차원 행 목록으로 만든다. 폴더 자체 행은 항상 포함한다(접힘이면 하위만 감춘다). |
+| `collectFolderPaths` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | collectFolderPaths(...) - rows가 가리키는 모든 폴더 경로(접힘과 무관, 상위 → 하위 순이 아니라 나온 순서). 모두 펼치기와 "폴더가 있는지" 판단에 쓴다. |
 | `canStartCompare` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | canStartCompare(...) - 비교 버튼 가능 여부와 이유. 저장 안 됨 → 미저장 변경 → 경로 오류(드라이브 상대 포함) → 진행 중 |
+| `compareChips` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | compareChips(s: itfCompareSummary, mode: typRunMode) - 칩 5개와 개수. 라벨은 rcloud와 같다: 추가·변경·삭제(sync)·대상만(copy)·오류·같음. 색은 상태 계열(추가 성공·변경 경고·삭제/오류 위험·같음 중립)이고, 끈 칩은 화면에서 중립으로 그린다. |
 | `compareStaleReason` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | compareStaleReason(...) - 화면 배너용. 작업 rev가 바뀌었으면 "작업 설정이 바뀌었습니다. 다시 비교하세요.", 나이가 넘었으면 "비교한 지 N분 지났습니다. 실행 전 다시 비교하세요.", 아니면 null. |
 | `dirSummaryText` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | dirSummaryText(...) - 전체 범위의 폴더 변화 한 줄. 예: "빈 폴더 3개 생성, 폴더 2개 삭제", copy: "빈 폴더 3개 생성, 대상에만 있는 폴더 2개(유지)". 둘 다 0이면 null. |
 | `emptyDirsUnsupportedText` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | emptyDirsUnsupportedText(...) - 빈 폴더를 만들 수 없는 대상의 폴더 생성 안내(INT-003 FR-31). false이고 createDirs > 0일 때만, 아니면 null |
 | `reasonText` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | reasonText(reasons: readonly typModifiedReason[]) - 변경 사유 문구. 예: ["size", "mtime"] → "크기, 수정시간" |
-| `selectRowIndexes` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | selectRowIndexes(...) - 필터·검색(부분 일치, 대소문자 무시·NFC)·정렬 결과를 entries 인덱스 배열로 돌려준다(객체 복사 없음). entries는 경로 키 오름차순이므로 보조 키(경로 오름차순)는 인덱스 순서로 대신한다. |
+| `selectRowIndexes` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | selectRowIndexes(...) - 칩 필터·검색(부분 일치, 대소문자 무시·NFC)·정렬 결과를 entries 인덱스 배열로 돌려준다(객체 복사 없음). entries는 경로 키 오름차순이므로 보조 키(경로 오름차순)는 인덱스 순서로 대신한다. |
 | `statusLabel` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | statusLabel(status: typCompareStatus, mode: typRunMode) - 상태 라벨. onlyDest: copy "대상만(유지)", sync "대상만(삭제 예정)" |
 | `statusTone` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | statusTone(status: typCompareStatus, mode: typRunMode) - 공통 함수/유틸리티 |
-| `buildTreeRows` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | buildTreeRows(entries, rows, expanded) - 필터·정렬된 인덱스에 폴더 행을 끼워 1차원 목록으로 펼친다(접힌 폴더의 하위는 뺀다). 폴더 행은 파일 수·변경 수를 센다 |
-| `collectFolderPaths` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | collectFolderPaths(entries, rows) - 보이는 행이 속한 폴더 경로(모두 펼치기용, 조상 포함) |
 | `excludeChangeConfirmText` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | excludeChangeConfirmText(kind: typExcludeChangeKind, userCount: number) - 확인 버튼 문구(일어날 일). 예: "패턴 지우고 작업 3개의 비교 결과 버리기" |
 | `jobOnlyCommentLike` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | jobOnlyCommentLike(patterns: readonly string[]) - 이 작업 전용 패턴 중 공용으로 둘 수 없는 줄(#·; 시작) |
 | `missingPatternIds` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | missingPatternIds(...) - 선택한 id 중 라이브러리에 없는 것(편집 중 지워진 패턴) |
@@ -91,11 +86,12 @@
 | `missingRemoteNames` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | missingRemoteNames(...) - 기본 conf를 쓰는 작업이 가리키는 remote 중 목록에 없는 이름(FR-25). remotes가 null이면(아직 못 읽음) 표시하지 않는다. 작업별 conf를 쓰는 작업도 확인하지 않는다. |
 | `scheduleSummary` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | scheduleSummary(job: Pick<typJob, "autoSync">) - 자동 실행 요약. 꺼져 있으면 null, 켜져 있으면 "30분마다 · 다음 11-02 10:30", "매일 09:00 · 다음 …", "매주 월·수 09:00 · 다음 …". |
 | `freshPreview` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | freshPreview(...) - 지금 비교 결과 뒤에 끝난 이 작업의 미리보기(없으면 null). startedAt >= compare.createdAt |
-| `jobSteps` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | jobSteps(i: itfJobStepsInput) - ① 비교 → ② 미리보기 → ③ 실행. "current"·"running"은 합쳐 최대 1개 |
-| `previewNotice` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | previewNotice(...) - 계획 패널의 미리보기 한 줄. 비교 결과가 없으면 null. 진행 중 → info "미리보기 중(파일은 바꾸지 않음)" |
+| `planFooterText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | planFooterText(...) - footer의 계획 상태 한 줄. 비교 결과가 없으면 null. `비교 MM-DD HH:mm:ss · 걸린 시간` + 계획 상태(낡음이면 다시 비교 안내, |
+| `previewNotice` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | previewNotice(...) - 안내 줄의 미리보기 한 줄. 비교 결과가 없으면 null. 진행 중 → info "미리보기 중(파일은 바꾸지 않음)" |
 | `relativeTimeText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | relativeTimeText(iso: string, nowMs: number) - "방금"(<1분) / "N분 전"(<60분) / formatLocalDateTime |
-| `runBarText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | runBarText(...) - 하단 실행 막대 문장. 비교 결과 있음 → headline = realRunConfirmText(" (총 …)" 없이), |
-| `workMainPanel` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | workMainPanel(...) - 오른쪽 열에 무엇을 그릴지. 우선순위: 이 작업 실제 실행 진행 중 → "run" / 이 작업 비교 진행 중 → "compare" / |
+| `runBarText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | runBarText(i: itfRunBarInput) - 하단 실행 막대 문장. 비교 결과 있음 → headline = realRunConfirmText(" (총 …)" 없이), |
+| `runPanelShown` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | runPanelShown(...) - 오른쪽(탭 본문)에 실행 진행·결과를 보여야 하는지. 우선순위: 이 작업 실제 실행 진행 중 → true / 이 작업 비교 진행 중 → false / |
+| `syncButtonText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | syncButtonText(i: itfRunBarInput & { realReady: boolean }) - toolbar의 [동기화] 단추 문구와 비활성 여부. 비교 결과 없음 → "동기화 — 먼저 [비교]를 누르세요"(꺼짐). |
 | `pathKindBadge` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | pathKindBadge(raw: string) - 입력 원문의 배지. 빈 값은 null, 형식 오류는 { text: "형식 오류", kind: null } |
 | `shortenPath` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | shortenPath(path: string, max = 36) - 긴 경로를 가운데를 "…"로 줄여 앞뒤를 남긴다(작업 목록 표시용). max 이하면 그대로. 앞 ceil((max-1)/2)자, 뒤 floor((max-1)/2)자를 남긴다. |
 | `browserChild` | [`src/lib/remote-browser.ts`](../../src/lib/remote-browser.ts) | browserChild(...) - 현재 경로 아래 폴더 이름 하나를 덧붙인 경로. 이름이 안전하지 않거나 기준 밖이면 null |
@@ -130,9 +126,9 @@
 | `busyMessageFor` | [`src/main/services/activity-lock.ts`](../../src/main/services/activity-lock.ts) | busyMessageFor(...) - BUSY 안내 문구. 작업 이름을 찾지 못하면 "다른 작업을"으로 쓴다. 예: "‘백업’ 작업을 실행하는 중입니다. 끝나거나 취소한 뒤 다시 시도하세요." |
 | `buildBackupSubdir` | [`src/main/services/backup-dir.ts`](../../src/main/services/backup-dir.ts) | buildBackupSubdir(at: Date, jobId: string) - 실행별 하위 폴더 이름. 예: 2026-11-02_103000_1a2b3c4d |
 | `nextBackupTime` | [`src/main/services/backup-dir.ts`](../../src/main/services/backup-dir.ts) | nextBackupTime(now: Date, last: Date \| null) - 이번 실행의 백업 시각. last(같은 프로세스에서 마지막으로 쓴 시각)가 없거나 now가 초 단위로 더 늦으면 now, 아니면(같은 초·시계가 뒤로 감) last + 1초. 초 아래는 버린다. |
+| `commandPreview` | [`src/main/services/command-preview.ts`](../../src/main/services/command-preview.ts) | commandPreview(job: typJob, settings: typSettings) - 작업의 비교·동기화 명령을 만든다. 표시용이며 실행하지 않는다. @param job 저장된 작업 |
 | `checkDestProbe` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
 | `checkSourceProbe` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
-| `commandPreview` | [`src/main/services/command-preview.ts`](../../src/main/services/command-preview.ts) | commandPreview(job: typJob, settings: typSettings) - 비교·동기화 명령 문자열(표시·복사 전용, 실행하지 않음). 인자는 command-builder 빌더로만 만든다 |
 | `resolveEffectiveExcludes` | [`src/main/services/effective-excludes.ts`](../../src/main/services/effective-excludes.ts) | resolveEffectiveExcludes(...) - 공통 함수/유틸리티 |
 | `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
 | `isExcludeFileName` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | isExcludeFileName(name: string) - 앱이 만든 제외 파일 이름인지(테스트·로그 확인용) |
@@ -256,7 +252,6 @@
 | `clsActivityLock` | [`src/main/services/activity-lock.ts`](../../src/main/services/activity-lock.ts) | class clsActivityLock - 공유 서비스/클라이언트 클래스 |
 | `clsCompareService` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | class clsCompareService - 공유 서비스/클라이언트 클래스 |
 | `clsExcludeService` | [`src/main/services/exclude-service.ts`](../../src/main/services/exclude-service.ts) | class clsExcludeService - 공유 서비스/클라이언트 클래스 |
-| `clsGroupStore` | [`src/main/store/group-store.ts`](../../src/main/store/group-store.ts) | class clsGroupStore - 작업 그룹 저장소(v3 groups 표). 이름 1~50자·대소문자 무시 중복 금지, position 순. 지운 그룹의 작업은 그룹 없음으로 남는다(INT-008 FR-17) |
 | `clsOsRunQueue` | [`src/main/services/os-run-queue.ts`](../../src/main/services/os-run-queue.ts) | class clsOsRunQueue - 메인 클래스 |
 | `clsOsScheduler` | [`src/main/services/os-scheduler.ts`](../../src/main/services/os-scheduler.ts) | class clsOsScheduler - OS 예약 등록 수명주기. 모든 schtasks 호출은 내부 큐로 직렬화한다. available이 false면 schtasks를 한 번도 부르지 않는다. |
 | `clsFsGate` | [`src/main/services/path-service.ts`](../../src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
@@ -271,7 +266,6 @@
 | `clsRunService` | [`src/main/services/run-service.ts`](../../src/main/services/run-service.ts) | class clsRunService - 공유 서비스/클라이언트 클래스 |
 | `clsScheduler` | [`src/main/services/scheduler.ts`](../../src/main/services/scheduler.ts) | class clsScheduler - 공유 서비스/클라이언트 클래스 |
 | `clsWslService` | [`src/main/services/wsl.ts`](../../src/main/services/wsl.ts) | class clsWslService - 공유 서비스/클라이언트 클래스 |
-| `useGroupsStore` | [`src/stores/groups-store.ts`](../../src/stores/groups-store.ts) | zustand - 작업 그룹 목록(load·save·remove·subscribe). save·remove는 main(groups:*)의 envelope를 그대로 돌려준다 |
 
 ## 5. Types & Interfaces
 
@@ -282,6 +276,8 @@
 | `itfZBCButtonProps` | [`src/components/ZBCButton.tsx`](../../src/components/ZBCButton.tsx) | interface itfZBCButtonProps - 인터페이스 정의 |
 | `typZBCButtonVariant` | [`src/components/ZBCButton.tsx`](../../src/components/ZBCButton.tsx) | type typZBCButtonVariant - ========== Props & Types ========== |
 | `itfZBCCheckboxProps` | [`src/components/ZBCCheckbox.tsx`](../../src/components/ZBCCheckbox.tsx) | interface itfZBCCheckboxProps - ========== Props & Types ========== |
+| `itfZBCDotProps` | [`src/components/ZBCDot.tsx`](../../src/components/ZBCDot.tsx) | interface itfZBCDotProps - 인터페이스 정의 |
+| `typZBCDotTone` | [`src/components/ZBCDot.tsx`](../../src/components/ZBCDot.tsx) | type typZBCDotTone - ========== Props & Types ========== |
 | `itfZBCFieldProps` | [`src/components/ZBCField.tsx`](../../src/components/ZBCField.tsx) | interface itfZBCFieldProps - ========== Props & Types ========== |
 | `itfZBCInputProps` | [`src/components/ZBCInput.tsx`](../../src/components/ZBCInput.tsx) | interface itfZBCInputProps - ========== Props & Types ========== |
 | `itfZBCModalProps` | [`src/components/ZBCModal.tsx`](../../src/components/ZBCModal.tsx) | interface itfZBCModalProps - ========== Props & Types ========== |
@@ -291,10 +287,15 @@
 | `itfZBCTabsProps` | [`src/components/ZBCTabs.tsx`](../../src/components/ZBCTabs.tsx) | interface itfZBCTabsProps - 인터페이스 정의 |
 | `itfZBCTextareaProps` | [`src/components/ZBCTextarea.tsx`](../../src/components/ZBCTextarea.tsx) | interface itfZBCTextareaProps - ========== Props & Types ========== |
 | `itfZBCToastProps` | [`src/components/ZBCToast.tsx`](../../src/components/ZBCToast.tsx) | interface itfZBCToastProps - ========== Props & Types ========== |
+| `itfTreeFileRow` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | interface itfTreeFileRow - 인터페이스 정의 |
+| `itfTreeFolderRow` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | interface itfTreeFolderRow - ========== Props & Types ========== |
+| `typTreeRow` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | type typTreeRow - 타입 별칭 정의 |
 | `itfCanStartCompareInput` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | interface itfCanStartCompareInput - 인터페이스 정의 |
+| `itfCompareChipCount` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | interface itfCompareChipCount - 인터페이스 정의 |
 | `itfCompareViewState` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | interface itfCompareViewState - 인터페이스 정의 |
-| `itfSummaryCard` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | interface itfSummaryCard - 인터페이스 정의 |
-| `typCompareFilterStatus` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareFilterStatus - 타입 별칭 정의 |
+| `typCompareChip` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareChip - 상태 칩. 파일 목록 위 칩 5개의 키이자 itfDiffEntry.status 값과 같다 |
+| `typCompareChipTone` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareChipTone - 칩 색. 끈 칩은 중립, 켠 칩만 이 색으로 보인다(rcloud 칩 문법) |
+| `typCompareLayout` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareLayout - 목록 모양. flat은 지금까지의 평면 표, tree는 폴더로 접고 펴는 표다 |
 | `typCompareSortKey` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareSortKey - 타입 별칭 정의 |
 | `typCompareTone` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareTone - ZBCBadge의 tone과 같은 값 (컴포넌트 파일을 node 환경에 끌어오지 않으려고 따로 둔다) |
 | `typSortDir` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typSortDir - 타입 별칭 정의 |
@@ -309,13 +310,11 @@
 | `typIntervalUnit` | [`src/lib/job-form.ts`](../../src/lib/job-form.ts) | type typIntervalUnit - 자동 실행 간격 입력 단위 |
 | `typJobFormField` | [`src/lib/job-form.ts`](../../src/lib/job-form.ts) | type typJobFormField - 타입 별칭 정의 |
 | `itfJobListItem` | [`src/lib/job-list-view.ts`](../../src/lib/job-list-view.ts) | interface itfJobListItem - 인터페이스 정의 |
-| `itfJobStep` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfJobStep - 인터페이스 정의 |
 | `itfJobStepsInput` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfJobStepsInput - 인터페이스 정의 |
 | `itfPlanNotice` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfPlanNotice - 인터페이스 정의 |
+| `itfRunBarInput` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfRunBarInput - runBarText·syncButtonText의 입력 |
 | `itfRunBarText` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfRunBarText - 인터페이스 정의 |
 | `itfStepLastRun` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | interface itfStepLastRun - 이 작업의 마지막으로 끝난 실행(run-store last 중 필요한 것) |
-| `typJobStepId` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typJobStepId - 타입 별칭 정의 |
-| `typJobStepState` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typJobStepState - 타입 별칭 정의 |
 | `typNoticeTone` | [`src/lib/job-steps.ts`](../../src/lib/job-steps.ts) | type typNoticeTone - 타입 별칭 정의 |
 | `itfPathKindBadge` | [`src/lib/path-display.ts`](../../src/lib/path-display.ts) | interface itfPathKindBadge - 인터페이스 정의 |
 | `itfActivityStop` | [`src/lib/run-view.ts`](../../src/lib/run-view.ts) | interface itfActivityStop - 작업 화면의 공통 중지 컨트롤(INT-002 T-08). 이 작업의 비교·미리보기·실행 중 하나만 멈춘다 |
@@ -332,6 +331,7 @@
 | `itfRowWindow` | [`src/lib/virtual-rows.ts`](../../src/lib/virtual-rows.ts) | interface itfRowWindow - 인터페이스 정의 |
 | `typAppLogLevel` | [`src/main/lib/logger.ts`](../../src/main/lib/logger.ts) | type typAppLogLevel - 타입 별칭 정의 |
 | `typActivity` | [`src/main/services/activity-lock.ts`](../../src/main/services/activity-lock.ts) | type typActivity - 타입 별칭 정의 |
+| `itfCommandPreview` | [`src/main/services/command-preview.ts`](../../src/main/services/command-preview.ts) | interface itfCommandPreview - 인터페이스 정의 |
 | `itfCompareServiceDeps` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | interface itfCompareServiceDeps - 인터페이스 정의 |
 | `itfEffectiveExcludes` | [`src/main/services/effective-excludes.ts`](../../src/main/services/effective-excludes.ts) | interface itfEffectiveExcludes - 인터페이스 정의 |
 | `itfExcludeFileHandle` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | interface itfExcludeFileHandle - 인터페이스 정의 |
@@ -385,6 +385,7 @@
 | `typAbnormalExit` | [`src/shared/exit-code.ts`](../../src/shared/exit-code.ts) | type typAbnormalExit - 코드만 본 분류. 오류 줄·Go 충돌 표지는 decideRunOutcome이 함께 판단한다 |
 | `itfAppInfo` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfAppInfo - 인터페이스 정의 |
 | `itfAppNotice` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfAppNotice - 시작 시 저장 파일 복구 등 사용자에게 알려야 할 일 |
+| `itfGroupsChangedEvent` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfGroupsChangedEvent - 인터페이스 정의 |
 | `itfJobsChangedEvent` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfJobsChangedEvent - 인터페이스 정의 |
 | `itfPathProbe` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfPathProbe - rclone:testPath 결과 |
 | `itfRcloneEnvironment` | [`src/shared/ipc-contract.ts`](../../src/shared/ipc-contract.ts) | interface itfRcloneEnvironment - rclone:detect 결과. 감지 실패도 오류 envelope가 아니라 problem으로 돌려준다(화면이 온보딩을 그림). |
@@ -423,6 +424,9 @@
 | `typExcludeDeleteInput` | [`src/shared/schemas/excludes.ts`](../../src/shared/schemas/excludes.ts) | type typExcludeDeleteInput - 타입 별칭 정의 |
 | `typExcludePattern` | [`src/shared/schemas/excludes.ts`](../../src/shared/schemas/excludes.ts) | type typExcludePattern - 타입 별칭 정의 |
 | `typExcludeUpdateInput` | [`src/shared/schemas/excludes.ts`](../../src/shared/schemas/excludes.ts) | type typExcludeUpdateInput - 타입 별칭 정의 |
+| `itfGroup` | [`src/shared/schemas/group.ts`](../../src/shared/schemas/group.ts) | interface itfGroup - 인터페이스 정의 |
+| `typGroupSaveInput` | [`src/shared/schemas/group.ts`](../../src/shared/schemas/group.ts) | type typGroupSaveInput - 타입 별칭 정의 |
+| `typJobSetGroupInput` | [`src/shared/schemas/group.ts`](../../src/shared/schemas/group.ts) | type typJobSetGroupInput - 타입 별칭 정의 |
 | `typHistoryClearInput` | [`src/shared/schemas/history.ts`](../../src/shared/schemas/history.ts) | type typHistoryClearInput - 타입 별칭 정의 |
 | `typHistoryGetInput` | [`src/shared/schemas/history.ts`](../../src/shared/schemas/history.ts) | type typHistoryGetInput - 타입 별칭 정의 |
 | `typHistoryListInput` | [`src/shared/schemas/history.ts`](../../src/shared/schemas/history.ts) | type typHistoryListInput - 타입 별칭 정의 |
@@ -451,6 +455,7 @@
 | `typRemoteUpdateInput` | [`src/shared/schemas/remotes.ts`](../../src/shared/schemas/remotes.ts) | type typRemoteUpdateInput - 타입 별칭 정의 |
 | `typActiveRunFile` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typActiveRunFile - 타입 별칭 정의 |
 | `typHistoryFile` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typHistoryFile - 타입 별칭 정의 |
+| `typRunCommandInput` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typRunCommandInput - 타입 별칭 정의 |
 | `typRunIdInput` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typRunIdInput - 타입 별칭 정의 |
 | `typRunPlan` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typRunPlan - 타입 별칭 정의 |
 | `typRunRecord` | [`src/shared/schemas/run.ts`](../../src/shared/schemas/run.ts) | type typRunRecord - 타입 별칭 정의 |
@@ -462,6 +467,7 @@
 | `typSettings` | [`src/shared/schemas/settings.ts`](../../src/shared/schemas/settings.ts) | type typSettings - 타입 별칭 정의 |
 | `typSettingsPatch` | [`src/shared/schemas/settings.ts`](../../src/shared/schemas/settings.ts) | type typSettingsPatch - 타입 별칭 정의 |
 | `typThemeMode` | [`src/shared/schemas/settings.ts`](../../src/shared/schemas/settings.ts) | type typThemeMode - 타입 별칭 정의 |
+| `typCopyTextInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typCopyTextInput - 타입 별칭 정의 |
 | `typDialogFilter` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typDialogFilter - 타입 별칭 정의 |
 | `typOpenExternalInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typOpenExternalInput - 타입 별칭 정의 |
 | `typPickDirectoryInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typPickDirectoryInput - 타입 별칭 정의 |
