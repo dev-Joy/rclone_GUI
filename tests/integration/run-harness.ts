@@ -227,6 +227,8 @@ export async function makeEnv(o: itfEnvOptions) {
         history,
         compare,
         runs,
+        /** 파일 내용 비교(INT-009)에서 실행 문맥을 만들 때 쓴다 */
+        rcloneEnv,
         /** 경로 확인(OS 예약 대기열의 사전 확인) */
         pathService,
         events,

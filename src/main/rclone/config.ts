@@ -39,6 +39,8 @@ export const RCLONE_TIMEOUTS = {
     listDir: 60_000,
     /** 비교용 전체 목록(lsjson --recursive) 한 쪽 */
     compare: 30 * 60_000,
+    /** 파일 내용 하나 읽기(cat, INT-009). 넘으면 그 쪽 열에 시간 초과로 표시한다 */
+    cat: 60_000,
     /** config providers 정의 읽기 */
     providers: 20_000,
     /** config redacted·delete·update 같은 설정 쓰기(짧은 작업) */

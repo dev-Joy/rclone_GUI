@@ -2,7 +2,10 @@
 
 이 문서는 일반 사용자를 위해 버전별 주요 변경사항을 알기 쉽게 정리한 이력입니다.
 
-<!-- version-history: last-sha=acb1d9df65d91ab03bedf3f975dc4a6d92a4843c last-date=2026-11-17 -->
+<!-- version-history: last-sha=0e8812f820d2ca2ab3d171556a0e80135d54bc5a last-date=2026-11-17 -->
+
+## v0.1.80 (2026-11-17)
+- 파일 내용을 읽는 compare:fileDiff API를 추가한다
 
 ## v0.1.79 (2026-11-17)
 - 줄 단위 diff와 루트·상대 경로 결합 함수를 추가한다

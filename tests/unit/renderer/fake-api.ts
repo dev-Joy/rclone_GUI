@@ -31,6 +31,7 @@ import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
 import type { typSettings } from "@/shared/schemas/settings";
 import type { itfRunLogView } from "@/shared/types/history";
+import type { itfFileDiffData } from "@/shared/types/file-diff";
 import type { itfDirListing, itfRemoteBookmark } from "@/shared/types/remotes";
 import type { itfRunSnapshot, typRunEvent } from "@/shared/types/run";
 import type {
@@ -58,6 +59,12 @@ export interface itfFakeApi {
     compareGetResolvers: Array<{
         jobId: string;
         resolve: (r: itfCompareResult | null) => void;
+    }>;
+    /** compare.fileDiff 응답 제어 */
+    compareFileDiffResolvers: Array<{
+        jobId: string;
+        path: string;
+        resolve: (r: typApiResult<itfFileDiffData>) => void;
     }>;
     /** compare.getActive 응답 */
     setCompareActive: (a: itfCompareActive | null) => void;
@@ -170,6 +177,7 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     const remotesResolvers: itfFakeApi["remotesResolvers"] = [];
     const compareRunResolvers: itfFakeApi["compareRunResolvers"] = [];
     const compareGetResolvers: itfFakeApi["compareGetResolvers"] = [];
+    const compareFileDiffResolvers: itfFakeApi["compareFileDiffResolvers"] = [];
     const progressListeners = new Set<(e: itfCompareProgress) => void>();
     let compareActive: itfCompareActive | null = null;
     const runListeners = new Set<(e: typRunEvent) => void>();
@@ -486,6 +494,12 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 calls.push("compare.getActive");
                 return f_Ok(compareActive);
             },
+            fileDiff: (jobId, path) => {
+                calls.push(`compare.fileDiff:${jobId}:${path}`);
+                return new Promise((resolve) =>
+                    compareFileDiffResolvers.push({ jobId, path, resolve }),
+                );
+            },
         },
         run: {
             start: (input) => {
@@ -619,6 +633,7 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         remotesResolvers,
         compareRunResolvers,
         compareGetResolvers,
+        compareFileDiffResolvers,
         setCompareActive: (a) => {
             compareActive = a;
         },

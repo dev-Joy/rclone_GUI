@@ -41,6 +41,7 @@ import type {
     itfCompareResult,
 } from "@/shared/types/compare";
 import type { itfRunLogView } from "@/shared/types/history";
+import type { itfFileDiffData } from "@/shared/types/file-diff";
 import type {
     itfRemoteAuthAnswerResult,
     itfRemoteAuthProgress,
@@ -96,6 +97,7 @@ export const IPC_CHANNELS = {
     compareCancel: "compare:cancel",
     compareGet: "compare:get",
     compareGetActive: "compare:getActive",
+    compareFileDiff: "compare:fileDiff",
     runStart: "run:start",
     runCancel: "run:cancel",
     runGetActive: "run:getActive",
@@ -296,6 +298,11 @@ export interface itfRcloneGuiApi {
         get(jobId: string): Promise<typApiResult<itfCompareResult | null>>;
         /** 앱 전역에서 진행 중인 비교 */
         getActive(): Promise<typApiResult<itfCompareActive | null>>;
+        /**
+         * 비교 결과 항목 하나의 원본·대상 내용을 읽는다(파일은 바꾸지 않음).
+         * 캐시 결과가 없으면 PLAN_STALE, 항목이 없으면 NOT_FOUND, 같은·충돌 항목은 VALIDATION
+         */
+        fileDiff(jobId: string, path: string): Promise<typApiResult<itfFileDiffData>>;
     };
     run: {
         /**

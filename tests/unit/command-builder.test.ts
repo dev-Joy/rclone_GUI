@@ -9,6 +9,7 @@ import {
     assertCommandLength,
     assertNoBlockedFlags,
     buildBackendFeaturesArgs,
+    buildCatArgs,
     buildConfigFileArgs,
     buildListDirsArgs,
     buildListRemotesArgs,
@@ -598,7 +599,33 @@ describe("허용 명령 목록", () => {
             "copy",
             "sync",
             "backend features",
+            "cat",
         ]);
+    });
+
+    it("buildCatArgs: cat --ask-password=false [--config C] -- <path> (AC-7)", () => {
+        const withConf = buildCatArgs({
+            path: "test-remote:dir/a b.txt",
+            configPath: "C:\\tmp\\rclone.conf",
+        });
+        expect(withConf).toEqual([
+            "cat",
+            "--ask-password=false",
+            "--config",
+            "C:\\tmp\\rclone.conf",
+            "--",
+            "test-remote:dir/a b.txt",
+        ]);
+        expect(buildCatArgs({ path: "C:\\tmp\\src\\a.txt", configPath: null })).toEqual([
+            "cat",
+            "--ask-password=false",
+            "--",
+            "C:\\tmp\\src\\a.txt",
+        ]);
+        for (const args of [withConf, buildCatArgs({ path: "a:b", configPath: null })]) {
+            expect(() => assertNoBlockedFlags(args)).not.toThrow();
+            expect(() => assertAllowedCommand(args)).not.toThrow();
+        }
     });
 
     it("backend의 다른 하위 명령은 거부한다", () => {

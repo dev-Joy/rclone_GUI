@@ -111,6 +111,7 @@ export const ALLOWED_COMMANDS: ReadonlyArray<readonly string[]> = [
     ["copy"],
     ["sync"],
     ["backend", "features"],
+    ["cat"],
 ];
 
 /** 허용 목록에 없는 하위 명령이면 clsCommandBlockedError를 던진다 */
@@ -297,6 +298,23 @@ export function buildLsjsonArgs(input: itfLsjsonArgsInput): string[] {
     if (input.skipLinks) args.push("--skip-links");
     if (input.fastList) args.push("--fast-list");
     f_PushCommon(args, input.configPath, input.excludes);
+    args.push("--", input.path);
+    return f_Finish(args);
+}
+
+export interface itfCatArgsInput {
+    /** 읽을 파일의 rclone 경로(루트 + 상대 경로) */
+    path: string;
+    configPath: string | null;
+}
+
+/**
+ * 파일 내용 읽기: cat --ask-password=false [--config C] -- <path> (INT-009 FR-3).
+ * 읽기 전용이며 경로는 "--" 뒤 위치 인자로만 준다.
+ */
+export function buildCatArgs(input: itfCatArgsInput): string[] {
+    const args = ["cat", NO_ASK_PASSWORD];
+    if (input.configPath) args.push("--config", input.configPath);
     args.push("--", input.path);
     return f_Finish(args);
 }

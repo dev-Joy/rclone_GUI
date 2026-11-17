@@ -367,3 +367,12 @@ probe `filter` 묶음(`node scripts/probes/rclone-probes.mjs rclone --only=filte
 - 명령: 위 58~61의 결과 정리
 - 결과: 외부 종료로 볼 코드는 `-1`(0xFFFFFFFF) 하나다. `taskkill`(1)은 rclone 자체 오류와, CIM `Terminate`(0)는 정상 완료와 구분할 수 없다. Go 런타임은 panic·`fatal error`(메모리 부족 포함)·Go가 잡은 Windows 예외를 exit 2로 끝내며(rclone 소스 `lib/atexit`의 `exitcode` 처리와 Go 런타임 동작), 이는 rclone 사용법 오류(2)와 같아 코드로 구분할 수 없다.
 - 영향: 충돌은 종료 코드가 아니라 stderr의 Go 충돌 표지(`panic: `·`fatal error: `·`Exception 0x` 줄 시작, JSON 로그가 아닌 줄)로 판정한다(INT-005 FR-4·FR-5). exit 2 + 표지 없음은 일반 실패로 둔다.
+
+## 2026-11-17 · rclone v1.75.1 · Windows 11 (INT-009 T-03: 파일 내용 비교 `cat` 실측)
+
+임시 폴더와 가명 alias remote(`it-cat`)로 확인했다. 값은 모두 가짜다.
+
+### 63. `cat`은 파일 바이트를 그대로 낸다 — 텍스트·바이너리·0바이트 exit 0, 없는 파일은 exit 3
+- 명령: `cat --ask-password=false -- <임시 폴더의 파일>` / `cat --ask-password=false --config <임시 conf> -- it-cat:sub/nested.txt` / 같은 명령을 없는 파일로
+- 결과: CRLF 텍스트는 `line1\r\nline2\r\n` 바이트 그대로, NUL이 든 파일(`\0BIN\0`)도 변환·경고 없이 같은 바이트로 나오고 stderr는 비어 있다. 0바이트 파일은 stdout 0바이트, exit 0. 공백·`-`로 시작하는 이름도 `--` 뒤 위치 인자로 정상 처리되고, `--config` + `it-cat:상대경로`도 exit 0. 없는 파일은 local·remote 모두 exit 3이고 stderr는 `ERROR : error listing: directory not found` + `NOTICE: Failed to cat with 2 errors: last error was: directory not found` 두 줄이며 파일 경로는 나오지 않는다(`lsjson`의 없는 경로와 같은 exit 3, 노트 2).
+- 영향: INT-009 FR-4·FR-5·FR-10·NFR-3. 텍스트/바이너리 구분은 rclone이 해 주지 않으므로 앱이 앞 8000바이트의 NUL로 판정하고, 0바이트는 빈 텍스트(줄 0개)로 다룬다. 2MB 상한은 앱의 `maxStdoutBytes`(상한+1)로만 건다(rclone `cat`에는 크기 옵션을 쓰지 않는다). exit 0이 아니면 그 쪽 `error` 상태로 담고, 오류 요약에 경로가 섞이지 않도록 앱에서도 경로 토큰을 지운다.

@@ -48,6 +48,7 @@ import { clsActivityLock } from "@/main/services/activity-lock";
 import { cleanupExcludeFiles, EXCLUDE_FILE_DIR } from "@/main/services/exclude-file";
 import { clsExcludeService } from "@/main/services/exclude-service";
 import { clsCompareService } from "@/main/services/compare-service";
+import { clsFileDiffService } from "@/main/services/file-diff-service";
 import { pruneRunLogs } from "@/main/services/log-retention";
 import {
     clsOsRunQueue,
@@ -145,6 +146,7 @@ interface itfServices {
     groups: clsGroupStore;
     history: clsHistoryStore;
     compare: clsCompareService;
+    fileDiff: clsFileDiffService;
     runs: clsRunService;
     scheduler: clsScheduler;
     osScheduler: clsOsScheduler;
@@ -698,6 +700,14 @@ async function f_InitCore(): Promise<itfServices> {
             }
         },
     });
+    // 파일 내용 비교(INT-009). 읽기 전용이며 비교 결과 캐시의 항목만 읽는다
+    const fileDiff = new clsFileDiffService({
+        jobs,
+        settings,
+        rcloneEnv,
+        excludes: excludeStore,
+        compare,
+    });
     const runs = new clsRunService({
         jobs,
         settings,
@@ -760,6 +770,7 @@ async function f_InitCore(): Promise<itfServices> {
         groups,
         history,
         compare,
+        fileDiff,
         runs,
         scheduler,
         osScheduler,
@@ -778,7 +789,7 @@ async function f_InitCore(): Promise<itfServices> {
 async function f_StartGui(hidden: boolean): Promise<void> {
     if (guiStarted || !svc) return;
     guiStarted = true;
-    const { settings, jobs, history, compare, runs, scheduler, osScheduler } = svc;
+    const { settings, jobs, history, compare, fileDiff, runs, scheduler, osScheduler } = svc;
     const { rcloneEnv, remoteService, remoteConfig, wsl, excludes, groups } = svc;
     f_SyncLoginItem(settings.get().ui.launchAtLogin);
 
@@ -798,6 +809,7 @@ async function f_StartGui(hidden: boolean): Promise<void> {
         remoteService,
         wsl,
         compare,
+        fileDiff,
         runs,
         history,
         scheduler,

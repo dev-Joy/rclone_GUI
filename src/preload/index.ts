@@ -73,6 +73,7 @@ const api: itfRcloneGuiApi = {
         cancel: (jobId) => ipcRenderer.invoke(C.compareCancel, { jobId }),
         get: (jobId) => ipcRenderer.invoke(C.compareGet, { jobId }),
         getActive: () => ipcRenderer.invoke(C.compareGetActive),
+        fileDiff: (jobId, path) => ipcRenderer.invoke(C.compareFileDiff, { jobId, path }),
     },
     run: {
         start: (input) => ipcRenderer.invoke(C.runStart, input),
