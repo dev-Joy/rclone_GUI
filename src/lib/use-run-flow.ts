@@ -132,8 +132,9 @@ export function useRunFlow(): itfRunFlow {
         ui.leaveSettings(() =>
             useJobEditorStore.getState().guard(() => {
                 useJobsStore.getState().select(jobId);
-                ui.setView("job");
-                ui.setPane("work");
+                ui.setTab("files");
+                ui.closeEditor();
+                ui.closeSettings();
                 void f_CompareThenAsk(jobId);
             }),
         );
@@ -143,7 +144,8 @@ export function useRunFlow(): itfRunFlow {
         const id = pendingJobId;
         setPendingJobId(null);
         if (id === null) return;
-        useUiStore.getState().setPane("work");
+        useUiStore.getState().setTab("files");
+        useUiStore.getState().closeEditor();
         void useRunStore.getState().start(id, false, c);
     };
 

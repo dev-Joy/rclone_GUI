@@ -5,7 +5,7 @@
  */
 
 // ========== External imports ==========
-import type { ReactNode } from "react";
+import type { MouseEvent as typReactMouseEvent, ReactNode } from "react";
 
 // ========== Props & Types ==========
 export type typZBCButtonVariant = "primary" | "secondary" | "danger" | "ghost";
@@ -24,7 +24,9 @@ export interface itfZBCButtonProps {
     "aria-describedby"?: string;
     /** 모달이 열릴 때 처음 포커스를 받는다 (ZBCModal이 data-autofocus를 찾는다) */
     initialFocus?: boolean;
-    onClick?: () => void;
+    /** 목록·툴바처럼 좁은 곳에 쓰는 작은 크기 */
+    small?: boolean;
+    onClick?: (event: typReactMouseEvent<HTMLButtonElement>) => void;
 }
 
 const propsDefault = {
@@ -32,6 +34,7 @@ const propsDefault = {
     type: "button",
     disabled: false,
     initialFocus: false,
+    small: false,
 } satisfies Partial<itfZBCButtonProps>;
 
 export default function ZBCButton(props: itfZBCButtonProps) {
@@ -43,6 +46,7 @@ export default function ZBCButton(props: itfZBCButtonProps) {
         disabled = propsDefault.disabled,
         title,
         initialFocus = propsDefault.initialFocus,
+        small = propsDefault.small,
         onClick,
     } = props;
 
@@ -53,6 +57,7 @@ export default function ZBCButton(props: itfZBCButtonProps) {
             id={id}
             className="zbc zbcButton"
             data-variant={variant}
+            data-size={small ? "small" : undefined}
             disabled={disabled}
             title={title}
             aria-label={props["aria-label"]}

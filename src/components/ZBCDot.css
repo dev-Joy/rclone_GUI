@@ -1,0 +1,37 @@
+/**
+ * ZBCDot 스타일
+ *
+ * @author dev-Joy 2026-11-17
+ */
+
+.zbcDot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--border);
+
+    &[data-tone="success"] {
+        background: var(--success);
+    }
+
+    &[data-tone="failed"],
+    &[data-tone="blocked"],
+    &[data-tone="interrupted"] {
+        background: var(--danger);
+    }
+
+    &[data-tone="canceled"],
+    &[data-tone="partial"] {
+        background: var(--warning);
+    }
+
+    &[data-tone="noop"] {
+        background: var(--muted);
+    }
+
+    &[data-tone="running"] {
+        background: var(--accent);
+    }
+}

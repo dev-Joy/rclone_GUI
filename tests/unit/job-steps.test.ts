@@ -4,16 +4,16 @@ import { describe, expect, it } from "vitest";
 // ========== Internal imports ==========
 import {
     freshPreview,
-    jobSteps,
+    planFooterText,
     previewNotice,
     relativeTimeText,
     runBarText,
-    workMainPanel,
-    type itfJobStepsInput,
+    runPanelShown,
+    syncButtonText,
     type itfStepLastRun,
 } from "@/lib/job-steps";
-import { formatBytes, formatLocalDateTime } from "@/shared/format";
-import type { typRunPlan, typRunStats } from "@/shared/schemas/run";
+import { formatBytes, formatDuration, formatLocalDateTime } from "@/shared/format";
+import type { typRunPlan } from "@/shared/schemas/run";
 import type { itfCompareResult, itfCompareSummary, itfDiffEntry } from "@/shared/types/compare";
 import type { itfDryRunSummary } from "@/shared/types/run";
 
@@ -129,48 +129,6 @@ function f_Last(over: Partial<itfStepLastRun["record"]> = {}, dry: itfDryRunSumm
     return { record, dryRunSummary: dry ?? (record.dryRun ? f_Dry() : null) };
 }
 
-function f_Stats(over: Partial<typRunStats> = {}): typRunStats {
-    return {
-        bytes: 42,
-        totalBytes: 100,
-        transfers: 0,
-        totalTransfers: 0,
-        deletes: 0,
-        deletedDirs: 0,
-        checks: 0,
-        totalChecks: 0,
-        listed: 0,
-        errors: 0,
-        speedBps: null,
-        etaSeconds: null,
-        partialFiles: 0,
-        etaPending: false,
-        elapsedMs: 0,
-        fatalError: false,
-        lastError: null,
-        ...over,
-    };
-}
-
-function f_In(over: Partial<itfJobStepsInput> = {}): itfJobStepsInput {
-    return {
-        jobId: JOB,
-        mode: "copy",
-        comparing: false,
-        compare: null,
-        staleReason: null,
-        run: null,
-        last: null,
-        realReady: false,
-        nowMs: T0 + 10_000,
-        ...over,
-    };
-}
-
-function f_States(i: itfJobStepsInput): string[] {
-    return jobSteps(i).map((s) => `${s.state}:${s.note}`);
-}
-
 const STALE = "비교한 지 11분 지났습니다. 실행 전 다시 비교하세요.";
 
 describe("relativeTimeText", () => {
@@ -213,196 +171,6 @@ describe("freshPreview", () => {
 
     it("비교 결과가 없으면 null", () => {
         expect(freshPreview({ jobId: JOB, compare: null, last: f_Last() })).toBeNull();
-    });
-});
-
-describe("jobSteps", () => {
-    const compare = f_Result();
-
-    it("결과 없음·활동 없음", () => {
-        expect(f_States(f_In())).toEqual([
-            "current:원본·대상 목록 읽기",
-            "pending:선택 · 권장",
-            "pending:비교 후 가능",
-        ]);
-    });
-
-    it("비교 중", () => {
-        expect(f_States(f_In({ comparing: true }))).toEqual([
-            "running:목록 읽는 중",
-            "pending:선택 · 권장",
-            "pending:비교 후 가능",
-        ]);
-    });
-
-    it("결과 있음·새 미리보기 없음 (실행 가능 여부에 따라 ③ 문구)", () => {
-        expect(f_States(f_In({ compare, realReady: true }))).toEqual([
-            "done:방금 · 9개 확인",
-            "current:선택 · 권장",
-            "pending:미리보기 후 권장",
-        ]);
-        expect(f_States(f_In({ compare }))[2]).toBe("pending:실행할 수 없음");
-    });
-
-    it("결과 낡음", () => {
-        expect(f_States(f_In({ compare, staleReason: STALE, realReady: false }))).toEqual([
-            "current:다시 비교 필요",
-            "pending:선택 · 권장",
-            "pending:비교 후 가능",
-        ]);
-    });
-
-    it("미리보기 진행 중", () => {
-        const run = { jobId: JOB, dryRun: true, stats: null, phase: "transferring" as const };
-        expect(f_States(f_In({ compare, run, realReady: false }))).toEqual([
-            "done:방금 · 9개 확인",
-            "running:미리보기 중",
-            "pending:미리보기 후 권장",
-        ]);
-    });
-
-    it("새 미리보기 성공·일치", () => {
-        expect(f_States(f_In({ compare, last: f_Last(), realReady: true }))).toEqual([
-            "done:방금 · 9개 확인",
-            "done:계획과 일치",
-            "current:준비됨",
-        ]);
-        expect(f_States(f_In({ compare, last: f_Last(), realReady: false }))[2]).toBe(
-            "pending:실행할 수 없음",
-        );
-    });
-
-    it("새 미리보기 성공·불일치", () => {
-        const last = f_Last({ plan: f_Plan({ deleteFiles: 2 }) });
-        expect(f_States(f_In({ compare, last, realReady: true }))).toEqual([
-            "done:방금 · 9개 확인",
-            "current:계획과 다름 · 다시 비교",
-            "pending:다시 비교 권장",
-        ]);
-        expect(f_States(f_In({ compare, last, realReady: false }))[2]).toBe(
-            "pending:실행할 수 없음",
-        );
-        expect(previewNotice(f_In({ compare, last }))).toEqual({
-            tone: "warning",
-            text: "미리보기가 비교 결과와 다릅니다. 다시 비교하세요.",
-        });
-    });
-
-    it("새 미리보기 실패", () => {
-        const last = f_Last({ status: "failed" });
-        expect(f_States(f_In({ compare, last, realReady: true }))).toEqual([
-            "done:방금 · 9개 확인",
-            "current:미리보기 실패",
-            "pending:미리보기 후 권장",
-        ]);
-    });
-
-    it("실제 실행 진행 중: 진행률·사전 확인·진행 중", () => {
-        const base = {
-            jobId: JOB,
-            dryRun: false,
-            stats: f_Stats(),
-            phase: "transferring" as const,
-        };
-        expect(f_States(f_In({ compare, run: base }))).toEqual([
-            "done:방금 · 9개 확인",
-            "pending:건너뜀",
-            "running:42%",
-        ]);
-        expect(f_States(f_In({ compare, run: base, last: f_Last() }))[1]).toBe("done:계획과 일치");
-        const unknown = { ...f_Last(), dryRunSummary: null };
-        expect(f_States(f_In({ compare, run: base, last: unknown }))[1]).toBe("done:미리보기 완료");
-        expect(f_States(f_In({ run: { ...base, stats: null } }))).toEqual([
-            "done:실행에 사용",
-            "pending:건너뜀",
-            "running:진행 중",
-        ]);
-        expect(f_States(f_In({ run: { ...base, phase: "preflight" } }))[2]).toBe(
-            "running:사전 확인 중",
-        );
-    });
-
-    it("실제 실행 비교 중(자동 실행·OS 예약): 옛 비교·미리보기를 쓰지 않는다", () => {
-        const run = { jobId: JOB, dryRun: false, stats: null, phase: "comparing" as const };
-        expect(f_States(f_In({ compare, run, last: f_Last(), realReady: true }))).toEqual([
-            "running:목록 읽는 중",
-            "pending:",
-            "pending:비교 후 실행",
-        ]);
-    });
-
-    it("실제 실행 준비 중(validating): ① 준비 중, ②③ 대기", () => {
-        const run = { jobId: JOB, dryRun: false, stats: null, phase: "validating" as const };
-        expect(f_States(f_In({ compare, run, last: f_Last() }))).toEqual([
-            "running:준비 중",
-            "pending:",
-            "pending:비교 후 실행",
-        ]);
-        expect(f_States(f_In({ run }))[0]).toBe("running:준비 중");
-    });
-
-    it("결과 없음 + 마지막 실제 실행 성공 → 다시 비교, ③ 완료", () => {
-        const last = f_Last({ dryRun: false, startedAt: ISO0 });
-        expect(f_States(f_In({ last }))).toEqual([
-            "current:다시 비교",
-            "pending:",
-            "done:방금 · 1분 12초",
-        ]);
-    });
-
-    it("결과 없음 + 마지막 실제 실행 실패 → ③ 상태 문구", () => {
-        const last = f_Last({ dryRun: false, status: "failed" });
-        expect(f_States(f_In({ last }))).toEqual([
-            "current:다시 비교",
-            "pending:",
-            "pending:복사 실패",
-        ]);
-    });
-
-    it("불변식: current+running ≤ 1, 레이블·id 순서 고정", () => {
-        const runReal = { jobId: JOB, dryRun: false, stats: null, phase: "transferring" as const };
-        const runDry = { ...runReal, dryRun: true };
-        const cases: itfJobStepsInput[] = [
-            f_In(),
-            f_In({ comparing: true }),
-            f_In({ compare }),
-            f_In({ compare, realReady: true }),
-            f_In({ compare, staleReason: STALE }),
-            f_In({ compare, run: runDry }),
-            f_In({ run: runDry }),
-            f_In({ compare, last: f_Last(), realReady: true }),
-            f_In({ compare, last: f_Last({ plan: f_Plan({ createFiles: 1 }) }) }),
-            f_In({ compare, last: f_Last({ status: "canceled" }) }),
-            f_In({ compare, run: runReal }),
-            f_In({ compare, run: { ...runReal, phase: "comparing" }, last: f_Last() }),
-            f_In({ compare, run: { ...runReal, phase: "validating" } }),
-            f_In({ last: f_Last({ dryRun: false }) }),
-            f_In({ last: f_Last({ dryRun: false, status: "partial" }) }),
-        ];
-        for (const c of cases) {
-            const steps = jobSteps(c);
-            const active = steps.filter((s) => s.state === "current" || s.state === "running");
-            expect(active.length).toBeLessThanOrEqual(1);
-            expect(steps.map((s) => s.label)).toEqual(["비교", "미리보기", "실행"]);
-            expect(steps.map((s) => s.id)).toEqual(["compare", "preview", "run"]);
-        }
-    });
-
-    it("다른 작업의 실행·마지막 실행은 무시한다", () => {
-        const run = {
-            jobId: OTHER,
-            dryRun: false,
-            stats: f_Stats(),
-            phase: "transferring" as const,
-        };
-        const steps = jobSteps(f_In({ compare, run, last: f_Last({ jobId: OTHER }) }));
-        expect(steps.some((s) => s.state === "running")).toBe(false);
-        expect(steps[1].state).toBe("current");
-    });
-
-    it("항목 수는 ko-KR 구분자로 쓴다", () => {
-        const big = f_Result({ entries: f_Entries(1231) });
-        expect(jobSteps(f_In({ compare: big }))[0].note).toBe("방금 · 1,231개 확인");
     });
 });
 
@@ -500,9 +268,9 @@ describe("runBarText", () => {
     });
 });
 
-/** 비교·실행 없음, 결과 없음일 때 오른쪽 열 */
+/** 비교·실행 없음, 결과 없음일 때 */
 function f_IdlePanel(last: itfStepLastRun) {
-    return workMainPanel({
+    return runPanelShown({
         jobId: JOB,
         run: null,
         comparing: false,
@@ -512,12 +280,12 @@ function f_IdlePanel(last: itfStepLastRun) {
     });
 }
 
-describe("workMainPanel", () => {
+describe("runPanelShown", () => {
     const real = { jobId: JOB, dryRun: false };
 
-    it("이 작업 실제 실행 중이면 run (비교 결과가 있어도)", () => {
+    it("이 작업 실제 실행 중이면 true (비교 결과가 있어도)", () => {
         expect(
-            workMainPanel({
+            runPanelShown({
                 jobId: JOB,
                 run: real,
                 comparing: false,
@@ -525,12 +293,12 @@ describe("workMainPanel", () => {
                 startError: null,
                 last: null,
             }),
-        ).toBe("run");
+        ).toBe(true);
     });
 
-    it("이 작업 미리보기 중이면 compare", () => {
+    it("이 작업 미리보기 중이면 false", () => {
         expect(
-            workMainPanel({
+            runPanelShown({
                 jobId: JOB,
                 run: { ...real, dryRun: true },
                 comparing: false,
@@ -538,13 +306,13 @@ describe("workMainPanel", () => {
                 startError: null,
                 last: null,
             }),
-        ).toBe("compare");
+        ).toBe(false);
     });
 
-    it("비교 중·결과 있음은 compare", () => {
+    it("비교 중·결과 있음은 false", () => {
         const lastReal = f_Last({ dryRun: false });
         expect(
-            workMainPanel({
+            runPanelShown({
                 jobId: JOB,
                 run: null,
                 comparing: true,
@@ -552,9 +320,9 @@ describe("workMainPanel", () => {
                 startError: null,
                 last: lastReal,
             }),
-        ).toBe("compare");
+        ).toBe(false);
         expect(
-            workMainPanel({
+            runPanelShown({
                 jobId: JOB,
                 run: null,
                 comparing: false,
@@ -562,16 +330,16 @@ describe("workMainPanel", () => {
                 startError: null,
                 last: lastReal,
             }),
-        ).toBe("compare");
+        ).toBe(false);
     });
 
-    it("결과 없음: 이 작업 마지막 실제 실행이면 run, 다른 작업·미리보기면 compare", () => {
-        expect(f_IdlePanel(f_Last({ dryRun: false }))).toBe("run");
-        expect(f_IdlePanel(f_Last({ dryRun: false, jobId: OTHER }))).toBe("compare");
-        expect(f_IdlePanel(f_Last())).toBe("compare");
+    it("결과 없음: 이 작업 마지막 실제 실행이면 true, 다른 작업·미리보기면 false", () => {
+        expect(f_IdlePanel(f_Last({ dryRun: false }))).toBe(true);
+        expect(f_IdlePanel(f_Last({ dryRun: false, jobId: OTHER }))).toBe(false);
+        expect(f_IdlePanel(f_Last())).toBe(false);
     });
 
-    it("이 작업 실제 실행 시작 오류가 비교 결과 뒤에 났으면 run, 미리보기·다른 작업·옛 오류는 아님", () => {
+    it("이 작업 실제 실행 시작 오류가 비교 결과 뒤에 났으면 true, 미리보기·다른 작업·옛 오류는 아님", () => {
         const base = {
             jobId: JOB,
             run: null,
@@ -580,13 +348,78 @@ describe("workMainPanel", () => {
             last: null,
         };
         const err = { jobId: JOB, dryRun: false, at: f_Iso(1_000) };
-        expect(workMainPanel({ ...base, startError: err })).toBe("run");
-        expect(workMainPanel({ ...base, compareCreatedAt: null, startError: err })).toBe("run");
-        expect(workMainPanel({ ...base, startError: { ...err, dryRun: true } })).toBe("compare");
-        expect(workMainPanel({ ...base, startError: { ...err, jobId: OTHER } })).toBe("compare");
-        expect(workMainPanel({ ...base, startError: { ...err, at: f_Iso(-1_000) } })).toBe(
-            "compare",
-        );
-        expect(workMainPanel({ ...base, comparing: true, startError: err })).toBe("compare");
+        expect(runPanelShown({ ...base, startError: err })).toBe(true);
+        expect(runPanelShown({ ...base, compareCreatedAt: null, startError: err })).toBe(true);
+        expect(runPanelShown({ ...base, startError: { ...err, dryRun: true } })).toBe(false);
+        expect(runPanelShown({ ...base, startError: { ...err, jobId: OTHER } })).toBe(false);
+        expect(runPanelShown({ ...base, startError: { ...err, at: f_Iso(-1_000) } })).toBe(false);
+        expect(runPanelShown({ ...base, comparing: true, startError: err })).toBe(false);
+    });
+});
+
+describe("syncButtonText", () => {
+    const job = { source: "C:\\tmp\\src", destination: "D:\\tmp\\dst", mode: "sync" as const };
+    const base = {
+        job,
+        staleReason: null,
+        maxAgeMinutes: 10,
+        nowMs: T0 + 1_000,
+        lastReal: null,
+        realReady: true,
+    };
+
+    it("비교 결과가 없으면 꺼지고 비교를 안내한다", () => {
+        expect(syncButtonText({ ...base, compare: null })).toEqual({
+            label: "동기화 — 먼저 [비교]를 누르세요",
+            disabled: true,
+        });
+    });
+
+    it("비교 결과가 있으면 일어날 일을 붙이고 실행 가능 여부를 따른다", () => {
+        const compare = f_Result({
+            mode: "sync",
+            summary: f_Summary({ createFiles: 1, updateFiles: 1, deleteFiles: 1 }),
+        });
+        expect(syncButtonText({ ...base, compare })).toEqual({
+            label: "동기화: 대상에 1개 복사, 1개 덮어씀, 1개 삭제",
+            disabled: false,
+        });
+        expect(syncButtonText({ ...base, compare, realReady: false }).disabled).toBe(true);
+    });
+
+    it("바뀔 것이 없으면 그렇게 말한다", () => {
+        const compare = f_Result({
+            summary: f_Summary({ createFiles: 0, updateFiles: 0, deleteFiles: 0 }),
+        });
+        expect(syncButtonText({ ...base, compare }).label).toBe("동기화: 바뀔 것 없음");
+    });
+});
+
+describe("planFooterText", () => {
+    it("비교 결과가 없으면 null", () => {
+        expect(planFooterText({ compare: null, staleReason: null })).toBeNull();
+    });
+
+    it("비교 시각·걸린 시간과 계획 상태를 적는다", () => {
+        const text = planFooterText({ compare: f_Result(), staleReason: null });
+        expect(text).toContain("비교 ");
+        expect(text).toContain(formatDuration(300));
+        expect(text).toContain("이 비교 결과로 동기화할 수 있습니다");
+    });
+
+    it("낡았으면 다시 비교 안내를 쓴다", () => {
+        const text = planFooterText({ compare: f_Result(), staleReason: STALE });
+        expect(text).toContain(STALE);
+        expect(text).not.toContain("이 비교 결과로 동기화할 수 있습니다");
+    });
+
+    it("바뀔 것이 없으면 그렇게 말한다", () => {
+        const text = planFooterText({
+            compare: f_Result({
+                summary: f_Summary({ createFiles: 0, updateFiles: 0, deleteFiles: 0 }),
+            }),
+            staleReason: null,
+        });
+        expect(text).toContain("바뀔 것 없음");
     });
 });

@@ -9,7 +9,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 4px 12px;
+    padding: 6px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: transparent;
@@ -32,6 +32,11 @@
         opacity: 0.55;
     }
 
+    &[data-size="small"] {
+        padding: 3px 10px;
+        font-size: 12px;
+    }
+
     &[data-variant="primary"] {
         border-color: var(--accent);
         background: var(--accent);
@@ -41,10 +46,11 @@
 
     &[data-variant="danger"] {
         border-color: var(--danger);
-        color: var(--danger);
+        background: var(--danger);
+        color: var(--on-strong);
 
         &:hover:not(:disabled) {
-            background: var(--danger-weak);
+            border-color: var(--danger);
         }
     }
 

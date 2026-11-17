@@ -1,7 +1,8 @@
 /**
  * 작업 편집기 상태 (zustand): 편집 중 초안(draft)과 저장본(baseline), 변경 여부, 저장, 변경 버리기 확인.
  * 헤더·사이드바·설정 이동이 같은 변경 여부를 봐야 해서 전역에 둔다.
- * jobs-store만 import 한다(단방향). jobs 변경은 HomePage가 syncFromJobs로 알려 준다.
+ * jobs-store·ui-store만 import 한다(단방향). jobs 변경은 HomePage가 syncFromJobs로 알려 준다.
+ * 편집기 열기·닫기는 job-editor-store 적재와 ui-store.editor를 같은 동작에서 함께 맞춘다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -16,12 +17,11 @@ import type { typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobRunOptions } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useUiStore } from "@/stores/ui-store";
 
 export interface itfJobEditorState {
     /** null = 저장 전 새 작업 */
     jobId: string | null;
-    /** 열려 있는지 (빈 상태 구분) */
-    open: boolean;
     baseline: typJobDraft | null;
     draft: typJobDraft | null;
     /** 열었을 때의 rev. jobs:changed로 rev가 바뀌면 외부 변경 */
@@ -72,7 +72,6 @@ type typEditorData = Omit<
 
 const CLOSED: typEditorData = {
     jobId: null,
-    open: false,
     baseline: null,
     draft: null,
     baseRev: null,
@@ -104,20 +103,20 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
         set({
             ...CLOSED,
             jobId: job.id,
-            open: true,
             baseline: jobToDraft(job),
             draft: jobToDraft(job),
             baseRev: job.rev,
         });
+        useUiStore.getState().openEditor({ mode: "edit", jobId: job.id });
     },
     openNew: (settings) => {
         session += 1;
         set({
             ...CLOSED,
-            open: true,
             baseline: createJobDraft(settings),
             draft: createJobDraft(settings),
         });
+        useUiStore.getState().openEditor({ mode: "new", jobId: null });
     },
     close: () => {
         session += 1;
@@ -180,14 +179,20 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
             saving: false,
             showErrors: false,
         });
+        // 새 작업을 저장했으면 편집기 대상도 그 작업으로 옮긴다(저장 뒤에도 같은 편집기가 이어진다)
+        const ui = useUiStore.getState();
+        if (ui.editor !== null && ui.editor.jobId !== r.data.id) {
+            ui.openEditor({ mode: "edit", jobId: r.data.id });
+        }
         return true;
     },
     syncFromJobs: (jobs) => {
         const s = get();
-        if (!s.open || s.jobId === null || s.saving) return;
+        if (s.draft === null || s.jobId === null || s.saving) return;
         const job = jobs.find((j) => j.id === s.jobId);
         if (!job) {
             get().close();
+            useUiStore.getState().closeEditor();
             return;
         }
         // 같거나 오래된 rev(늦게 온 이벤트)는 무시한다. 단 공용 제외 패턴이 지워져 연결만 바뀐 경우

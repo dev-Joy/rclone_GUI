@@ -1,5 +1,6 @@
 /**
  * JobWorkspace 스타일
+ * INT-008 FR-6·9·10·14: header(제목·배지·단추·경로 줄) · toolbar · 안내 줄 · 실행 배너 · 탭 · footer.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -8,13 +9,13 @@
     .JobWorkspace {
         display: flex;
         flex-direction: column;
-        gap: 8px;
         min-width: 0;
 
         .header {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 2px 12px;
+            padding-bottom: 6px;
         }
 
         .heading {
@@ -28,28 +29,9 @@
         .title {
             overflow: hidden;
             margin: 0;
-            font-size: 18px;
+            font-size: 17px;
             text-overflow: ellipsis;
             white-space: nowrap;
-        }
-
-        .paths {
-            overflow: hidden;
-            margin: 0;
-            color: var(--muted);
-            font-family: var(--font-mono);
-            font-size: 12px;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .headerRow {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            min-width: 0;
         }
 
         .actions {
@@ -59,63 +41,115 @@
             gap: 6px;
         }
 
-        /* ⋯ 메뉴(복제·삭제): 네이티브 details 디스클로저. summary가 list-item이 아니라 표식은 안 보인다 */
-        .more {
-            position: relative;
+        .paths {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 8px;
+            min-width: 0;
+            color: var(--muted);
+            font-family: var(--font-mono);
+            font-size: 12px;
         }
 
-        .moreButton {
-            display: inline-flex;
+        .path {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .arrow {
+            flex: none;
+            color: var(--accent);
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
             align-items: center;
-            justify-content: center;
-            min-width: 32px;
-            padding: 4px 8px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            color: var(--text);
-            font-weight: 600;
-            line-height: 1.5;
-            list-style: none;
-            cursor: pointer;
-
-            &:hover {
-                border-color: var(--accent);
-            }
-
-            &:focus-visible {
-                outline: 2px solid var(--focus);
-                outline-offset: 1px;
-            }
+            gap: 8px;
+            padding-bottom: 6px;
         }
 
-        .more[open] > .moreButton {
-            background: var(--accent-weak);
-        }
-
-        .moreMenu {
-            position: absolute;
-            top: calc(100% + 4px);
-            right: 0;
-            z-index: 2;
+        .notices {
             display: flex;
             flex-direction: column;
             gap: 4px;
-            min-width: 120px;
-            padding: 6px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            background: var(--panel);
+            padding-bottom: 6px;
+        }
 
-            :global(.zbcButton) {
-                justify-content: flex-start;
+        .notice {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+
+            &[data-level="success"] {
+                color: var(--success);
+            }
+
+            &[data-level="warning"] {
+                color: var(--warning);
+            }
+
+            &[data-level="danger"] {
+                color: var(--danger);
             }
         }
 
-        .panel {
+        .runPanel {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             min-width: 0;
+            margin-bottom: 8px;
+        }
+
+        .runBanner {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .runMetaRow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .progressBar {
+            width: 200px;
+            height: 8px;
+        }
+
+        .detailToggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        .tabPanel {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            padding-top: 8px;
+        }
+
+        .footer {
+            display: flex;
+            gap: 18px;
+            padding: 8px 0 2px;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .footerItem {
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     }
 }

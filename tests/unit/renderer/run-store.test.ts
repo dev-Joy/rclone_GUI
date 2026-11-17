@@ -396,13 +396,13 @@ describe("run-store recompareDrift (다시 비교)", () => {
         error: { code: "PLAN_DRIFT", message: "바뀜" },
     });
 
-    /** 막힌 작업 J1과 지금 보고 있는 작업 J2(작업 설정 화면) */
+    /** 막힌 작업 J1과 지금 보고 있는 작업 J2(작업 편집기 열림) */
     function f_Setup() {
         const j1 = makeJob({ id: J1, name: "작업" });
         const j2 = makeJob({ id: J2, name: "다른 작업" });
         useJobsStore.setState({ jobs: [j1, j2], selectedJobId: J2 });
         useJobEditorStore.getState().openJob(j2);
-        useUiStore.setState({ view: "job", pane: "edit" });
+        useUiStore.setState({ tab: "files", editor: { mode: "edit", jobId: J2 } });
         useRunStore.setState({ driftNotice: DRIFT });
     }
 
@@ -411,7 +411,7 @@ describe("run-store recompareDrift (다시 비교)", () => {
         f_S().recompareDrift();
         expect(f_S().driftNotice).toBeNull();
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
-        expect(useUiStore.getState()).toMatchObject({ view: "job", pane: "work" });
+        expect(useUiStore.getState()).toMatchObject({ tab: "files", editor: null });
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });
 
@@ -422,7 +422,7 @@ describe("run-store recompareDrift (다시 비교)", () => {
         expect(f_S().driftNotice).toBeNull();
         expect(useJobEditorStore.getState().pendingAction).not.toBeNull();
         expect(useJobsStore.getState().selectedJobId).toBe(J2);
-        expect(useUiStore.getState().pane).toBe("edit");
+        expect(useUiStore.getState().editor).toEqual({ mode: "edit", jobId: J2 });
         expect(f_CompareRuns()).toEqual([]);
         useJobEditorStore.getState().cancelDiscard();
         expect(useJobEditorStore.getState().draft?.name).toBe("편집 중");
@@ -432,18 +432,22 @@ describe("run-store recompareDrift (다시 비교)", () => {
         f_S().recompareDrift();
         useJobEditorStore.getState().confirmDiscard();
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
-        expect(useUiStore.getState().pane).toBe("work");
+        expect(useUiStore.getState()).toMatchObject({ tab: "files", editor: null });
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });
 
-    it("설정 화면에 저장하지 않은 변경이 있으면 설정 떠나기 확인을 먼저 거친다", () => {
+    it("설정에 저장하지 않은 변경이 있으면 설정 떠나기 확인을 먼저 거친다", () => {
         f_Setup();
-        useUiStore.setState({ view: "settings", settingsDirty: true });
+        useUiStore.setState({ settingsOpen: true, settingsDirty: true });
         f_S().recompareDrift();
         expect(useUiStore.getState().pendingLeave).not.toBeNull();
         expect(f_CompareRuns()).toEqual([]);
         useUiStore.getState().confirmLeave();
-        expect(useUiStore.getState()).toMatchObject({ view: "job", pane: "work" });
+        expect(useUiStore.getState()).toMatchObject({
+            settingsOpen: false,
+            tab: "files",
+            editor: null,
+        });
         expect(useJobsStore.getState().selectedJobId).toBe(J1);
         expect(f_CompareRuns()).toEqual([`compare.run:${J1}`]);
     });

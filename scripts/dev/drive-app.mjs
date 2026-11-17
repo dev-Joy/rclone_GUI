@@ -4,12 +4,13 @@
  *        (pre-v2 백업·연결 테이블). 공용 제외 패턴 IPC(추가·중복·#거부·삭제)도 1회차에서 확인한다.
  * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
- *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인)과 설정 화면,
- *        비교 화면(임시 원본·대상 비교 → 요약·행 표시, 상태 필터·동일 숨기기·경로 검색),
- *        실행 화면(미리보기 요약·대상 불변 → 복사 실행 확인 창 → 대상 반영),
+ *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인: 편집은 header의 ‘편집’ 모달)과
+ *        설정 모달(상단 막대 ‘설정’),
+ *        비교 화면(임시 원본·대상 비교 → 상태 칩·행 표시, 칩 필터·경로 검색),
+ *        실행(⋯ 메뉴 미리보기 안내·대상 불변 → 동기화 단추 확인 창 → 대상 반영),
  *        실행 중 rclone을 바깥에서 Stop-Process로 강제 종료 → 외부 종료 문구·이력 exitCode -1·로그 exit=-1(0xFFFFFFFF)(INT-005 AC-13),
  *        동기화(삭제 확인 모달·체크 전 비활성 → 비교 뒤 대상 변경 시 사전 확인 불일치 모달·대상 불변
- *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 비교 탭) → 대상 반영),
+ *        → 다른 작업을 고친 채 다시 비교(변경 버리기 확인 → 막힌 작업의 파일 목록) → 대상 반영),
  *        대상의 가짜 `x.bin.0123abcd.partial`을 비교 목록·삭제 확인 창에서 "취소로 남은 임시 파일"로 표시,
  *        이력 탭(목록·상세·로그 끝부분), 설정(트레이·로그인 시작 표시, 이력 비우기), 자동 실행 일시정지
  * 2회차: 재시작 후 작업·설정·lastRun·일시정지 유지, active-run 없음, 이름순 첫 작업 자동 선택,
@@ -407,7 +408,7 @@ function f_PidAlive(pid) {
 function f_Ui(app) {
     return {
         text: () => app.evaluate("document.body.innerText"),
-        /** 글자가 정확히 같은 첫 버튼(비활성 포함 여부 선택) */
+        /** 글자가 정확히 같은 첫 버튼(비활성 포함 여부 선택). 여러 모달이 겹치면 문서 순서 첫 모달 안에서 찾는다 */
         click: (label, { inDialog = false } = {}) =>
             app.evaluate(`(() => {
                 const root = ${inDialog} ? document.querySelector("dialog[open]") : document;
@@ -417,15 +418,32 @@ function f_Ui(app) {
                 b.click();
                 return true;
             })()`),
+        /** 열린 모달이 여럿일 때(편집 + 확인 창) 어느 모달에 있든 같은 글자 단추를 누른다 */
+        clickDialog: (label) =>
+            app.evaluate(`(() => {
+                const b = [...document.querySelectorAll("dialog[open] button")]
+                    .find((x) => x.textContent.trim() === ${js(label)} && !x.disabled);
+                if (!b) return false;
+                b.click();
+                return true;
+            })()`),
+        /** 선택자로 요소를 누른다(E2E용 id가 있는 단추 등) */
+        clickSel: (selector) =>
+            app.evaluate(`(() => {
+                const el = document.querySelector(${js(selector)});
+                if (!el) return false;
+                el.click();
+                return true;
+            })()`),
         disabled: (label) =>
             app.evaluate(`[...document.querySelectorAll("button")]
                 .filter((x) => x.textContent.trim() === ${js(label)})
                 .map((x) => x.disabled)`),
-        /** 사이드바의 작업 항목(이름이 정확히 같은 것) 클릭 */
+        /** 사이드바의 작업 항목(이름이 정확히 같은 것) 클릭. 이름은 목록 항목의 span id(job-item-name-*)로 찾는다 */
         clickJob: (name) =>
             app.evaluate(`(() => {
                 const b = [...document.querySelectorAll("nav[aria-labelledby=jobs-title] li button")]
-                    .find((x) => x.querySelector("span")?.textContent === ${js(name)});
+                    .find((x) => x.querySelector('span[id^="job-item-name-"]')?.textContent === ${js(name)});
                 if (!b) return false;
                 b.click();
                 return true;
@@ -443,6 +461,11 @@ function f_Ui(app) {
             })()`),
         value: (selector) => app.evaluate(`document.querySelector(${js(selector)})?.value ?? null`),
         dialogText: () => app.evaluate(`document.querySelector("dialog[open]")?.innerText ?? ""`),
+        /** 열린 모달이 여럿일 때 모두의 글자를 합친다(편집 + 확인 창) */
+        dialogsText: () =>
+            app.evaluate(
+                `[...document.querySelectorAll("dialog[open]")].map((d) => d.innerText).join("\\n")`,
+            ),
         /** 조건식이 참이 될 때까지 기다린다 */
         until: async (expression, timeoutMs = 5000) => {
             for (let t = 0; t < timeoutMs; t += 100) {
@@ -582,7 +605,13 @@ try {
     );
     // ===== Phase 4: 작업 화면 =====
     const ui = f_Ui(a);
-    f_Check("사이드바에서 작업 열기", await ui.clickJob("스모크"));
+    f_Check("사이드바에서 작업 선택", await ui.clickJob("스모크"));
+    f_Check(
+        "작업 화면 제목",
+        await ui.until(`document.querySelector("#job-title")?.textContent === "스모크"`),
+    );
+    // 편집은 작업 header의 ‘편집’ 단추로 여는 모달이다
+    await ui.click("편집");
     f_Check(
         "편집기에 저장된 값 표시",
         await ui.until(`document.querySelector("input[name=name]")?.value === "스모크"`),
@@ -605,8 +634,10 @@ try {
     );
     await ui.click("닫기", { inDialog: true });
 
-    // 새 작업: 설정 기본값으로 초안
-    await ui.click("새 작업");
+    // 새 작업: 설정 기본값으로 초안 (편집 모달을 닫고 목록의 ‘+ 새 작업’을 누른다)
+    await ui.click("취소", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
+    await ui.click("+ 새 작업");
     await ui.until(`document.querySelector("input[name=name]")?.value === ""`);
     f_Check(
         "새 작업 초안(이름 빈칸, 제외 규칙 = 설정 기본값)",
@@ -643,20 +674,17 @@ try {
                 `document.querySelector("nav [aria-current=true]")?.textContent.includes("UI 작업")`,
             )),
     );
-    // 버튼 "비교"와 단계 탭 "비교·미리보기" (INT-002 T-08)
-    const compareDisabled = [
-        ...(await ui.disabled("비교")),
-        ...(await ui.disabled("비교·미리보기")),
-    ];
+    // 비교는 toolbar의 #job-compare, 실제 실행은 #job-sync (비교 전에는 먼저 비교하라고 안내)
     f_Check(
-        "저장 후 비교(버튼·탭)·미리보기 활성, 복사 실행은 비교 전 비활성",
-        compareDisabled.length === 2 &&
-            compareDisabled.every((d) => !d) &&
-            (await ui.disabled("미리보기")).every((d) => !d) &&
-            (await ui.disabled("복사 실행")).every(Boolean) &&
-            (await ui.text()).includes("먼저 비교하세요"),
-        JSON.stringify(compareDisabled),
+        "저장 후: 비교 단추 활성·동기화 단추는 비교 전 비활성 + 먼저 [비교] 안내",
+        (await a.evaluate(
+            `document.querySelector("#job-compare")?.disabled === false && document.querySelector("#job-sync")?.disabled === true`,
+        )) && (await ui.text()).includes("먼저 [비교]를 누르세요"),
+        await a.evaluate(`document.querySelector("#job-sync")?.textContent ?? ""`),
     );
+    // 편집 모달을 다시 열어 경로 접근 확인
+    await ui.click("편집");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`);
     await ui.click("접근 확인");
     f_Check(
         "접근 확인(임시 원본 폴더) 성공",
@@ -666,11 +694,9 @@ try {
     // 저장하지 않은 변경
     await ui.fill("input[name=name]", "UI 작업 수정");
     f_Check(
-        "변경 중: 비교 버튼·실행·복제 비활성 + 안내(비교 탭은 저장된 결과 보기용)",
-        (await a.evaluate(
-            `[...document.querySelectorAll("header button")].filter((b) => b.textContent.trim() === "비교").map((b) => b.disabled).join()`,
-        )) === "true" &&
-            (await ui.disabled("복사 실행")).every(Boolean) &&
+        "변경 중: 비교·동기화·복제 비활성 + 안내",
+        (await a.evaluate(`document.querySelector("#job-compare")?.disabled === true`)) &&
+            (await a.evaluate(`document.querySelector("#job-sync")?.disabled === true`)) &&
             (await ui.disabled("복제")).every(Boolean) &&
             (await ui.text()).includes("저장하지 않은 변경이 있습니다"),
     );
@@ -678,23 +704,26 @@ try {
     await f_Sleep(200);
     f_Check(
         "다른 작업 클릭 → 변경 버리기 확인",
-        (await ui.dialogText()).includes("변경 버리고 이동"),
+        (await ui.dialogsText()).includes("변경 버리고 이동"),
     );
-    await ui.click("계속 편집", { inDialog: true });
+    await ui.clickDialog("계속 편집");
     await f_Sleep(200);
     f_Check(
         "계속 편집 → 변경 유지",
-        (await ui.value("input[name=name]")) === "UI 작업 수정" && (await ui.dialogText()) === "",
+        (await ui.value("input[name=name]")) === "UI 작업 수정" &&
+            !(await ui.dialogsText()).includes("변경 버리고 이동"),
     );
     await ui.clickJob("스모크");
     await f_Sleep(200);
-    await ui.click("변경 버리고 이동", { inDialog: true });
+    await ui.clickDialog("변경 버리고 이동");
     f_Check(
         "변경 버리고 이동 → 다른 작업 열림",
-        await ui.until(`document.querySelector("input[name=name]")?.value === "스모크"`),
+        await ui.until(`document.querySelector("#job-title")?.textContent === "스모크"`),
     );
 
     // remote 선택(기본 rclone.conf = 임시 설정 파일)과 한 글자 remote
+    await ui.click("편집");
+    await ui.until(`document.querySelector("input[name=name]")?.value === "스모크"`);
     await ui.until(`document.querySelector("#job-source-remote")`, 10000);
     const remoteOptions = await a.evaluate(
         `[...document.querySelectorAll("#job-source-remote option")].map((o) => o.value + ":" + o.disabled)`,
@@ -725,7 +754,8 @@ try {
         "리모트 루트 저장 차단",
         (await ui.text()).includes("루트 전체는 지정할 수 없습니다") && smokeJob?.rev === 0,
     );
-    await ui.click("되돌리기");
+    await ui.click("취소", { inDialog: true });
+    await ui.clickDialog("변경 버리고 이동");
     await f_Sleep(200);
 
     // 복제·삭제
@@ -734,7 +764,7 @@ try {
         "복제 → 사본 선택",
         (await ui.until(`document.body.innerText.includes("저장된 작업 3개")`)) &&
             (await ui.until(
-                `document.querySelector("input[name=name]")?.value === "스모크 (복사)"`,
+                `document.querySelector("#job-title")?.textContent === "스모크 (복사)"`,
             )),
     );
     await ui.click("삭제");
@@ -745,7 +775,7 @@ try {
         "삭제 확인 → 목록 감소·다음 작업 선택",
         deleteDialog.includes("파일은 건드리지 않습니다") &&
             (await ui.until(`document.body.innerText.includes("저장된 작업 2개")`)) &&
-            (await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`)),
+            (await ui.until(`document.querySelector("#job-title")?.textContent === "UI 작업"`)),
         deleteDialog,
     );
     const remotesApi = await a.evaluate(
@@ -775,6 +805,10 @@ try {
         (await a.evaluate("document.documentElement.dataset.theme")) === "light" &&
             savedSettings.data.defaults.checkers === 12,
     );
+    // 저장하면 설정 모달이 닫힌다 → 범위 밖 값을 시험하려고 다시 연다
+    await ui.until(`!document.querySelector("dialog[open]")`);
+    await ui.click("설정");
+    await ui.until(`document.querySelector("input[name=settings-logs-historyLimit]")`);
     await ui.fill("input[name=settings-logs-historyLimit]", "50");
     await ui.click("설정 저장");
     await f_Sleep(300);
@@ -783,43 +817,53 @@ try {
         (await ui.text()).includes("100~5000 사이의 정수를 입력하세요.") &&
             (await a.evaluate("window.rclonegui.settings.get()")).data.logs.historyLimit === 500,
     );
-    await ui.click("작업");
+    // 설정 모달의 ×로 닫으면 저장하지 않은 변경을 먼저 확인한다
+    await ui.click("×", { inDialog: true });
     await f_Sleep(200);
-    const leaveText = await ui.dialogText();
-    await ui.click("계속 편집", { inDialog: true });
+    const leaveText = await ui.dialogsText();
+    await ui.clickDialog("계속 편집");
     await f_Sleep(200);
     f_Check(
-        "설정 미저장 변경 → 화면 이동 전 확인, 계속 편집 시 유지",
+        "설정 미저장 변경 → 닫기 전 확인, 계속 편집 시 유지",
         leaveText.includes("설정 화면에서 고친 내용") &&
             (await ui.value("input[name=settings-logs-historyLimit]")) === "50",
         leaveText,
     );
     await ui.click("되돌리기");
-    await ui.click("작업");
-    await ui.click("새 작업");
+    await ui.click("×", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
+    await ui.click("+ 새 작업");
     f_Check(
         "새 작업 초안에 바뀐 기본값(checkers 12)",
         await ui.until(`document.querySelector("input[name=job-checkers]")?.value === "12"`),
     );
-    await ui.click("작성 취소");
+    await ui.click("취소", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
     await f_Sleep(200);
 
     // ===== Phase 5: 비교 화면 (임시 원본·대상, 읽기 전용) =====
     await ui.clickJob("UI 작업");
-    await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`);
+    await ui.until(`document.querySelector("#job-title")?.textContent === "UI 작업"`);
     await ui.click("비교");
-    const compared = await ui.until(`document.querySelector("ul[aria-label='비교 요약']")`, 20000);
-    const summaryText = await a.evaluate(
-        `document.querySelector("ul[aria-label='비교 요약']")?.innerText ?? ""`,
+    const chipState = `[...document.querySelectorAll("section[aria-label='파일 목록'] button[aria-pressed]")]`;
+    const f_Chip = (label) =>
+        `${chipState}.find((b) => b.textContent.replace(/\\s+/g, " ").trim().startsWith(${js(label)}))`;
+    const compared = await ui.until(
+        `document.querySelector("section[aria-label='파일 목록'] tr[data-status]")`,
+        20000,
+    );
+    const chipText = await a.evaluate(
+        `${chipState}.map((b) => b.textContent.replace(/\\s+/g, " ").trim() + ":" + b.getAttribute("aria-pressed")).join(" | ")`,
     );
     f_Check(
-        "비교 실행 → 요약(복사 1·덮어씀 1·대상만 1·동일 1)",
+        "비교 실행 → 상태 칩(추가 1·변경 1·대상만 1·같음 1, 같음은 꺼짐)",
         compared &&
-            summaryText.includes("대상에 1개 복사") &&
-            summaryText.includes("1개 덮어씀") &&
-            summaryText.includes("1개 대상에만 있음(유지)") &&
-            summaryText.includes("동일 1개"),
-        compared ? summaryText.replace(/\s+/g, " ") : (await ui.text()).slice(0, 300),
+            chipText.includes("추가 1:true") &&
+            chipText.includes("변경 1:true") &&
+            chipText.includes("대상만 1:true") &&
+            chipText.includes("오류 0:true") &&
+            chipText.includes("같음 1:false"),
+        compared ? chipText : (await ui.text()).slice(0, 300),
     );
     const f_Rows = () =>
         a.evaluate(
@@ -828,22 +872,26 @@ try {
     const f_Count = () =>
         a.evaluate(`document.querySelector("output[aria-live]")?.textContent ?? ""`);
     f_Check(
-        "기본(동일 숨기기) → 동일 행 제외 3행",
-        (await f_Rows()) === "modified,onlyDest,onlySource" &&
-            (await a.evaluate(`document.querySelector("#compare-hide-equal")?.checked`)) === true,
+        "기본(같음 칩 꺼짐) → 동일 행 제외 3행",
+        (await f_Rows()) === "modified,onlyDest,onlySource",
         await f_Rows(),
     );
-    await a.evaluate(`document.querySelector("#compare-hide-equal").click()`);
+    await a.evaluate(`(${f_Chip("같음")}).click()`);
     await f_Sleep(200);
     f_Check(
-        "동일 숨기기 해제 → 4행",
-        (await f_Rows()) === "equal,modified,onlyDest,onlySource",
+        "같음 칩 켬 → 4행",
+        (await f_Rows()) === "equal,modified,onlyDest,onlySource" &&
+            (await a.evaluate(`(${f_Chip("같음")}).getAttribute("aria-pressed")`)) === "true",
         `${await f_Rows()} / ${await f_Count()}`,
     );
-    await ui.fill("#compare-status", "modified");
+    // 같음 칩을 다시 끄고, 추가·대상만 칩을 끄면 변경 1행만 남는다
+    await a.evaluate(`(${f_Chip("같음")}).click()`);
+    await a.evaluate(`(${f_Chip("추가")}).click()`);
+    await a.evaluate(`(${f_Chip("대상만")}).click()`);
     await f_Sleep(200);
-    f_Check("상태 필터(변경) → 1행", (await f_Rows()) === "modified", await f_Rows());
-    await ui.fill("#compare-status", "all");
+    f_Check("상태 칩(변경만) → 1행", (await f_Rows()) === "modified", await f_Rows());
+    await a.evaluate(`(${f_Chip("추가")}).click()`);
+    await a.evaluate(`(${f_Chip("대상만")}).click()`);
     await ui.fill("#compare-query", "EXTRA");
     f_Check(
         "경로 검색(대소문자 무시) → 대상만 1행",
@@ -853,11 +901,13 @@ try {
         await f_Rows(),
     );
     await ui.fill("#compare-query", "");
-    await ui.click("작업 설정");
+    await ui.click("편집");
     f_Check(
-        "작업 설정 탭으로 돌아가기",
+        "편집 모달로 돌아가기",
         await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`),
     );
+    await ui.click("취소", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
     const dstAfter = readdirSync(smokeDst).toSorted().join(",");
     f_Check(
         "비교는 대상 파일을 바꾸지 않음",
@@ -866,20 +916,18 @@ try {
     );
 
     // ===== Phase 6: 실행 화면 (미리보기 → 복사 실행) =====
-    await ui.click("미리보기");
+    // 미리보기는 작업 header의 ⋯ 메뉴에서 연다
+    await ui.click("⋯");
+    await ui.until(`document.querySelector("[role=menu]")`);
+    await ui.click("미리보기 실행");
     const dryShown = await ui.until(
-        `document.querySelector("section[aria-label='미리보기 결과']")`,
+        `document.querySelector("#job-preview-notice")?.innerText.includes("미리보기가 비교 결과와 같은 일을 합니다")`,
         20000,
     );
-    const dryText = await a.evaluate(
-        `document.querySelector("section[aria-label='미리보기 결과']")?.innerText ?? ""`,
-    );
     f_Check(
-        "미리보기 → 요약(대상에 2개 복사)·비교 결과와 일치",
-        dryShown &&
-            dryText.includes("실행하면 대상에 2개 복사") &&
-            dryText.includes("비교 결과와 같은 일을 합니다"),
-        dryShown ? dryText.replace(/\s+/g, " ") : (await ui.text()).slice(0, 300),
+        "미리보기 → 비교 결과와 같은 일을 한다는 안내",
+        dryShown,
+        await a.evaluate(`document.querySelector("#job-preview-notice")?.innerText ?? ""`),
     );
     f_Check(
         "미리보기는 대상 파일을 바꾸지 않음",
@@ -887,10 +935,10 @@ try {
             readFileSync(join(smokeDst, "changed.txt"), "utf8") === "changed",
     );
     f_Check(
-        "미리보기 뒤에도 복사 실행 활성(비교 결과 유지)",
-        (await ui.disabled("복사 실행")).every((d) => !d),
+        "미리보기 뒤에도 동기화 단추 활성(비교 결과 유지)",
+        await ui.until(`document.querySelector("#job-sync")?.disabled === false`),
     );
-    await ui.click("복사 실행");
+    await ui.clickSel("#job-sync");
     await f_Sleep(200);
     const confirmText = await ui.dialogText();
     f_Check(
@@ -910,10 +958,9 @@ try {
         readdirSync(smokeDst).toSorted().join(","),
     );
     f_Check(
-        "실행 후 복사 실행 다시 비활성(비교 결과 버림)",
-        (await ui.until(
-            `[...document.querySelectorAll("button")].filter((b) => b.textContent.trim() === "복사 실행").every((b) => b.disabled)`,
-        )) && (await ui.text()).includes("먼저 비교하세요"),
+        "실행 후 동기화 단추 다시 비활성(비교 결과 버림)",
+        (await ui.until(`document.querySelector("#job-sync")?.disabled === true`)) &&
+            (await ui.text()).includes("먼저 [비교]를 누르세요"),
     );
     const uiJob = (await a.evaluate("window.rclonegui.jobs.list()")).data.find(
         (j) => j.name === "UI 작업",
@@ -929,7 +976,7 @@ try {
             !existsSync(join(userData, "active-run.json")),
     );
     // ===== Phase 8: 이력 탭(목록·상세·로그 끝부분) =====
-    await a.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+    await a.evaluate(`document.querySelector("#job-open-history")?.click()`);
     const histRows = `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr").length`;
     const histShown = await ui.until(`${histRows} >= 2`, 5000);
     const histText = await a.evaluate(
@@ -947,8 +994,9 @@ try {
     await ui.fill("#history-kind", "dryRun");
     f_Check("이력 종류 필터(미리보기) → 1건", await ui.until(`${histRows} === 1`));
     await ui.fill("#history-kind", "all");
+    // 행마다 목록·정보·로그 링크가 있다 → 상세는 둘째(정보)
     await a.evaluate(
-        `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+        `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button")[1]?.click()`,
     );
     const detailShown = await ui.until(
         `document.querySelector("dialog[open]")?.innerText.includes("rcloneGUI 실행 로그")`,
@@ -973,11 +1021,14 @@ try {
         `window.rclonegui.jobs.create({ ...${draft}, name: "sync 스모크", mode: "sync", source: ${js(smokeSrc)}, destination: ${js(syncDst)} })`,
     );
     await ui.clickJob("sync 스모크");
-    await ui.until(`document.querySelector("input[name=name]")?.value === "sync 스모크"`);
-    const syncReady = `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "동기화 실행" && !b.disabled)`;
+    await ui.until(`document.querySelector("#job-title")?.textContent === "sync 스모크"`);
+    const syncReady = `(() => {
+        const b = document.querySelector("#job-sync");
+        return b !== null && !b.disabled && b.textContent.startsWith("동기화: ");
+    })()`;
     await ui.click("비교");
-    f_Check("sync 비교 → 동기화 실행 활성", await ui.until(syncReady, 20000));
-    await ui.click("동기화 실행");
+    f_Check("sync 비교 → 동기화 단추 활성", await ui.until(syncReady, 20000));
+    await ui.clickSel("#job-sync");
     await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
     const delText = await ui.dialogText();
     f_Check(
@@ -1016,32 +1067,32 @@ try {
             readdirSync(syncDst).toSorted().join(",") === "keep.txt,late.txt",
         driftText.replace(/\s+/g, " "),
     );
-    // 안내가 떠 있는 동안 다른 작업으로 옮겨 고친다 → 다시 비교는 변경 버리기 확인 뒤 막힌 작업의 비교 탭으로 옮겨 비교한다
+    // 안내가 떠 있는 동안 다른 작업으로 옮겨 고친다 → 다시 비교는 변경 버리기 확인 뒤 막힌 작업의 파일 목록으로 옮겨 비교한다
     await ui.clickJob("UI 작업");
-    await a.evaluate(`document.querySelector("#job-tabs-tab-edit")?.click()`);
+    await ui.click("편집");
     await ui.until(`document.querySelector("input[name=name]")?.value === "UI 작업"`);
     await ui.fill("input[name=name]", "UI 작업 수정");
-    await ui.click("다시 비교", { inDialog: true });
+    await ui.clickDialog("다시 비교");
     f_Check(
         "다른 작업을 고친 채 다시 비교 → 변경 버리기 확인",
         await ui.until(
-            `document.querySelector("dialog[open]")?.innerText.includes("변경 버리고 이동")`,
+            `[...document.querySelectorAll("dialog[open]")].some((d) => d.innerText.includes("변경 버리고 이동"))`,
         ),
-        await ui.dialogText(),
+        await ui.dialogsText(),
     );
-    await ui.click("변경 버리고 이동", { inDialog: true });
+    await ui.clickDialog("변경 버리고 이동");
     f_Check(
-        "다시 비교 → 막힌 작업(sync 스모크)·비교 탭으로 옮겨 비교, 동기화 실행 활성",
+        "다시 비교 → 막힌 작업(sync 스모크)·파일 목록으로 옮겨 비교, 동기화 단추 활성",
         (await ui.until(`!document.querySelector("dialog[open]")`)) &&
             (await ui.until(syncReady, 20000)) &&
             (await a.evaluate(`document.querySelector("#job-title")?.textContent`)) ===
                 "sync 스모크" &&
             (await a.evaluate(
-                `document.querySelector("#job-tabs-tab-compare")?.getAttribute("aria-selected")`,
+                `document.querySelector("#job-tab-files")?.getAttribute("aria-selected")`,
             )) === "true",
         (await ui.text()).slice(0, 300),
     );
-    await ui.click("동기화 실행");
+    await ui.clickSel("#job-sync");
     await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
     await a.evaluate(`document.querySelector("#delete-confirm-ack").click()`);
     await a.evaluate(`document.querySelector("#delete-confirm-large")?.click()`);
@@ -1095,14 +1146,11 @@ try {
         JSON.stringify(killJob).slice(0, 200),
     );
     await ui.clickJob("외부 종료 스모크");
-    await ui.until(`document.querySelector("input[name=name]")?.value === "외부 종료 스모크"`);
+    await ui.until(`document.querySelector("#job-title")?.textContent === "외부 종료 스모크"`);
     await ui.click("비교");
-    const killReady = await ui.until(
-        `[...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "복사 실행" && !b.disabled)`,
-        120_000,
-    );
+    const killReady = await ui.until(syncReady, 120_000);
     f_Check("AC-13 준비: 비교 완료·복사 실행 활성", killReady, (await ui.text()).slice(0, 200));
-    await ui.click("복사 실행");
+    await ui.clickSel("#job-sync");
     await ui.until(`document.querySelector("dialog[open] button")`);
     await ui.click("복사 실행", { inDialog: true });
     // active-run.json에 pid가 기록되면 바깥에서 강제 종료한다(앱 중지 경로가 아니라 Stop-Process)
@@ -1158,7 +1206,7 @@ try {
         /# 종료: .* exit=-1\(0xFFFFFFFF\)/.test(killLog.trimEnd().split("\n").at(-1) ?? ""),
         (killLog.trimEnd().split("\n").at(-1) ?? "").slice(0, 200),
     );
-    await a.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+    await a.evaluate(`document.querySelector("#job-open-history")?.click()`);
     await ui.until(
         `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr").length >= 1`,
         5000,
@@ -1171,8 +1219,9 @@ try {
         killBadgeTitle.includes("rclone이 외부에서 종료된 것으로 보입니다"),
         killBadgeTitle.slice(0, 200),
     );
+    // 행마다 목록·정보·로그 링크가 있다 → 상세는 둘째(정보)
     await a.evaluate(
-        `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+        `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button")[1]?.click()`,
     );
     const killDetailShown = await ui.until(
         `document.querySelector("dialog[open]")?.innerText.includes("rclone이 외부에서 종료된 것으로 보입니다")`,
@@ -1206,11 +1255,11 @@ try {
         `window.rclonegui.jobs.create({ ...${draft}, name: "partial 스모크", mode: "sync", source: ${js(partSrc)}, destination: ${js(partDst)} })`,
     );
     await ui.clickJob("partial 스모크");
-    await ui.until(`document.querySelector("input[name=name]")?.value === "partial 스모크"`);
+    await ui.until(`document.querySelector("#job-title")?.textContent === "partial 스모크"`);
     await ui.click("비교");
     await ui.until(syncReady, 20000);
     const partRows = await a.evaluate(
-        `[...document.querySelectorAll("tr[data-status=onlyDest]")].map((r) => r.cells[1]?.innerText ?? "")`,
+        `[...document.querySelectorAll("tr[data-status=onlyDest]")].map((r) => r.cells[0]?.innerText ?? "")`,
     );
     const BADGE = "취소로 남은 임시 파일";
     f_Check(
@@ -1220,7 +1269,7 @@ try {
             partRows.some((t) => t.includes("report.partial") && !t.includes(BADGE)),
         JSON.stringify(partRows),
     );
-    await ui.click("동기화 실행");
+    await ui.clickSel("#job-sync");
     await ui.until(`document.querySelector("dialog[open] #delete-confirm-ack")`);
     const partSamples = await a.evaluate(
         `[...document.querySelectorAll("dialog[open] details li")].map((li) => li.innerText)`,
@@ -1305,7 +1354,9 @@ try {
             readdirSync(join(userData, "logs")).some((n) => n.startsWith("run-")),
         `before=${histBefore}`,
     );
-    await ui.click("작업");
+    // 설정 모달을 닫고 상단 막대의 일시정지를 누른다
+    await ui.click("×", { inDialog: true });
+    await ui.until(`!document.querySelector("dialog[open]")`);
     await ui.click("자동 실행 일시정지");
     f_Check(
         "상단 막대 일시정지 → scheduler 상태 paused·문구",
@@ -1385,7 +1436,7 @@ try {
     // 선택은 메모리만: 재시작하면 이름순(ko) 첫 작업
     f_Check(
         "재시작 후 이름순 첫 작업 자동 선택",
-        await f_Ui(b).until(`document.querySelector("input[name=name]")?.value === "스모크"`),
+        await f_Ui(b).until(`document.querySelector("#job-title")?.textContent === "스모크"`),
     );
 
     // ===== Phase 8: 일시정지 유지 → 재개 → 1분 주기 자동 실행 =====
@@ -1632,12 +1683,12 @@ try {
         const cUi = f_Ui(c);
         await cUi.clickJob("종료 스모크");
         await cUi.until(`document.querySelector("#job-title")?.textContent === "종료 스모크"`);
-        await c.evaluate(`document.querySelector("#job-tabs-tab-history")?.click()`);
+        await c.evaluate(`document.querySelector("#job-open-history")?.click()`);
         await cUi.until(
-            `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button").length === 1`,
+            `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button").length === 3`,
         );
         await c.evaluate(
-            `document.querySelector("table[aria-label='실행 이력'] tbody tr button")?.click()`,
+            `document.querySelectorAll("table[aria-label='실행 이력'] tbody tr button")[1]?.click()`,
         );
         const quitDetail = await cUi.until(
             `document.querySelector("dialog[open]")?.innerText.includes("임시 파일(.partial)이 남을 수 있습니다")`,
@@ -1733,7 +1784,8 @@ async function f_OsScheduleRound(draft) {
 
         // AC-2: 편집기에서 예약 실행 방식을 Windows 작업 스케줄러로 저장
         await ui.clickJob("OS 예약");
-        await ui.click("작업 설정");
+        await ui.until(`document.querySelector("#job-title")?.textContent === "OS 예약"`);
+        await ui.click("편집");
         const enabled = await ui.until(
             `document.querySelector("#job-auto-backend option[value=os]")?.disabled === false`,
         );
@@ -1776,7 +1828,9 @@ async function f_OsScheduleRound(draft) {
             `exit=${q.code}`,
         );
 
-        // AC-6: 앱 예약으로 바꾸면 OS 예약을 지운다
+        // AC-6: 앱 예약으로 바꾸면 OS 예약을 지운다 (저장하면 모달이 닫히므로 다시 연다)
+        await ui.click("편집");
+        await ui.until(`document.querySelector("#job-auto-backend")`);
         await ui.fill("#job-auto-backend", "app");
         await ui.click("저장");
         const removed = await ui.untilAsync(osStatusOf("(t) => t === null"), 30_000);

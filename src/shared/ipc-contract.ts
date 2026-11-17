@@ -60,6 +60,7 @@ export const IPC_CHANNELS = {
     appGetInfo: "app:getInfo",
     appGetNotices: "app:getNotices",
     appOpenLogsFolder: "app:openLogsFolder",
+    appCopyText: "app:copyText",
     settingsGet: "settings:get",
     settingsUpdate: "settings:update",
     jobsList: "jobs:list",
@@ -93,6 +94,7 @@ export const IPC_CHANNELS = {
     runStart: "run:start",
     runCancel: "run:cancel",
     runGetActive: "run:getActive",
+    runCommand: "run:command",
     historyList: "history:list",
     historyGet: "history:get",
     historyReadLog: "history:readLog",
@@ -199,6 +201,8 @@ export interface itfRcloneGuiApi {
         getInfo(): Promise<typApiResult<itfAppInfo>>;
         getNotices(): Promise<typApiResult<itfAppNotice[]>>;
         openLogsFolder(): Promise<typApiResult<null>>;
+        /** 클립보드에 글자만 복사한다(8KB 이하). 내용은 로그·파일에 남기지 않는다 */
+        copyText(text: string): Promise<typApiResult<true>>;
     };
     settings: {
         get(): Promise<typApiResult<typSettings>>;
@@ -282,6 +286,8 @@ export interface itfRcloneGuiApi {
         cancel(runId: string): Promise<typApiResult<null>>;
         /** 앱 전역에서 진행 중인 실행(최근 로그 포함) */
         getActive(): Promise<typApiResult<itfRunSnapshot | null>>;
+        /** 터미널에서 그대로 실행할 수 있는 비교·동기화 명령(표시용, 실행하지 않음) */
+        command(jobId: string): Promise<typApiResult<{ compare: string; sync: string }>>;
     };
     history: {
         /** 실행 이력(최신순). jobId로 거르고 limit개까지

@@ -1,10 +1,10 @@
 # rcloneGUI MVP 설계 명세 (MVP_SPEC)
 
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
-- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/planned/INT-006-in-app-remote-config/intent.md`
+- 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/planned/INT-006-in-app-remote-config/intent.md`, `docs/intent/planned/INT-008-rcloud-ui-parity/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-03 (INT-006 앱에서 remote 추가·수정·삭제·재인증 반영 표 추가)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-17 (INT-008 Phase 1 화면 구조·모양 반영, §13 갱신)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1 반영 (2026-11-17), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -36,8 +36,8 @@
 | 허용 명령 | - | `version`, `config file`, `listremotes`, `lsjson`, `copy`, `sync`만 (`assertAllowedCommand`, `runRclone`이 실행 직전 재확인) |
 | system 채널 | 없음 | `system:openExternal` (https://rclone.org/ 만) |
 | Phase 4 파일 | `features/jobs/*`, `features/settings/*` | `pages/{AppLayout,TopBar,JobSidebar,JobWorkspace,JobEditor,PathField,RemotePicker,WslPathHelper,ExcludesEditor,JobOptionsFields,SettingsPage,DiscardChangesModal}.tsx`, 공용 `components/ZBC{Button,Field,Input,Textarea,Select,Checkbox,Badge,Modal,Tabs}`, `stores/{job-editor,ui}-store.ts`, `lib/{job-form,settings-form,form-utils,path-display,use-path-probe}.ts`, `shared/remote-name.ts`. `PathCheckPanel` 삭제(경로 필드·WSL 도우미로 이동) |
-| 작업 선택 (§13.2) | 재시작 시 첫 job | 메모리만. 재시작·선택 작업 삭제 시 **이름순(ko 정렬: 한글이 영문보다 먼저)** 첫/다음 작업. 화면 전환은 라우터 없이 `ui-store`(`job`/`settings`) |
-| 설정 화면 (§13.2) | 스케줄러 일시정지·트레이·로그인 시작·이력 비우기 포함 | 아직 동작하지 않는 스케줄러 일시정지·트레이 최소화·로그인 시 시작·이력 비우기는 **표시하지 않음**(저장 patch에도 넣지 않아 기존 값 유지) |
+| 작업 선택 (§13.2) | 재시작 시 첫 job | 메모리만. 재시작·선택 작업 삭제 시 **이름순(ko 정렬: 한글이 영문보다 먼저)** 첫/다음 작업. 화면 전환은 라우터 없이 `ui-store`(`tab`/`editor`/`settingsOpen`) |
+| 설정 모달 (§13.2) | 스케줄러 일시정지·트레이·로그인 시작·이력 비우기 포함 | 설정은 상단 `설정`·rclone 상태 알약으로 여는 모달(바깥 클릭으로 닫히지 않고, 저장 안 한 변경은 닫을 때 확인). 섹션은 rclone → remote 설정 → 리모트 북마크 → 제외 패턴 → 기본 옵션 → 안전 → 화면(테마) → 창·시작 → 로그·이력 → 앱 정보. 자동 실행 일시정지는 모달이 아니라 상단 막대·트레이에서 바꾸고, 로그인 시 시작은 설치본에서만 바꾼다 |
 | 한 글자 remote | - | Windows rclone은 `x:경로`를 드라이브로 해석 → remote 목록에서 고를 수 없게 하고 편집기·rclone 설정에 경고. 입력란에 `x:폴더`를 직접 쓰면 **저장은 허용하고 경고만**(실제 X 드라이브일 수 있음). `parsePath`는 그대로 |
 | 화면 검증 문구 | zod 메시지 | 스키마 메시지는 그대로 두고 화면(`job-form`/`settings-form`)에서 한국어 문구로 바꿈. 비교·실행 버튼은 Phase 4에서 항상 비활성 |
 | 화면 스토어 테스트 | - | `tests/unit/renderer/*`는 web tsconfig로만 타입 검사(node에서 제외). DOM 무의존 lib 4개는 node tsconfig `include`에 명시 |
@@ -102,7 +102,7 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 | 동기화 범위 (§8.1) | 파일만 | 작업 `scope`: `files`(기본, `lsjson --files-only`) / `all`(폴더 포함 목록, copy·sync·dry-run에 `--create-empty-src-dirs`). 비교 결과 `createDirs`·`deleteDirs`·`dirChanges`, 실행 입력 `confirmedDeleteDirs`, 계획 토큰 v3에 scope·폴더 수. `--max-delete`는 파일 삭제 수만(rclone이 폴더를 세지 않음), 폴더 삭제는 확인 수·사전 확인(`remove directory`·`deletedDirs`)으로 맞춤. 자동 실행의 삭제 조건은 파일+폴더 합산 |
 | 스케줄러 (§10) | 균등 interval | `autoSync.kind`: `interval`(분)·`daily`(HH:MM)·`weekly`(요일 마스크 + HH:MM), 로컬 시각·DST(`src/shared/schedule.ts`). 시작 즉시 `nextOccurrence`로 다음 예약 선기록, 끝나면 `nextAfterFinish`(daily·weekly 성공 시 1시간 안 정시 건너뜀). 놓친 예약은 시작·재개 60초 뒤 1회. 게이트·`startAuto`는 그대로 |
 | 종료·로그인 안내 | - | 트레이 `종료`에서만 다음 예약 경고(실행 중이면 기존 확인 창만), 자동 실행을 켤 때 로그인 시 시작이 꺼져 있으면 안내 |
-| 화면 (§13) | 비교·실행·이력 탭 | 탭 없음. 작업 화면(`JobWorkView`): 위쪽 단계 막대(`JobStepBar`, ① 비교 → ② 미리보기 → ③ 실행, `@/lib/job-steps`), 왼쪽 ‘대상에 일어날 일’ 패널(`ComparePlanPanel`: 요약 카드·안내·미리보기 일치 한 줄·비교 방식), 오른쪽 파일 목록(`CompareView`) 또는 실제 실행 진행·결과(`RunView real`), 하단 고정 실행 막대(`JobRunBar`). 이력·작업 설정은 헤더 버튼으로 여는 보조 화면(`ui-store` `pane`), 복제·삭제는 ‘⋯’. 공통 중지(`JobActivityBar`, 버튼 하나)는 작업 화면은 실행 막대 안, 보조 화면은 헤더 아래 한 곳. 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
+| 화면 (§13) | 비교·실행·이력 탭 | 상단 막대(브랜드·rclone 상태 알약·설정) + 왼쪽 250px 작업 목록 + 오른쪽 작업 화면. 작업 화면 = header(제목·mode·상태 배지, 편집·복제·삭제·⋯, 경로 줄) → toolbar(비교·동기화·중지) → 안내 줄 → 실행 배너(`#job-run-panel`, `JobActivityBar`) → 밑줄 탭(파일 목록·기록) → footer. 단계 막대·계획 패널·하단 실행 막대(`JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`)는 INT-008 Phase 1에서 제거. 편집·설정은 모달(`ui-store` `editor`·`settingsOpen`), 복제·삭제는 header 단추, ⋯ 메뉴는 미리보기 실행·비교/동기화 명령 복사. 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
 | 이력 (§11.1) | `history.json` | SQLite `run_records` |
 | cron (§2.2) | Post-MVP | 매일·요일 예약은 구현, cron 표현은 계속 미지원 |
 | 패키징 (§17) | - | NSIS 설치본 하나, portable exe 없음(실행 파일 위치가 바뀌면 로그인 항목·예약 경로가 깨짐) |
@@ -1635,16 +1635,21 @@ export interface rcloneGUIApi {
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ TopBar: rcloneGUI | rclone 상태 배지 | 스케줄러 일시정지 | 설정      │
+│ TopBar: rcloneGUI | rclone 상태 알약 | 다음 자동 실행 | 설정       │
 ├───────────────┬────────────────────────────────────────────────────┤
-│ Job Sidebar   │ Job Header: 이름 | source → destination | mode | 자동│
-│ + 새 작업     │ Tabs: 비교 | 실행 | 이력 | 작업 설정               │
-│ - Job A       │                                                    │
-│ - Job B       │  [Compare View]                                    │
-│               │  요약 카드: 신규/갱신/삭제/동일/충돌/전송 바이트    │
-│               │  툴바: 상태 필터 | 검색 | 동일 숨기기 | 새로고침     │
-│               │  테이블(가상화): 상태|경로|좌측|우측|사유            │
+│ Job 목록 250px │ Job Header: 제목 | mode 배지 | 상태 배지          │
+│               │             편집 | 복제 | 삭제 | ⋯                 │
+│ ● Job A       │ 경로 줄: 원본 → 대상 (mono)                        │
+│   원본 → 대상 │ 툴바: 비교 | 동기화(N개 복사·덮어씀·삭제) | 중지   │
+│   하위 문구   │ 안내 줄: 사전 확인·빈 폴더 불가·낡음               │
+│ ● Job B       │ 실행 배너(#job-run-panel): 진행률·남은 시간·중지   │
+│               │ 밑줄 탭: 파일 목록 | 기록                          │
+│ + 새 작업     │  칩(추가·변경·삭제·오류·같음) | 보기 | 경로 검색   │
+│               │  표: 항목|원본 크기|원본 수정 시각|할 일|          │
+│               │      대상 수정 시각|대상 크기                      │
+│               │ Footer: 비교 시각·걸린 시간 | 계획 상태 문구       │
 └───────────────┴────────────────────────────────────────────────────┘
+작업 편집·설정은 모달(dialog)로 열고, 알림(토스트)은 화면 위쪽 가운데에 띄운다.
 ```
 
 ### 13.2 화면별 요구
@@ -1655,11 +1660,23 @@ export interface rcloneGUIApi {
 - remote 인증 오류: stderr 요약 + `rclone config reconnect` 안내.
 
 **Job 목록**
-- 이름, 모드 배지, 마지막 실행 상태/시각, 자동 배지 + 다음 실행 시각.
-- 정렬: 이름 오름차순. 선택 상태는 UI 메모리(재시작 시 첫 job).
-- 삭제/복제는 컨텍스트 메뉴 또는 상세 헤더.
+- 왼쪽 250px 고정. 정렬은 이름 오름차순(ko). 선택 상태는 UI 메모리(재시작 시 첫 job).
+- 항목: 상태 점(`ZBCDot`)·이름·mode 배지·`원본 → 대상`·하위 문구(최근 실행·예약·상태 문구, `ui.showJobStatusText`로 숨김). remote 없음·OS 예약 미등록 배지는 하위 문구 줄에 둔다.
+- 선택 항목은 `inset 3px` accent 왼쪽 막대와 `--panel-2` 배경. 목록 하단에 `+ 새 작업`.
+- 항목의 `지금 실행`은 비교 → 확인 창(삭제가 있는 동기화는 삭제 확인 창)을 거친다.
+- 작업 그룹은 Phase 3(INT-008)에서 추가한다.
 
-**Job 편집**
+**작업 화면(header·toolbar·탭·footer)**
+- header: 제목·mode 배지·상태 배지(저장 안 됨·remote 없음·OS 예약 미등록)와 `편집`·`복제`·`삭제`·`⋯` 단추, 아래에 경로 줄(mono, accent 화살표).
+- toolbar: `비교`·`동기화`·`중지`. 동기화 단추 문구는 `동기화: 대상에 N개 복사, N개 덮어씀, N개 삭제`이고, 비교 전에는 `동기화 — 먼저 [비교]를 누르세요`로 꺼진다.
+- 안내 줄: `previewNotice`와 낡음·형식 충돌·빈 폴더 불가 안내를 toolbar 아래 한 줄씩 보인다.
+- 실행 배너(`#job-run-panel`): 비교·미리보기·실행이 진행 중일 때만 보이며 공통 중지(`JobActivityBar`)·진행률·남은 시간·`진행 글 보기`를 둔다.
+- ⋯ 메뉴: `미리보기 실행`·`비교 명령 복사`·`동기화 명령 복사`. 명령 복사는 표시·복사 전용이며 rclone을 실행하지 않는다.
+- footer: `비교 MM-DD HH:mm:ss · 걸린 시간`과 계획 상태 문구.
+- 단계 막대·계획 패널·하단 실행 막대(워크벤치)는 두지 않는다(INT-008 Phase 1에서 제거).
+
+**작업 편집(모달)**
+- `+ 새 작업`·`편집`·`복제`가 작업 편집 모달을 연다. 바깥 클릭으로 닫히지 않고, 저장 안 한 변경이 있으면 닫을 때 확인한다.
 - 필수: 이름/원본/대상/모드.
 - 경로 필드: 텍스트 입력 + 종류 배지 + 폴더 선택 + WSL 도우미 + remote 선택 + 테스트.
 - WSL 도우미 모달: distro, Linux path, preview UNC, `/mnt/<drive>` 대안, 적용 대상 선택.
@@ -1669,36 +1686,23 @@ export interface rcloneGUIApi {
 - 자동: enabled/interval/allowDeletes, 다음 실행 시각 표시.
 - 저장 전 zod 검증, 필드별 오류. 저장 안 된 변경이 있으면 비교/실행 비활성 + 안내.
 
-**비교 탭**
-- 요약 카드 클릭 → 해당 상태 필터.
-- 기본 "동일 숨기기" ON. 상태 필터(전체/변경/원본만/대상만/변경됨/충돌/동일).
-- 검색은 path 부분일치(대소문자 무시), 150ms 디바운스.
-- 정렬: 경로/상태/좌측 크기/좌측 수정시간/우측 크기/우측 수정시간.
-- 테이블: 고정 헤더, 30px 행, 좌우 컬럼, 상태 배지+사유, 경로 툴팁.
-- copy 모드의 onlyDest는 "대상만(유지)", sync 모드는 "삭제 예정"으로 표시.
-- 실행 버튼: 모드에 따라 "복사 실행"/"동기화 실행". 최신 계획 없으면 비활성.
-- stale 배너/형식 충돌 배너/빈 원본 배너.
-- 충돌 필터 시 해결 안내(수동 정리 필요).
+**파일 목록 탭**
+- 상태 칩 5종(추가·변경·삭제/대상만·오류·같음)과 개수. 켠 칩의 행만 보이며 같음은 기본 꺼짐.
+- `보기: 상태별` select(대응 데이터가 있는 보기는 이것 하나), 경로 검색(부분일치·대소문자 무시·150ms 디바운스), 표시 개수.
+- 표 6열: 항목·원본 크기·원본 수정 시각·할 일(+사유)·대상 수정 시각·대상 크기. 고정 헤더, 30px 행, 가상화.
+- 정렬: 경로/상태/원본 크기/원본 수정 시각/대상 크기/대상 수정 시각.
+- copy 모드의 onlyDest는 `대상만`, sync 모드는 `삭제`로 표시. `.partial` 파일은 `취소로 남은 임시 파일`로 표시.
+- 실행 중에는 같은 탭에 진행·결과(`RunView real`)가 보인다.
 
-**실행 탭**
-- 단계 표시(검증/비교/사전검증/전송/마무리), 진행률(바이트), stats 그리드(전송/삭제/체크/에러/속도/ETA).
-- 실시간 로그 tail(최대 2000줄, 자동 스크롤 토글), 전체 로그 폴더 열기.
-- 취소 버튼(확인 후), 실행 중 다른 작업 전환 시 상태 유지.
-- Dry-run 결과 카드: 복사/갱신/삭제 예정 수/바이트, 샘플.
-- 완료 카드: 상태, 소요 시간, stats, 이력 링크.
+**기록 탭**
+- 이 작업의 실행 이력, 최신순, 종류·결과 필터.
+- 열: 시작·종류·결과·건수·걸린 시간·내용. 행마다 `목록`(파일 목록 탭)·`정보`(실행 기록 상세 모달)·`로그`(로그 폴더) 링크.
+- `로그 폴더 열기` 버튼.
 
-**이력 탭**
-- 전체/작업별, 상태 필터, 최신순.
-- 컬럼: 시작, 트리거(수동/자동/미리보기), 모드, 상태, 소요, 복사/삭제/바이트/에러, 로그.
-- 상세 drawer: 계획/preflight/오류/로그 tail, "로그 폴더 열기".
-
-**설정**
-- rclone: 감지 상태/버전/경로/config/remotes, 자동 감지, 수동 선택, 테스트.
-- 기본값: excludes, checkers/transfers, fastList/skipLinks/checkHashes/tolerance/preflight.
-- 안전: 삭제 확인 임계값, 자동 최대 삭제, compare max age, case-insensitive(고급).
-- 스케줄러: 일시정지, 다음 실행 목록.
-- 로그/이력: 보존 일수, 이력 수, 폴더 열기, 이력 비우기.
-- 앱: 테마, 트레이 최소화, 로그인 자동 시작, 앱 정보.
+**설정(모달)**
+- 상단 `설정`·rclone 상태 알약으로 연다. 바깥 클릭으로 닫히지 않고, 저장 안 한 변경이 있으면 닫을 때 확인한다.
+- 섹션 순서: rclone(감지 상태/버전/경로/config/remotes, 자동 감지, 수동 선택, 테스트) → remote 설정 → 리모트 북마크 → 제외 패턴 → 기본 옵션 → 안전 → 화면(테마) → 창·시작 → 로그·이력 → 앱 정보.
+- 자동 실행 일시정지는 모달이 아니라 상단 막대·트레이에서 바꾼다. 로그인 시 시작은 설치본에서만 바꾼다.
 
 **트레이**
 - Show/Open logs/Scheduler pause toggle/Quit.
@@ -1723,7 +1727,9 @@ export interface rcloneGUIApi {
 
 ### 13.4 디자인/접근성
 
-- 순수 CSS + 디자인 토큰(`--bg`, `--panel`, `--text`, `--muted`, `--border`, `--accent`, `--danger`, `--warning`, `--success`).
+- 순수 CSS + 디자인 토큰(`--bg`, `--panel`, `--text`, `--muted`, `--border`, `--accent`, `--danger`, `--warning`, `--success`). 토큰 값은 1세대 구현(rcloud)과 같다(INT-008 Phase 1).
+- 본문 13px/1.5, mono `Consolas, "D2Coding", monospace`. 단추 `small`은 12px, 배지는 radius 4px·11px.
+- 알림(토스트)은 화면 위쪽 가운데 notice로 띄우고 오류는 위험 색을 쓴다. 설정·편집 모달은 바깥 클릭으로 닫히지 않는다.
 - 라이트/다크/시스템. 시스템은 `prefers-color-scheme`, 수동은 `data-theme`.
 - 상태는 색+텍스트+아이콘으로 표현(색만 의존 금지).
 - 모달 focus trap, Esc 닫기(파괴 확인은 취소), aria-label, 키보드 탐색.

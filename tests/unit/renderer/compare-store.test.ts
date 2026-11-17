@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ========== Internal imports ==========
+import { DEFAULT_COMPARE_VIEW } from "@/lib/compare-view";
 import { emptySummary } from "@/shared/diff-engine";
 import type { itfCompareResult } from "@/shared/types/compare";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
@@ -138,10 +139,11 @@ describe("compare-store show", () => {
         expect(f_S().loading).toBe(false);
     });
 
-    it("작업 전환 시 검색어만 비우고 필터는 유지", async () => {
-        f_S().setView({ query: "abc", status: "modified" });
+    it("작업 전환 시 검색어만 비우고 칩은 유지", async () => {
+        const chips = { ...DEFAULT_COMPARE_VIEW.chips, equal: true };
+        f_S().setView({ query: "abc", chips });
         void f_S().show(J1);
-        expect(f_S().view).toMatchObject({ query: "", status: "modified" });
+        expect(f_S().view).toMatchObject({ query: "", chips });
         f_S().setView({ query: "x" });
         void f_S().show(J1);
         expect(f_S().view.query).toBe("x");

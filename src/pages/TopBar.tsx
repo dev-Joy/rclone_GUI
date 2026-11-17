@@ -1,12 +1,12 @@
 /**
- * 상단 막대: 앱 제목, rclone 상태(글자로 표시), 다음 자동 실행·일시정지 토글, 작업·설정 화면 전환.
- * 설정으로 옮길 때 저장하지 않은 작업 변경이 있으면 먼저 확인한다.
+ * 상단 막대: 브랜드, rclone 상태 알약(누르면 설정), 설정 단추, 다음 자동 실행 글, 일시정지 토글.
+ * INT-008 FR-4: 화면 전환(navigation)을 없애고 상단 막대 자체에 필요한 동작만 둔다.
+ * 설정을 닫을 때 저장하지 않은 변경이 있으면 먼저 확인한다(guard·leaveSettings).
  *
  * @author dev-Joy 2026-10-28
  */
 
 // ========== Internal imports ==========
-import ZBCBadge, { type typZBCBadgeTone } from "@/components/ZBCBadge";
 import ZBCButton from "@/components/ZBCButton";
 import { nextAutoRunText } from "@/lib/history-view";
 import { formatLocalDateTime } from "@/shared/format";
@@ -31,8 +31,9 @@ export default function TopBar(props: itfTopBarProps) {
     // ========== hook & state 변수 선언 ==========
     const env = useRcloneEnvStore((s) => s.env);
     const envError = useRcloneEnvStore((s) => s.error);
-    const view = useUiStore((s) => s.view);
-    const setView = useUiStore((s) => s.setView);
+    const settingsOpen = useUiStore((s) => s.settingsOpen);
+    const openSettings = useUiStore((s) => s.openSettings);
+    const closeSettings = useUiStore((s) => s.closeSettings);
     const leaveSettings = useUiStore((s) => s.leaveSettings);
     const guard = useJobEditorStore((s) => s.guard);
     const scheduler = useSchedulerStore((s) => s.state);
@@ -40,35 +41,52 @@ export default function TopBar(props: itfTopBarProps) {
     const setPaused = useSchedulerStore((s) => s.setPaused);
 
     // ========== 내부 변수 (_V) ==========
-    const status: { tone: typZBCBadgeTone; text: string } =
+    const statusBad = envError !== null || (env !== null && env.problem !== null);
+    const statusText =
         envError !== null
-            ? { tone: "danger", text: "rclone 확인 실패" }
+            ? "rclone 확인 실패"
             : env === null
-              ? { tone: "neutral", text: "rclone 확인 중…" }
+              ? "rclone 확인 중…"
               : env.problem
-                ? { tone: "danger", text: "rclone 문제 있음" }
-                : { tone: "success", text: `rclone 사용 가능 ${env.versionText ?? ""}`.trim() };
+                ? "rclone 문제 있음"
+                : `rclone 사용 가능 ${env.versionText ?? ""}`.trim();
+    const statusTitle = env?.problem?.message ?? envError ?? undefined;
     const paused = scheduler?.paused ?? false;
     const autoText = nextAutoRunText(scheduler, formatLocalDateTime);
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const h_Jobs = () => leaveSettings(() => setView("job"));
+    /** 설정 화면을 연다(이미 열려 있으면 닫는다: 화면 전환 단추가 없어진 자리를 대신한다) */
     const h_Settings = () => {
-        if (view !== "settings") guard(() => setView("settings"));
+        if (settingsOpen) leaveSettings(closeSettings);
+        else guard(openSettings);
     };
     const h_TogglePause = () => void setPaused(!paused);
 
     return (
-        <header className={styles.TopBar}>
-            <h1 className={styles.title}>{title}</h1>
-            <ZBCBadge tone={status.tone} title={env?.problem?.message}>
-                {status.text}
-            </ZBCBadge>
+        <>
+            <h1 className={styles.brand}>{title}</h1>
+            <button
+                type="button"
+                className={styles.pill}
+                data-tone={statusBad ? "danger" : undefined}
+                title={statusTitle}
+                onClick={h_Settings}
+            >
+                {statusText}
+            </button>
+            <ZBCButton
+                small
+                onClick={h_Settings}
+                title={settingsOpen ? "설정 화면을 닫습니다." : undefined}
+            >
+                설정
+            </ZBCButton>
             <span className={styles.spacer} />
             {scheduler && (
                 <div className={styles.auto}>
                     <output className={styles.autoText}>{autoText}</output>
                     <ZBCButton
+                        small
                         onClick={h_TogglePause}
                         disabled={pausePending}
                         title={
@@ -81,17 +99,6 @@ export default function TopBar(props: itfTopBarProps) {
                     </ZBCButton>
                 </div>
             )}
-            <nav className={styles.nav} aria-label="화면 전환">
-                <ZBCButton variant={view === "job" ? "primary" : "secondary"} onClick={h_Jobs}>
-                    작업
-                </ZBCButton>
-                <ZBCButton
-                    variant={view === "settings" ? "primary" : "secondary"}
-                    onClick={h_Settings}
-                >
-                    설정
-                </ZBCButton>
-            </nav>
-        </header>
+        </>
     );
 }

@@ -36,3 +36,9 @@ export type typPickFileInput = z.infer<typeof zPickFileInput>;
 
 export const zOpenExternalInput = z.object({ url: z.url().max(2048) }).strict();
 export type typOpenExternalInput = z.infer<typeof zOpenExternalInput>;
+
+/** 클립보드 복사 한도(UTF-16 글자 수, 8KB) */
+export const COPY_TEXT_MAX = 8 * 1024;
+
+export const zCopyTextInput = z.object({ text: z.string().max(COPY_TEXT_MAX) }).strict();
+export type typCopyTextInput = z.infer<typeof zCopyTextInput>;

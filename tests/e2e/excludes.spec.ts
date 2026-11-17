@@ -2,6 +2,7 @@
  * 공용 제외 패턴 E2E (INT-002 T-03). 임시 userData로 앱을 띄워 두 작업이 같은 공용 패턴을 고르고
  * (중복 추가는 기존 패턴 선택), #로 시작하는 패턴은 공용으로 막히며 작업 전용으로는 안내만 보이는지,
  * 쓰는 작업을 보여 주는 확인 창을 거쳐 지우면 두 작업에서 빠지는지 확인한다. rclone은 쓰지 않는다.
+ * 공용 패턴 고르기는 작업 편집 모달 안에서만 보이므로 저장할 때마다 편집 모달을 다시 연다.
  *
  * @author dev-Joy 2026-10-29
  */
@@ -13,7 +14,15 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 // ========== Internal imports ==========
-import { createJob, expectNoConsoleErrors, launchApp, openJob, waitForApp } from "./app-harness";
+import {
+    createJob,
+    dismissToasts,
+    expectNoConsoleErrors,
+    jobEditor,
+    launchApp,
+    openJob,
+    waitForApp,
+} from "./app-harness";
 
 let root = "";
 
@@ -28,16 +37,13 @@ test.afterAll(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-/** 떠 있는 알림을 모두 닫는다(같은 문구 알림이 겹치지 않게) */
-async function f_DismissToasts(page: Page): Promise<void> {
-    const close = page.getByRole("button", { name: "알림 닫기" });
-    while ((await close.count()) > 0) await close.first().click();
-}
-
+/** 편집 모달의 저장 단추로 저장하고(모달이 스스로 닫힌다) 알림을 닫는다 */
 async function f_Save(page: Page): Promise<void> {
-    await page.getByRole("button", { name: "저장", exact: true }).click();
-    await expect(page.getByText("작업을 저장했습니다.")).toBeVisible();
-    await f_DismissToasts(page);
+    const dialog = jobEditor(page);
+    await dialog.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(page.getByText("작업을 저장했습니다.").last()).toBeVisible();
+    await expect(dialog).toBeHidden();
+    await dismissToasts(page);
 }
 
 test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 지운다", async () => {
@@ -53,7 +59,7 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
             source: join(root, "a-src"),
             destination: join(root, "a-dst"),
         });
-        await f_DismissToasts(page);
+        await openJob(page, "공용 A");
         await library.locator("#job-exclude-library-new").fill("  *.bak  ");
         await library.getByRole("button", { name: "공용 패턴 추가" }).click();
         await expect(library.locator("legend")).toHaveText("공용 제외 패턴 (1개 선택)");
@@ -61,6 +67,7 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
         await f_Save(page);
 
         // #로 시작하는 패턴은 공용으로 막는다
+        await openJob(page, "공용 A");
         await library.locator("#job-exclude-library-new").fill("#주석");
         await library.getByRole("button", { name: "공용 패턴 추가" }).click();
         await expect(library.getByRole("alert")).toContainText(
@@ -72,7 +79,11 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
         await expect(
             page.getByText(/#·;로 시작하는 줄 1개는 다른 작업과 공유할 수 없어/),
         ).toBeVisible();
-        await page.getByRole("button", { name: "되돌리기" }).click();
+        // 되돌릴 수단이 없으므로 변경을 버리고 편집을 닫는다
+        await jobEditor(page).getByRole("button", { name: "취소", exact: true }).click();
+        const discard = page.getByRole("dialog", { name: "저장하지 않은 변경이 있습니다" });
+        await discard.getByRole("button", { name: "변경 버리고 이동" }).click();
+        await expect(jobEditor(page)).toBeHidden();
 
         // 작업 B: 같은 패턴을 다시 추가하면 기존 패턴을 고른다
         await createJob(page, {
@@ -80,18 +91,19 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
             source: join(root, "b-src"),
             destination: join(root, "b-dst"),
         });
-        await f_DismissToasts(page);
+        await openJob(page, "공용 B");
         await library.locator("#job-exclude-library-new").fill("*.bak");
         await library.getByRole("button", { name: "공용 패턴 추가" }).click();
         await expect(page.getByText("이미 있는 패턴을 골랐습니다.")).toBeVisible();
         await expect(library.getByRole("checkbox", { name: "*.bak" })).toBeChecked();
-        await f_DismissToasts(page);
         await f_Save(page);
+        // 저장한 뒤 다시 열어 두 작업이 쓰는지 본다
+        await openJob(page, "공용 B");
         await expect(library.getByText("작업 2개에서 사용")).toBeVisible();
 
         // 지우기: 쓰는 작업 2개를 보여 주는 확인 창
         await library.getByRole("button", { name: "*.bak 패턴 삭제" }).click();
-        const dialog = page.getByRole("dialog");
+        const dialog = page.getByRole("dialog", { name: "공용 제외 패턴 지우기" });
         await expect(dialog.getByRole("list", { name: "이 패턴을 쓰는 작업" })).toContainText(
             "공용 A",
         );
@@ -103,11 +115,14 @@ test("공용 제외 패턴: 두 작업이 함께 쓰고, 확인 창을 거쳐 �
             .click();
         await expect(page.getByText("공용 제외 패턴을 지웠습니다.")).toBeVisible();
         await expect(library.locator("legend")).toHaveText("공용 제외 패턴 (0개 선택)");
-        await expect(page.getByText("저장됨")).toBeVisible();
+        await expect(jobEditor(page).getByText("저장됨")).toBeVisible();
 
+        // 편집 모달을 닫은 뒤(모달이 열려 있으면 바깥을 누를 수 없다) 다른 작업을 연다
+        await jobEditor(page).getByRole("button", { name: "취소", exact: true }).click();
+        await expect(jobEditor(page)).toBeHidden();
         await openJob(page, "공용 A");
         await expect(library.locator("legend")).toHaveText("공용 제외 패턴 (0개 선택)");
-        await expect(page.getByText("저장됨")).toBeVisible();
+        await expect(jobEditor(page).getByText("저장됨")).toBeVisible();
 
         expectNoConsoleErrors(harness.consoleErrors);
     } finally {

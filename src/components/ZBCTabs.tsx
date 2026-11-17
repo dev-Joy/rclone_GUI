@@ -1,6 +1,6 @@
 /**
  * 탭 목록 (role="tablist"). ←/→ 키로 이동하고 비활성 탭은 건너뛴다. 패널은 쓰는 쪽에서 그린다.
- * 탭 id는 `${id}-tab-${탭}`, 패널 id는 `${id}-panel-${탭}`로 맞춘다
+ * 탭 id는 `${id}-tab-${탭}`(domId를 주면 그 값), 패널 id는 `${id}-panel-${탭}`로 맞춘다
  * (패널: <div role="tabpanel" id={`${id}-panel-${탭}`} aria-labelledby={`${id}-tab-${탭}`}>).
  *
  * @author dev-Joy 2026-10-28
@@ -16,6 +16,8 @@ export interface itfZBCTab<T extends string> {
     disabled?: boolean;
     /** 탭 옆 짧은 표시 (예: "준비 중") */
     badge?: string;
+    /** DOM id를 직접 정한다(E2E 선택자 유지 등). 없으면 `${id}-tab-${탭}` */
+    domId?: string;
 }
 
 export interface itfZBCTabsProps<T extends string> {
@@ -61,7 +63,7 @@ export default function ZBCTabs<T extends string>(props: itfZBCTabsProps<T>) {
                     key={t.id}
                     type="button"
                     role="tab"
-                    id={`${id}-tab-${t.id}`}
+                    id={t.domId ?? `${id}-tab-${t.id}`}
                     aria-controls={t.id === active ? `${id}-panel-${t.id}` : undefined}
                     className="zbcTabsTab"
                     data-tab-id={t.id}

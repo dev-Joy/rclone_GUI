@@ -1,5 +1,5 @@
 /**
- * HistoryView 스타일
+ * HistoryView 스타일 (rcloud 기록 표: 13px, 링크는 글자 단추)
  *
  * @author dev-Joy 2026-10-29
  */
@@ -65,11 +65,32 @@
             }
         }
 
-        .counts {
+        .counts,
+        .message {
             color: var(--muted);
         }
 
-        .open {
+        .message {
+            max-width: 320px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .links {
+            text-align: right;
+        }
+
+        /* 화면에는 숨기고 화면 읽기 프로그램에만 보이는 머리글 */
+        .srOnly {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+            white-space: nowrap;
+        }
+
+        .link {
             padding: 0;
             border: 0;
             background: none;
@@ -77,6 +98,10 @@
             font: inherit;
             text-decoration: underline;
             cursor: pointer;
+
+            & + & {
+                margin-left: 10px;
+            }
 
             &:focus-visible {
                 outline: 2px solid var(--focus);

@@ -193,8 +193,9 @@ export const useRunStore = create<itfRunState>((set, get) => {
             ui.leaveSettings(() =>
                 useJobEditorStore.getState().guard(() => {
                     useJobsStore.getState().select(jobId);
-                    ui.setView("job");
-                    ui.setPane("work");
+                    ui.setTab("files");
+                    ui.closeEditor();
+                    ui.closeSettings();
                     void useCompareStore.getState().run(jobId);
                 }),
             );

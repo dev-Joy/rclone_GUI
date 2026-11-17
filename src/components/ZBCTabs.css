@@ -6,7 +6,7 @@
 
 .zbcTabs {
     display: flex;
-    gap: 2px;
+    gap: 4px;
     overflow-x: auto;
     border-bottom: 1px solid var(--border);
 }
@@ -16,14 +16,19 @@
     align-items: center;
     gap: 6px;
     margin-bottom: -1px;
-    padding: 6px 14px;
+    padding: 6px 12px;
     border: 0;
     border-bottom: 2px solid transparent;
-    background: transparent;
+    background: none;
     color: var(--muted);
     font: inherit;
+    font-size: 13px;
     white-space: nowrap;
     cursor: pointer;
+
+    &:hover {
+        color: var(--text);
+    }
 
     &[aria-selected="true"] {
         border-bottom-color: var(--accent);

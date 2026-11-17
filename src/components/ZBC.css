@@ -10,6 +10,7 @@
 @import "./ZBCBadge.css" layer(components);
 @import "./ZBCButton.css" layer(components);
 @import "./ZBCCheckbox.css" layer(components);
+@import "./ZBCDot.css" layer(components);
 @import "./ZBCField.css" layer(components);
 @import "./ZBCInput.css" layer(components);
 @import "./ZBCModal.css" layer(components);

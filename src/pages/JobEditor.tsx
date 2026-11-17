@@ -1,5 +1,6 @@
 /**
- * 작업 설정 편집기. 이름·모드·원본·대상·제외 규칙·rclone.conf·고급/위험 옵션·자동 실행·메모를 고치고 저장한다.
+ * 작업 편집 모달. 이름·모드·원본·대상·제외 규칙·rclone.conf·고급/위험 옵션·자동 실행·메모를 고치고 저장한다.
+ * 바깥 클릭으로 닫히지 않고, 취소·×·Escape는 저장하지 않은 변경이 있으면 DiscardChangesModal을 거친다.
  * 저장 전에 화면에서 검증하고(필드별 오류), main이 다시 검증해 거부하면 폼 위에 이유를 보여 준다.
  * 자동 실행은 앱 안 스케줄러 또는 Windows 작업 스케줄러(INT-003 T-01) 중에서 고른다. Windows 쪽은 설치한 앱에서만
  * 고를 수 있고(아니면 비활성 + 이유), 고르면 암호화된 rclone.conf 미지원 안내와 등록 상태(미등록·실패)를 보인다.
@@ -16,6 +17,7 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCCheckbox from "@/components/ZBCCheckbox";
 import ZBCField from "@/components/ZBCField";
 import ZBCInput from "@/components/ZBCInput";
+import ZBCModal from "@/components/ZBCModal";
 import ZBCSelect from "@/components/ZBCSelect";
 import ZBCTextarea from "@/components/ZBCTextarea";
 import { errorText, getApi, unwrap } from "@/lib/api";
@@ -27,6 +29,7 @@ import {
     intervalUnitOf,
     serverErrorToCheck,
     shouldShowLoginHint,
+    sortJobs,
     validateJobDraft,
     type itfJobFormCheck,
     type typIntervalUnit,
@@ -138,8 +141,10 @@ export default function JobEditor() {
     const setField = useJobEditorStore((s) => s.setField);
     const setOptions = useJobEditorStore((s) => s.setOptions);
     const setAutoSync = useJobEditorStore((s) => s.setAutoSync);
-    const revert = useJobEditorStore((s) => s.revert);
     const save = useJobEditorStore((s) => s.save);
+    const closeDraft = useJobEditorStore((s) => s.close);
+    const guard = useJobEditorStore((s) => s.guard);
+    const closeEditor = useUiStore((s) => s.closeEditor);
     const baseline = useJobEditorStore((s) => s.baseline);
     /** "이 작업만 다른 파일"을 골랐지만 아직 파일을 고르지 않은 상태 */
     const [wantOverride, setWantOverride] = useState(false);
@@ -291,440 +296,466 @@ export default function JobEditor() {
             pushToast("info", LOGIN_HINT);
             markLoginHintShown();
         }
+        closeEditor();
     };
     const h_SaveClick = () => void h_Save();
+    /** 취소·×·Escape: 저장하지 않은 변경이 있으면 먼저 확인한다(DiscardChangesModal) */
+    const h_Close = () =>
+        guard(() => {
+            // 새 작업을 닫으면 작업 화면으로 돌아간다(목록의 첫 작업). 편집은 선택을 바꾸지 않는다
+            const wasNew = jobId === null;
+            closeDraft();
+            closeEditor();
+            if (wasNew) {
+                const jobs = useJobsStore.getState().jobs;
+                useJobsStore.getState().select(sortJobs(jobs)[0]?.id ?? null);
+            }
+        });
 
     return (
-        <div className={styles.JobEditor}>
-            <div className={styles.form}>
-                {externalChange && (
-                    <output className={styles.notice} data-level="warning">
-                        다른 곳에서 이 작업이 바뀌었습니다. 저장하면 지금 화면의 값으로 덮어씁니다.
+        <ZBCModal
+            open
+            title="작업 편집"
+            onClose={h_Close}
+            closeOnBackdrop={false}
+            size="wide"
+            footer={
+                <>
+                    <output className={styles.footerText}>
+                        {showErrors && errorCount > 0
+                            ? `고칠 곳이 ${errorCount}개 있습니다.`
+                            : dirty
+                              ? "저장하지 않은 변경이 있습니다."
+                              : jobId === null
+                                ? "아직 저장하지 않은 새 작업입니다."
+                                : "저장됨"}
                     </output>
-                )}
-                {showErrors && check.formErrors.length > 0 && (
-                    <div className={styles.notice} data-level="error" role="alert">
-                        {check.formErrors.map((m) => (
-                            <p key={m}>{m}</p>
-                        ))}
-                    </div>
-                )}
-                {check.formWarnings.length > 0 && (
-                    <div className={styles.notice} data-level="warning">
-                        {check.formWarnings.map((m) => (
-                            <p key={m}>주의: {m}</p>
-                        ))}
-                    </div>
-                )}
-
-                <section className={styles.section} aria-labelledby="job-basic-title">
-                    <h3 id="job-basic-title" className={styles.sectionTitle}>
-                        기본
-                    </h3>
-                    <ZBCField label="이름" htmlFor="job-name" error={err("name")} required>
-                        <ZBCInput
-                            id="job-name"
-                            name="name"
-                            value={draft.name}
-                            onChange={h_Name}
-                            placeholder="예: 프로젝트 백업"
-                            invalid={Boolean(err("name"))}
-                            describedBy="job-name-desc"
-                        />
-                    </ZBCField>
-                    <fieldset className={styles.modes}>
-                        <legend className={styles.legend}>모드 (필수)</legend>
-                        {MODE_OPTIONS.map((m) => (
-                            <label
-                                key={m.value}
-                                className={styles.mode}
-                                data-checked={draft.mode === m.value ? "" : undefined}
-                            >
-                                <input
-                                    type="radio"
-                                    name="mode"
-                                    value={m.value}
-                                    checked={draft.mode === m.value}
-                                    onChange={h_Mode}
-                                />
-                                <span>
-                                    <strong>{m.label}</strong> — {m.description}
-                                </span>
-                            </label>
-                        ))}
-                    </fieldset>
-                    <fieldset className={styles.modes}>
-                        <legend className={styles.legend}>동기화 범위</legend>
-                        {SCOPE_OPTIONS.map((m) => (
-                            <label
-                                key={m.value}
-                                className={styles.mode}
-                                data-checked={draft.scope === m.value ? "" : undefined}
-                            >
-                                <input
-                                    type="radio"
-                                    name="scope"
-                                    value={m.value}
-                                    checked={draft.scope === m.value}
-                                    onChange={h_Scope}
-                                />
-                                <span>
-                                    <strong>{m.label}</strong> — {m.description}
-                                </span>
-                            </label>
-                        ))}
-                    </fieldset>
-                    {emptyDirWarning && (
-                        <output
-                            className={styles.notice}
-                            data-level="warning"
-                            id="job-scope-empty-dir-warning"
-                        >
-                            {EMPTY_DIR_SCOPE_WARNING}
+                    <ZBCButton onClick={h_Close} disabled={saving}>
+                        취소
+                    </ZBCButton>
+                    <ZBCButton variant="primary" onClick={h_SaveClick} disabled={!canSave}>
+                        {saving ? "저장 중…" : "저장"}
+                    </ZBCButton>
+                </>
+            }
+        >
+            <div className={styles.JobEditor}>
+                <div className={styles.form}>
+                    {externalChange && (
+                        <output className={styles.notice} data-level="warning">
+                            다른 곳에서 이 작업이 바뀌었습니다. 저장하면 지금 화면의 값으로
+                            덮어씁니다.
                         </output>
                     )}
-                </section>
-
-                <section className={styles.section} aria-labelledby="job-paths-title">
-                    <h3 id="job-paths-title" className={styles.sectionTitle}>
-                        경로
-                    </h3>
-                    <PathField
-                        id="job-source"
-                        name="source"
-                        label="원본"
-                        value={draft.source}
-                        onChange={h_Source}
-                        configPath={override}
-                        error={err("source")}
-                        warnings={warn("source")}
-                    />
-                    <PathField
-                        id="job-destination"
-                        name="destination"
-                        label="대상"
-                        value={draft.destination}
-                        onChange={h_Destination}
-                        configPath={override}
-                        error={err("destination")}
-                        warnings={warn("destination")}
-                    />
-                    {draft.mode === "sync" ? (
-                        <>
-                            <PathField
-                                id="job-backup-dir"
-                                name="backupDir"
-                                label="백업 폴더 (선택)"
-                                value={draft.backupDir ?? ""}
-                                onChange={h_BackupDir}
-                                configPath={override}
-                                error={err("backupDir")}
-                                warnings={warn("backupDir")}
-                                required={false}
-                            />
-                            <p className={styles.muted} id="job-backup-dir-note">
-                                {BACKUP_DIR_HINT}
-                            </p>
-                        </>
-                    ) : (
-                        warn("backupDir").map((w, i) => (
-                            <p
-                                key={w}
-                                className={styles.muted}
-                                id={i === 0 ? "job-backup-dir-note" : undefined}
-                            >
-                                {w}
-                            </p>
-                        ))
-                    )}
-                </section>
-
-                <section className={styles.section} aria-labelledby="job-excludes-title">
-                    <h3 id="job-excludes-title" className={styles.sectionTitle}>
-                        제외
-                    </h3>
-                    <ExcludeLibraryPicker
-                        id="job-exclude-library"
-                        value={draft.excludePatternIds}
-                        onChange={h_ExcludeIds}
-                    />
-                    <ExcludesEditor
-                        id="job-excludes"
-                        label="이 작업에만 쓰는 제외 패턴"
-                        value={draft.excludes}
-                        onChange={h_Excludes}
-                        defaults={settings?.defaults.excludes}
-                        defaultsLabel="설정 기본값 불러오기"
-                        error={err("excludes")}
-                        commentNote
-                    />
-                </section>
-
-                <section className={styles.section} aria-labelledby="job-config-title">
-                    <h3 id="job-config-title" className={styles.sectionTitle}>
-                        사용할 rclone.conf
-                    </h3>
-                    <div
-                        className={styles.configChoice}
-                        role="radiogroup"
-                        aria-labelledby="job-config-title"
-                    >
-                        <label className={styles.mode}>
-                            <input
-                                type="radio"
-                                name="config-choice"
-                                checked={!otherConfig}
-                                onChange={h_UseDefaultConfig}
-                            />
-                            <span>기본 설정 파일 사용 (설정 화면의 rclone 설정)</span>
-                        </label>
-                        <label className={styles.mode}>
-                            <input
-                                type="radio"
-                                name="config-choice"
-                                checked={otherConfig}
-                                onChange={h_UseOtherConfig}
-                            />
-                            <span>이 작업만 다른 파일 사용</span>
-                        </label>
-                    </div>
-                    {otherConfig && (
-                        <div className={styles.configPath}>
-                            <span className={styles.mono} title={override ?? undefined}>
-                                {override ?? "아직 고르지 않음 — 비워 두면 기본 rclone.conf 사용"}
-                            </span>
-                            <ZBCButton onClick={h_PickConfig}>
-                                {override === null ? "rclone.conf 파일 고르기" : "다른 파일 고르기"}
-                            </ZBCButton>
+                    {showErrors && check.formErrors.length > 0 && (
+                        <div className={styles.notice} data-level="error" role="alert">
+                            {check.formErrors.map((m) => (
+                                <p key={m}>{m}</p>
+                            ))}
                         </div>
                     )}
-                    {err("configPathOverride") && (
-                        <p className={styles.fieldError} role="alert">
-                            {err("configPathOverride")}
-                        </p>
+                    {check.formWarnings.length > 0 && (
+                        <div className={styles.notice} data-level="warning">
+                            {check.formWarnings.map((m) => (
+                                <p key={m}>주의: {m}</p>
+                            ))}
+                        </div>
                     )}
-                </section>
 
-                <section className={styles.section} aria-labelledby="job-options-title">
-                    <h3 id="job-options-title" className={styles.sectionTitle}>
-                        실행 옵션
-                    </h3>
-                    <JobOptionsFields
-                        idPrefix="job"
-                        value={draft.options}
-                        onChange={setOptions}
-                        mode={draft.mode}
-                        hasBackupDir={draft.backupDir !== null}
-                        errors={{
-                            checkers: err("options.checkers") ?? undefined,
-                            transfers: err("options.transfers") ?? undefined,
-                            modtimeToleranceMs: err("options.modtimeToleranceMs") ?? undefined,
-                        }}
-                    />
-                </section>
-
-                <section className={styles.section} aria-labelledby="job-auto-title">
-                    <h3 id="job-auto-title" className={styles.sectionTitle}>
-                        자동 실행
-                    </h3>
-                    <ZBCCheckbox
-                        id="job-auto-enabled"
-                        name="autoEnabled"
-                        checked={auto.enabled}
-                        onChange={h_AutoEnabled}
-                        label="예약에 따라 자동 실행"
-                        description="예약 시각마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
-                    />
-                    <ZBCField
-                        label="예약 실행 방식"
-                        htmlFor="job-auto-backend"
-                        hint={
-                            isOs
-                                ? "앱이 꺼져 있어도 Windows 작업 스케줄러가 예약 시각에 앱을 창 없이 실행합니다."
-                                : "앱이 켜져 있는 동안(트레이 포함)만 예약 시각에 실행합니다."
-                        }
-                    >
-                        <ZBCSelect
-                            id="job-auto-backend"
-                            name="autoBackend"
-                            value={auto.backend}
-                            options={backendOptions}
-                            onChange={h_AutoBackend}
-                            describedBy={
-                                !osAvailable && osStatus?.reason
-                                    ? "job-auto-backend-reason"
-                                    : undefined
-                            }
-                        />
-                    </ZBCField>
-                    {!osAvailable && osStatus?.reason && (
-                        <p className={styles.muted} id="job-auto-backend-reason">
-                            Windows 작업 스케줄러 예약: {osStatus.reason}
-                        </p>
-                    )}
-                    {isOs && (
-                        <p className={styles.muted} id="job-auto-encrypted-hint">
-                            {ENCRYPTED_CONF_HINT}
-                        </p>
-                    )}
-                    {osTaskWarning !== null && (
-                        <output className={styles.notice} id="job-auto-os-warning">
-                            {osTaskWarning}
-                        </output>
-                    )}
-                    {auto.enabled && !isOs && !launchAtLogin && (
-                        <p className={styles.muted}>
-                            ‘로그인 시 시작’이 꺼져 있습니다. PC를 다시 켠 뒤 앱을 직접 열기 전에는
-                            자동 실행이 돌지 않습니다.
-                        </p>
-                    )}
-                    <fieldset className={styles.modes}>
-                        <legend className={styles.legend}>예약 방식</legend>
-                        {AUTO_KIND_OPTIONS.map((k) => (
-                            <label
-                                key={k.value}
-                                className={styles.mode}
-                                data-checked={auto.kind === k.value ? "" : undefined}
-                            >
-                                <input
-                                    type="radio"
-                                    name="autoKind"
-                                    value={k.value}
-                                    checked={auto.kind === k.value}
-                                    onChange={h_AutoKind}
-                                />
-                                <span>{k.label}</span>
-                            </label>
-                        ))}
-                    </fieldset>
-                    {auto.kind === "interval" && (
-                        <ZBCField
-                            label="실행 간격"
-                            htmlFor="job-auto-interval"
-                            hint="최대 7일(10080분·168시간)"
-                            error={err("autoSync.intervalMinutes")}
-                        >
-                            <div className={styles.inline}>
-                                <ZBCInput
-                                    id="job-auto-interval"
-                                    name="autoInterval"
-                                    type="number"
-                                    min={1}
-                                    max={intervalUnit === "hour" ? 168 : 10080}
-                                    step={1}
-                                    value={numberText(
-                                        intervalDisplay(auto.intervalMinutes, intervalUnit),
-                                    )}
-                                    onChange={h_AutoInterval}
-                                    invalid={Boolean(err("autoSync.intervalMinutes"))}
-                                    describedBy="job-auto-interval-desc"
-                                />
-                                <ZBCSelect
-                                    id="job-auto-interval-unit"
-                                    name="autoIntervalUnit"
-                                    value={intervalUnit}
-                                    options={INTERVAL_UNIT_OPTIONS}
-                                    onChange={h_AutoIntervalUnit}
-                                />
-                            </div>
-                        </ZBCField>
-                    )}
-                    {auto.kind === "weekly" && (
-                        <fieldset id="job-auto-weekdays" className={styles.modes}>
-                            <legend className={styles.legend}>요일</legend>
-                            <div className={styles.inline}>
-                                {WEEKDAY_OPTIONS.map((d) => (
-                                    <ZBCCheckbox
-                                        key={d.bit}
-                                        id={`job-auto-weekday-${d.bit}`}
-                                        name={`autoWeekday${d.bit}`}
-                                        checked={(auto.weekdays & (1 << d.bit)) !== 0}
-                                        onChange={(v) => h_AutoWeekday(d.bit, v)}
-                                        label={d.label}
-                                    />
-                                ))}
-                            </div>
-                            {err("autoSync.weekdays") && (
-                                <p className={styles.fieldError} role="alert">
-                                    {err("autoSync.weekdays")}
-                                </p>
-                            )}
-                        </fieldset>
-                    )}
-                    {auto.kind !== "interval" && (
-                        <ZBCField
-                            label="실행 시각"
-                            htmlFor="job-auto-time"
-                            hint="이 PC의 시각 기준"
-                            error={err("autoSync.timeOfDay")}
-                        >
+                    <section className={styles.section} aria-labelledby="job-basic-title">
+                        <h3 id="job-basic-title" className={styles.sectionTitle}>
+                            기본
+                        </h3>
+                        <ZBCField label="이름" htmlFor="job-name" error={err("name")} required>
                             <ZBCInput
-                                id="job-auto-time"
-                                name="autoTime"
-                                type="time"
-                                value={auto.timeOfDay}
-                                onChange={h_AutoTime}
-                                invalid={Boolean(err("autoSync.timeOfDay"))}
+                                id="job-name"
+                                name="name"
+                                value={draft.name}
+                                onChange={h_Name}
+                                placeholder="예: 프로젝트 백업"
+                                invalid={Boolean(err("name"))}
+                                describedBy="job-name-desc"
                             />
                         </ZBCField>
-                    )}
-                    <ZBCCheckbox
-                        id="job-auto-deletes"
-                        name="autoDeletes"
-                        checked={auto.allowDeletes}
-                        onChange={h_AutoDeletes}
-                        label="자동 실행 때 대상 파일 삭제 허용 (동기화 모드)"
-                        description="삭제가 필요하면 이 옵션이 켜져 있고, 삭제 수가 설정의 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전 확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다."
-                    />
-                    {previewNext !== null && (
-                        <p className={styles.muted} id="job-auto-preview">
-                            저장하면 다음 실행: {previewNext}
-                        </p>
-                    )}
-                    <p className={styles.muted}>
-                        다음 실행:{" "}
-                        {job?.autoSync.backend === "os"
-                            ? "Windows 작업 스케줄러가 실행합니다"
-                            : formatLocalDateTime(job?.autoSync.nextRunAt ?? null)}{" "}
-                        · 마지막 자동 실행:{" "}
-                        {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
-                    </p>
-                </section>
+                        <fieldset className={styles.modes}>
+                            <legend className={styles.legend}>모드 (필수)</legend>
+                            {MODE_OPTIONS.map((m) => (
+                                <label
+                                    key={m.value}
+                                    className={styles.mode}
+                                    data-checked={draft.mode === m.value ? "" : undefined}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="mode"
+                                        value={m.value}
+                                        checked={draft.mode === m.value}
+                                        onChange={h_Mode}
+                                    />
+                                    <span>
+                                        <strong>{m.label}</strong> — {m.description}
+                                    </span>
+                                </label>
+                            ))}
+                        </fieldset>
+                        <fieldset className={styles.modes}>
+                            <legend className={styles.legend}>동기화 범위</legend>
+                            {SCOPE_OPTIONS.map((m) => (
+                                <label
+                                    key={m.value}
+                                    className={styles.mode}
+                                    data-checked={draft.scope === m.value ? "" : undefined}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="scope"
+                                        value={m.value}
+                                        checked={draft.scope === m.value}
+                                        onChange={h_Scope}
+                                    />
+                                    <span>
+                                        <strong>{m.label}</strong> — {m.description}
+                                    </span>
+                                </label>
+                            ))}
+                        </fieldset>
+                        {emptyDirWarning && (
+                            <output
+                                className={styles.notice}
+                                data-level="warning"
+                                id="job-scope-empty-dir-warning"
+                            >
+                                {EMPTY_DIR_SCOPE_WARNING}
+                            </output>
+                        )}
+                    </section>
 
-                <section className={styles.section} aria-labelledby="job-notes-title">
-                    <h3 id="job-notes-title" className={styles.sectionTitle}>
-                        메모
-                    </h3>
-                    <ZBCField label="메모" htmlFor="job-notes" error={err("notes")}>
-                        <ZBCTextarea
-                            id="job-notes"
-                            name="notes"
-                            value={draft.notes}
-                            onChange={h_Notes}
-                            rows={3}
-                            describedBy="job-notes-desc"
+                    <section className={styles.section} aria-labelledby="job-paths-title">
+                        <h3 id="job-paths-title" className={styles.sectionTitle}>
+                            경로
+                        </h3>
+                        <PathField
+                            id="job-source"
+                            name="source"
+                            label="원본"
+                            value={draft.source}
+                            onChange={h_Source}
+                            configPath={override}
+                            error={err("source")}
+                            warnings={warn("source")}
                         />
-                    </ZBCField>
-                </section>
-            </div>
+                        <PathField
+                            id="job-destination"
+                            name="destination"
+                            label="대상"
+                            value={draft.destination}
+                            onChange={h_Destination}
+                            configPath={override}
+                            error={err("destination")}
+                            warnings={warn("destination")}
+                        />
+                        {draft.mode === "sync" ? (
+                            <>
+                                <PathField
+                                    id="job-backup-dir"
+                                    name="backupDir"
+                                    label="백업 폴더 (선택)"
+                                    value={draft.backupDir ?? ""}
+                                    onChange={h_BackupDir}
+                                    configPath={override}
+                                    error={err("backupDir")}
+                                    warnings={warn("backupDir")}
+                                    required={false}
+                                />
+                                <p className={styles.muted} id="job-backup-dir-note">
+                                    {BACKUP_DIR_HINT}
+                                </p>
+                            </>
+                        ) : (
+                            warn("backupDir").map((w, i) => (
+                                <p
+                                    key={w}
+                                    className={styles.muted}
+                                    id={i === 0 ? "job-backup-dir-note" : undefined}
+                                >
+                                    {w}
+                                </p>
+                            ))
+                        )}
+                    </section>
 
-            <footer className={styles.footer}>
-                <output className={styles.footerText}>
-                    {showErrors && errorCount > 0
-                        ? `고칠 곳이 ${errorCount}개 있습니다.`
-                        : dirty
-                          ? "저장하지 않은 변경이 있습니다."
-                          : jobId === null
-                            ? "아직 저장하지 않은 새 작업입니다."
-                            : "저장됨"}
-                </output>
-                <ZBCButton onClick={revert} disabled={!dirty || saving}>
-                    되돌리기
-                </ZBCButton>
-                <ZBCButton variant="primary" onClick={h_SaveClick} disabled={!canSave}>
-                    {saving ? "저장 중…" : "저장"}
-                </ZBCButton>
-            </footer>
-        </div>
+                    <section className={styles.section} aria-labelledby="job-excludes-title">
+                        <h3 id="job-excludes-title" className={styles.sectionTitle}>
+                            제외
+                        </h3>
+                        <ExcludeLibraryPicker
+                            id="job-exclude-library"
+                            value={draft.excludePatternIds}
+                            onChange={h_ExcludeIds}
+                        />
+                        <ExcludesEditor
+                            id="job-excludes"
+                            label="이 작업에만 쓰는 제외 패턴"
+                            value={draft.excludes}
+                            onChange={h_Excludes}
+                            defaults={settings?.defaults.excludes}
+                            defaultsLabel="설정 기본값 불러오기"
+                            error={err("excludes")}
+                            commentNote
+                        />
+                    </section>
+
+                    <section className={styles.section} aria-labelledby="job-config-title">
+                        <h3 id="job-config-title" className={styles.sectionTitle}>
+                            사용할 rclone.conf
+                        </h3>
+                        <div
+                            className={styles.configChoice}
+                            role="radiogroup"
+                            aria-labelledby="job-config-title"
+                        >
+                            <label className={styles.mode}>
+                                <input
+                                    type="radio"
+                                    name="config-choice"
+                                    checked={!otherConfig}
+                                    onChange={h_UseDefaultConfig}
+                                />
+                                <span>기본 설정 파일 사용 (설정 화면의 rclone 설정)</span>
+                            </label>
+                            <label className={styles.mode}>
+                                <input
+                                    type="radio"
+                                    name="config-choice"
+                                    checked={otherConfig}
+                                    onChange={h_UseOtherConfig}
+                                />
+                                <span>이 작업만 다른 파일 사용</span>
+                            </label>
+                        </div>
+                        {otherConfig && (
+                            <div className={styles.configPath}>
+                                <span className={styles.mono} title={override ?? undefined}>
+                                    {override ??
+                                        "아직 고르지 않음 — 비워 두면 기본 rclone.conf 사용"}
+                                </span>
+                                <ZBCButton onClick={h_PickConfig}>
+                                    {override === null
+                                        ? "rclone.conf 파일 고르기"
+                                        : "다른 파일 고르기"}
+                                </ZBCButton>
+                            </div>
+                        )}
+                        {err("configPathOverride") && (
+                            <p className={styles.fieldError} role="alert">
+                                {err("configPathOverride")}
+                            </p>
+                        )}
+                    </section>
+
+                    <section className={styles.section} aria-labelledby="job-options-title">
+                        <h3 id="job-options-title" className={styles.sectionTitle}>
+                            실행 옵션
+                        </h3>
+                        <JobOptionsFields
+                            idPrefix="job"
+                            value={draft.options}
+                            onChange={setOptions}
+                            mode={draft.mode}
+                            hasBackupDir={draft.backupDir !== null}
+                            errors={{
+                                checkers: err("options.checkers") ?? undefined,
+                                transfers: err("options.transfers") ?? undefined,
+                                modtimeToleranceMs: err("options.modtimeToleranceMs") ?? undefined,
+                            }}
+                        />
+                    </section>
+
+                    <section className={styles.section} aria-labelledby="job-auto-title">
+                        <h3 id="job-auto-title" className={styles.sectionTitle}>
+                            자동 실행
+                        </h3>
+                        <ZBCCheckbox
+                            id="job-auto-enabled"
+                            name="autoEnabled"
+                            checked={auto.enabled}
+                            onChange={h_AutoEnabled}
+                            label="예약에 따라 자동 실행"
+                            description="예약 시각마다 비교하고, 바꿀 파일이 있으면 안전 조건을 확인한 뒤 실행합니다. 결과는 알림과 이력에 남습니다."
+                        />
+                        <ZBCField
+                            label="예약 실행 방식"
+                            htmlFor="job-auto-backend"
+                            hint={
+                                isOs
+                                    ? "앱이 꺼져 있어도 Windows 작업 스케줄러가 예약 시각에 앱을 창 없이 실행합니다."
+                                    : "앱이 켜져 있는 동안(트레이 포함)만 예약 시각에 실행합니다."
+                            }
+                        >
+                            <ZBCSelect
+                                id="job-auto-backend"
+                                name="autoBackend"
+                                value={auto.backend}
+                                options={backendOptions}
+                                onChange={h_AutoBackend}
+                                describedBy={
+                                    !osAvailable && osStatus?.reason
+                                        ? "job-auto-backend-reason"
+                                        : undefined
+                                }
+                            />
+                        </ZBCField>
+                        {!osAvailable && osStatus?.reason && (
+                            <p className={styles.muted} id="job-auto-backend-reason">
+                                Windows 작업 스케줄러 예약: {osStatus.reason}
+                            </p>
+                        )}
+                        {isOs && (
+                            <p className={styles.muted} id="job-auto-encrypted-hint">
+                                {ENCRYPTED_CONF_HINT}
+                            </p>
+                        )}
+                        {osTaskWarning !== null && (
+                            <output className={styles.notice} id="job-auto-os-warning">
+                                {osTaskWarning}
+                            </output>
+                        )}
+                        {auto.enabled && !isOs && !launchAtLogin && (
+                            <p className={styles.muted}>
+                                ‘로그인 시 시작’이 꺼져 있습니다. PC를 다시 켠 뒤 앱을 직접 열기
+                                전에는 자동 실행이 돌지 않습니다.
+                            </p>
+                        )}
+                        <fieldset className={styles.modes}>
+                            <legend className={styles.legend}>예약 방식</legend>
+                            {AUTO_KIND_OPTIONS.map((k) => (
+                                <label
+                                    key={k.value}
+                                    className={styles.mode}
+                                    data-checked={auto.kind === k.value ? "" : undefined}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="autoKind"
+                                        value={k.value}
+                                        checked={auto.kind === k.value}
+                                        onChange={h_AutoKind}
+                                    />
+                                    <span>{k.label}</span>
+                                </label>
+                            ))}
+                        </fieldset>
+                        {auto.kind === "interval" && (
+                            <ZBCField
+                                label="실행 간격"
+                                htmlFor="job-auto-interval"
+                                hint="최대 7일(10080분·168시간)"
+                                error={err("autoSync.intervalMinutes")}
+                            >
+                                <div className={styles.inline}>
+                                    <ZBCInput
+                                        id="job-auto-interval"
+                                        name="autoInterval"
+                                        type="number"
+                                        min={1}
+                                        max={intervalUnit === "hour" ? 168 : 10080}
+                                        step={1}
+                                        value={numberText(
+                                            intervalDisplay(auto.intervalMinutes, intervalUnit),
+                                        )}
+                                        onChange={h_AutoInterval}
+                                        invalid={Boolean(err("autoSync.intervalMinutes"))}
+                                        describedBy="job-auto-interval-desc"
+                                    />
+                                    <ZBCSelect
+                                        id="job-auto-interval-unit"
+                                        name="autoIntervalUnit"
+                                        value={intervalUnit}
+                                        options={INTERVAL_UNIT_OPTIONS}
+                                        onChange={h_AutoIntervalUnit}
+                                    />
+                                </div>
+                            </ZBCField>
+                        )}
+                        {auto.kind === "weekly" && (
+                            <fieldset id="job-auto-weekdays" className={styles.modes}>
+                                <legend className={styles.legend}>요일</legend>
+                                <div className={styles.inline}>
+                                    {WEEKDAY_OPTIONS.map((d) => (
+                                        <ZBCCheckbox
+                                            key={d.bit}
+                                            id={`job-auto-weekday-${d.bit}`}
+                                            name={`autoWeekday${d.bit}`}
+                                            checked={(auto.weekdays & (1 << d.bit)) !== 0}
+                                            onChange={(v) => h_AutoWeekday(d.bit, v)}
+                                            label={d.label}
+                                        />
+                                    ))}
+                                </div>
+                                {err("autoSync.weekdays") && (
+                                    <p className={styles.fieldError} role="alert">
+                                        {err("autoSync.weekdays")}
+                                    </p>
+                                )}
+                            </fieldset>
+                        )}
+                        {auto.kind !== "interval" && (
+                            <ZBCField
+                                label="실행 시각"
+                                htmlFor="job-auto-time"
+                                hint="이 PC의 시각 기준"
+                                error={err("autoSync.timeOfDay")}
+                            >
+                                <ZBCInput
+                                    id="job-auto-time"
+                                    name="autoTime"
+                                    type="time"
+                                    value={auto.timeOfDay}
+                                    onChange={h_AutoTime}
+                                    invalid={Boolean(err("autoSync.timeOfDay"))}
+                                />
+                            </ZBCField>
+                        )}
+                        <ZBCCheckbox
+                            id="job-auto-deletes"
+                            name="autoDeletes"
+                            checked={auto.allowDeletes}
+                            onChange={h_AutoDeletes}
+                            label="자동 실행 때 대상 파일 삭제 허용 (동기화 모드)"
+                            description="삭제가 필요하면 이 옵션이 켜져 있고, 삭제 수가 설정의 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전 확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다."
+                        />
+                        {previewNext !== null && (
+                            <p className={styles.muted} id="job-auto-preview">
+                                저장하면 다음 실행: {previewNext}
+                            </p>
+                        )}
+                        <p className={styles.muted}>
+                            다음 실행:{" "}
+                            {job?.autoSync.backend === "os"
+                                ? "Windows 작업 스케줄러가 실행합니다"
+                                : formatLocalDateTime(job?.autoSync.nextRunAt ?? null)}{" "}
+                            · 마지막 자동 실행:{" "}
+                            {formatLocalDateTime(job?.autoSync.lastAutoRunAt ?? null)}
+                        </p>
+                    </section>
+
+                    <section className={styles.section} aria-labelledby="job-notes-title">
+                        <h3 id="job-notes-title" className={styles.sectionTitle}>
+                            메모
+                        </h3>
+                        <ZBCField label="메모" htmlFor="job-notes" error={err("notes")}>
+                            <ZBCTextarea
+                                id="job-notes"
+                                name="notes"
+                                value={draft.notes}
+                                onChange={h_Notes}
+                                rows={3}
+                                describedBy="job-notes-desc"
+                            />
+                        </ZBCField>
+                    </section>
+                </div>
+            </div>
+        </ZBCModal>
     );
 }

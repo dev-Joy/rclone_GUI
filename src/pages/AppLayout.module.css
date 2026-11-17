@@ -1,54 +1,54 @@
 /**
  * AppLayout 스타일 (레이아웃)
+ * INT-008 FR-4·FR-5: 상단 막대 고정 + 아래 [250px 작업 목록 | 작업 화면] flex 배치.
  *
  * @author dev-Joy 2026-10-28
  */
 
 @layer layouts {
     .AppLayout {
-        display: grid;
-        grid-template-areas:
-            "top top"
-            "sidebar main";
-        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-        grid-template-rows: auto minmax(0, 1fr);
+        display: flex;
+        flex-direction: column;
         height: 100%;
 
-        .top {
-            grid-area: top;
+        .topbar {
+            display: flex;
+            flex: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+        }
+
+        .body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
         }
 
         .sidebar {
-            grid-area: sidebar;
-            overflow-y: auto;
+            display: flex;
+            flex: none;
+            min-width: 0;
+            overflow: hidden;
             border-right: 1px solid var(--border);
             background: var(--panel);
         }
 
         .main {
             display: flex;
+            flex: 1;
             flex-direction: column;
-            grid-area: main;
             min-width: 0;
             overflow-y: auto;
             background: var(--panel);
         }
 
-        .banner {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 12px 20px 0;
-
-            &:empty {
-                display: none;
-            }
-        }
-
         .content {
             flex: 1 1 auto;
             min-width: 0;
-            padding: 12px 20px 0;
+            padding: 12px 14px;
         }
     }
 }

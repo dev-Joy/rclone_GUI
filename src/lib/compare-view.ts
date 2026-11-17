@@ -1,5 +1,5 @@
 /**
- * 비교 화면의 순수 로직: 상태 라벨·색, 사유 문구, 필터·검색·정렬(인덱스 배열), 요약 카드 문구,
+ * 비교 화면의 순수 로직: 상태 라벨·색, 사유 문구, 칩 필터·검색·정렬(인덱스 배열), 칩 개수·색,
  * 결과가 낡았는지, 비교 버튼 가능 여부. DOM·window 의존 없음 (단위 테스트는 node 환경).
  *
  * @author dev-Joy 2026-10-28
@@ -21,50 +21,35 @@ import type {
 /** ZBCBadge의 tone과 같은 값 (컴포넌트 파일을 node 환경에 끌어오지 않으려고 따로 둔다) */
 export type typCompareTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
-export type typCompareFilterStatus =
-    | "all"
-    | "changes"
-    | "onlySource"
-    | "modified"
-    | "onlyDest"
-    | "typeConflict"
-    | "equal";
+/** 상태 칩. 파일 목록 위 칩 5개의 키이자 itfDiffEntry.status 값과 같다 */
+export type typCompareChip = "onlySource" | "modified" | "onlyDest" | "typeConflict" | "equal";
+
+/** 칩 색. 끈 칩은 중립, 켠 칩만 이 색으로 보인다(rcloud 칩 문법) */
+export type typCompareChipTone = "add" | "change" | "delete" | "danger" | "same";
 
 export type typCompareSortKey = "path" | "status" | "srcSize" | "srcTime" | "dstSize" | "dstTime";
 export type typSortDir = "asc" | "desc";
 
 export interface itfCompareViewState {
-    status: typCompareFilterStatus;
+    /** 상태 칩. 켠 상태의 행만 목록에 보인다(같음은 기본 꺼짐) */
+    chips: Record<typCompareChip, boolean>;
     query: string;
-    hideEqual: boolean;
     sortKey: typCompareSortKey;
     sortDir: typSortDir;
 }
 
 export const DEFAULT_COMPARE_VIEW: itfCompareViewState = {
-    status: "all",
+    chips: {
+        onlySource: true,
+        modified: true,
+        onlyDest: true,
+        typeConflict: true,
+        equal: false,
+    },
     query: "",
-    hideEqual: true,
     sortKey: "path",
     sortDir: "asc",
 };
-
-export const FILTER_LABELS: Record<typCompareFilterStatus, string> = {
-    all: "전체",
-    changes: "변경만(복사·덮어씀·대상만·충돌)",
-    onlySource: "원본만",
-    modified: "변경",
-    onlyDest: "대상만",
-    typeConflict: "형식 충돌",
-    equal: "동일",
-};
-
-const CHANGE_STATUSES: ReadonlySet<typCompareStatus> = new Set([
-    "onlySource",
-    "modified",
-    "onlyDest",
-    "typeConflict",
-]);
 
 /** 상태 정렬 순서: 충돌 → 복사 → 덮어씀 → 대상만 → 동일 */
 const STATUS_RANK: Record<typCompareStatus, number> = {
@@ -123,14 +108,6 @@ function f_Key(text: string): string {
     return text.normalize("NFC").toLowerCase();
 }
 
-function f_StatusMatch(entry: itfDiffEntry, v: itfCompareViewState): boolean {
-    if (v.status === "equal") return entry.status === "equal";
-    if (v.hideEqual && entry.status === "equal") return false;
-    if (v.status === "all") return true;
-    if (v.status === "changes") return CHANGE_STATUSES.has(entry.status);
-    return entry.status === v.status;
-}
-
 /** 정렬 값. null은 방향과 상관없이 뒤로 보낸다 */
 function f_SortValue(e: itfDiffEntry, key: typCompareSortKey): number | null {
     switch (key) {
@@ -150,9 +127,8 @@ function f_SortValue(e: itfDiffEntry, key: typCompareSortKey): number | null {
 }
 
 /**
- * 필터·검색(부분 일치, 대소문자 무시·NFC)·정렬 결과를 entries 인덱스 배열로 돌려준다(객체 복사 없음).
+ * 칩 필터·검색(부분 일치, 대소문자 무시·NFC)·정렬 결과를 entries 인덱스 배열로 돌려준다(객체 복사 없음).
  * entries는 경로 키 오름차순이므로 보조 키(경로 오름차순)는 인덱스 순서로 대신한다.
- * status가 "equal"이면 hideEqual을 무시한다.
  */
 export function selectRowIndexes(
     entries: readonly itfDiffEntry[],
@@ -162,7 +138,7 @@ export function selectRowIndexes(
     const rows: number[] = [];
     for (let i = 0; i < entries.length; i += 1) {
         const e = entries[i]!;
-        if (!f_StatusMatch(e, v)) continue;
+        if (!v.chips[e.status]) continue;
         if (q && !f_Key(e.path).includes(q) && !(e.dest && f_Key(e.dest.path).includes(q)))
             continue;
         rows.push(i);
@@ -182,60 +158,30 @@ export function selectRowIndexes(
     });
 }
 
-export interface itfSummaryCard {
-    filter: typCompareFilterStatus;
+export interface itfCompareChipCount {
+    key: typCompareChip;
     label: string;
     count: number;
-    /** 표시할 바이트(없으면 null) */
-    bytes: number | null;
-    tone: typCompareTone;
+    tone: typCompareChipTone;
 }
 
-/** 요약 카드. 문구는 일어날 일: "대상에 12개 복사", "8개 덮어씀", sync "3개 삭제" / copy "3개 대상에만 있음(유지)" */
-export function summaryCards(s: itfCompareSummary, mode: typRunMode): itfSummaryCard[] {
-    const cards: itfSummaryCard[] = [
+/**
+ * 칩 5개와 개수. 라벨은 rcloud와 같다: 추가·변경·삭제(sync)·대상만(copy)·오류·같음.
+ * 색은 상태 계열(추가 성공·변경 경고·삭제/오류 위험·같음 중립)이고, 끈 칩은 화면에서 중립으로 그린다.
+ */
+export function compareChips(s: itfCompareSummary, mode: typRunMode): itfCompareChipCount[] {
+    return [
+        { key: "onlySource", label: "추가", count: s.createFiles, tone: "add" },
+        { key: "modified", label: "변경", count: s.updateFiles, tone: "change" },
         {
-            filter: "onlySource",
-            label: `대상에 ${s.createFiles}개 복사`,
-            count: s.createFiles,
-            bytes: s.createBytes,
-            tone: "accent",
-        },
-        {
-            filter: "modified",
-            label: `${s.updateFiles}개 덮어씀`,
-            count: s.updateFiles,
-            bytes: s.updateBytes,
-            tone: "warning",
-        },
-        {
-            filter: "onlyDest",
-            label:
-                mode === "sync"
-                    ? `${s.deleteFiles}개 삭제`
-                    : `${s.deleteFiles}개 대상에만 있음(유지)`,
+            key: "onlyDest",
+            label: mode === "sync" ? "삭제" : "대상만",
             count: s.deleteFiles,
-            bytes: s.deleteBytes,
-            tone: mode === "sync" ? "danger" : "neutral",
+            tone: "delete",
         },
-        {
-            filter: "equal",
-            label: `동일 ${s.sameFiles}개`,
-            count: s.sameFiles,
-            bytes: null,
-            tone: "neutral",
-        },
+        { key: "typeConflict", label: "오류", count: s.conflictFiles, tone: "danger" },
+        { key: "equal", label: "같음", count: s.sameFiles, tone: "same" },
     ];
-    if (s.conflictFiles > 0) {
-        cards.push({
-            filter: "typeConflict",
-            label: `형식 충돌 ${s.conflictFiles}개`,
-            count: s.conflictFiles,
-            bytes: null,
-            tone: "danger",
-        });
-    }
-    return cards;
 }
 
 /**

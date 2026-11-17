@@ -1,7 +1,8 @@
 /**
  * 첫 화면(앱 셸). 앱 정보·시작 알림·설정·작업 목록을 불러오고 rclone을 감지한 뒤
- * 상단 막대 + 작업 목록 + [작업 화면 | 설정 화면]을 조립한다.
- * 작업 선택이 바뀌면 편집기를 그 작업으로 열고, 목록이 바뀌면 편집기에 알린다.
+ * 상단 막대 + 작업 목록 + 작업 화면을 조립하고, 작업 편집·설정은 그 위에 모달로 띄운다.
+ * 작업 선택은 선택만 하고, 편집 모달은 작업 화면의 편집 버튼이나 목록의 `+ 새 작업`이 연다.
+ * 목록이 바뀌면 편집기에 알린다.
  * 스케줄러 상태·이력 갱신(run:event finished)·main 알림(app:notify → 토스트)을 구독한다.
  *
  * @author dev-Joy 2026-10-28
@@ -27,6 +28,7 @@ import { useToastStore } from "@/stores/toast-store";
 import { useUiStore } from "@/stores/ui-store";
 import AppLayout from "./AppLayout";
 import DiscardChangesModal from "./DiscardChangesModal";
+import JobEditor from "./JobEditor";
 import JobSidebar from "./JobSidebar";
 import JobWorkspace from "./JobWorkspace";
 import OnboardingBanner from "./OnboardingBanner";
@@ -60,10 +62,9 @@ export default function HomePage(props: itfHomePageProps) {
     const pushToast = useToastStore((s) => s.push);
     const dismissToast = useToastStore((s) => s.dismiss);
     const detectRclone = useRcloneEnvStore((s) => s.detect);
-    const editorOpen = useJobEditorStore((s) => s.open);
     const openNew = useJobEditorStore((s) => s.openNew);
-    const view = useUiStore((s) => s.view);
-    const setPane = useUiStore((s) => s.setPane);
+    const editor = useUiStore((s) => s.editor);
+    const settingsOpen = useUiStore((s) => s.settingsOpen);
     const subscribeCompare = useCompareStore((s) => s.subscribe);
     const showCompare = useCompareStore((s) => s.show);
     const subscribeRun = useRunStore((s) => s.subscribe);
@@ -120,24 +121,21 @@ export default function HomePage(props: itfHomePageProps) {
         useJobEditorStore.getState().syncFromJobs(jobs);
     }, [jobs]);
 
-    // 선택한 작업을 편집기로 연다 (null은 새 작업 편집 또는 빈 상태라 편집기가 직접 처리)
+    // 작업 편집·설정 모달은 동시에 열지 않는다(설정이 열리면 편집 모달을 닫는다).
+    // 화면에서는 서로의 backdrop에 가려 도달하지 않지만, 상태가 겹치지 않게 여기서 한 번 더 맞춘다.
     useEffect(() => {
-        if (selectedJobId === null) return;
-        const job = jobs.find((j) => j.id === selectedJobId);
-        const editor = useJobEditorStore.getState();
-        if (job && (!editor.open || editor.jobId !== job.id)) editor.openJob(job);
-    }, [selectedJobId, jobs]);
+        if (!settingsOpen) return;
+        useUiStore.getState().closeEditor();
+    }, [settingsOpen]);
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_New = () => {
         if (!settings) return;
         openNew(settings);
-        setPane("edit");
     };
 
     let content;
-    if (view === "settings") content = <SettingsPage info={info} />;
-    else if (editorOpen) content = <JobWorkspace />;
+    if (selectedJobId !== null) content = <JobWorkspace />;
     else {
         content = (
             <div className={styles.empty}>
@@ -155,22 +153,19 @@ export default function HomePage(props: itfHomePageProps) {
 
     return (
         <div className={styles.HomePage}>
-            <AppLayout
-                topBar={<TopBar title={title} />}
-                sidebar={<JobSidebar />}
-                banner={
-                    <>
-                        {notices.map((n, i) => (
-                            <p key={i} className={styles.notice} data-level={n.level} role="alert">
-                                {n.message}
-                            </p>
-                        ))}
-                        <OnboardingBanner />
-                    </>
-                }
-            >
+            <AppLayout topBar={<TopBar title={title} />} sidebar={<JobSidebar />}>
+                <div className={styles.banner}>
+                    {notices.map((n, i) => (
+                        <p key={i} className={styles.notice} data-level={n.level} role="alert">
+                            {n.message}
+                        </p>
+                    ))}
+                    <OnboardingBanner />
+                </div>
                 {content}
             </AppLayout>
+            {editor !== null && <JobEditor />}
+            {settingsOpen && <SettingsPage info={info} />}
             <DiscardChangesModal />
             <ZBCToast toasts={toasts} onDismiss={dismissToast} />
         </div>

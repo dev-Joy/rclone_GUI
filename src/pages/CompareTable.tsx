@@ -1,8 +1,9 @@
 /**
  * 비교 결과 표(고정 높이 30px 행의 가상 목록). 보이는 행만 그리고 위·아래는 빈 행으로 채운다.
- * 열: 상태(+사유) · 경로 · 원본 크기·수정시간 · 대상 크기·수정시간. 머리글 버튼으로 정렬한다.
- * 화면 읽기 프로그램용으로 aria-rowcount·aria-rowindex·aria-sort를 둔다. 머리글은 스크롤해도 고정된다.
- * 대상에만 있는 rclone 임시 파일(.partial)은 경로 앞에 "취소로 남은 임시 파일"로 표시한다.
+ * 열: 항목 · 원본 크기 · 원본 수정 시각 · 할 일(+사유) · 대상 수정 시각 · 대상 크기(rcloud와 같은 차례).
+ * 머리글 버튼으로 정렬한다. 화면 읽기 프로그램용으로 aria-rowcount·aria-rowindex·aria-sort를 둔다.
+ * 머리글은 스크롤해도 고정된다.
+ * 대상에만 있는 rclone 임시 파일(.partial)은 항목 앞에 "취소로 남은 임시 파일"로 표시한다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -47,12 +48,12 @@ interface itfRowProps {
 const ROW_HEIGHT = 30;
 
 const COLUMNS: ReadonlyArray<{ key: typCompareSortKey; label: string }> = [
-    { key: "status", label: "상태" },
-    { key: "path", label: "경로" },
+    { key: "path", label: "항목" },
     { key: "srcSize", label: "원본 크기" },
-    { key: "srcTime", label: "원본 수정시간" },
+    { key: "srcTime", label: "원본 수정 시각" },
+    { key: "status", label: "할 일" },
+    { key: "dstTime", label: "대상 수정 시각" },
     { key: "dstSize", label: "대상 크기" },
-    { key: "dstTime", label: "대상 수정시간" },
 ];
 
 function f_Size(side: itfDiffEntry["source"]): string {
@@ -73,12 +74,6 @@ const CompareRow = memo(function CompareRow(props: itfRowProps) {
             : entry.path;
     return (
         <tr className={styles.row} aria-rowindex={rowIndex} data-status={entry.status}>
-            <td className={styles.status}>
-                <ZBCBadge tone={statusTone(entry.status, mode)}>
-                    {statusLabel(entry.status, mode)}
-                </ZBCBadge>
-                {reasons && <span className={styles.reason}>{reasons}</span>}
-            </td>
             <td className={styles.path} title={pathTitle}>
                 {partial && (
                     <span className={styles.partial}>
@@ -92,8 +87,14 @@ const CompareRow = memo(function CompareRow(props: itfRowProps) {
             </td>
             <td className={styles.num}>{f_Size(entry.source)}</td>
             <td className={styles.time}>{f_Time(entry.source)}</td>
-            <td className={styles.num}>{f_Size(entry.dest)}</td>
+            <td>
+                <ZBCBadge tone={statusTone(entry.status, mode)}>
+                    {statusLabel(entry.status, mode)}
+                </ZBCBadge>
+                {reasons && <span className={styles.reason}>{reasons}</span>}
+            </td>
             <td className={styles.time}>{f_Time(entry.dest)}</td>
+            <td className={styles.num}>{f_Size(entry.dest)}</td>
         </tr>
     );
 });
@@ -126,12 +127,12 @@ export default function CompareTable(props: itfCompareTableProps) {
             >
                 <table className={styles.table} aria-rowcount={rows.length + 1}>
                     <colgroup>
-                        <col className={styles.colStatus} />
                         <col />
                         <col className={styles.colSize} />
                         <col className={styles.colTime} />
-                        <col className={styles.colSize} />
+                        <col className={styles.colStatus} />
                         <col className={styles.colTime} />
+                        <col className={styles.colSize} />
                     </colgroup>
                     <thead className={styles.head}>
                         <tr className={styles.row} aria-rowindex={1}>

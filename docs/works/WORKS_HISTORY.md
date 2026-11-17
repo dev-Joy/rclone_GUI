@@ -231,6 +231,19 @@
 - 검증(Windows 클론 D:\dev-Joy\rcloneGUI-workbench): `pnpm run check` 1,352 통과, `format:check`, `test:e2e` 16(콘솔 오류 0), `build:win` 통과. 정합성 게이트 필수(하드)① 2-pass + 재판정 PASS. WSL에서 `path-service.test.ts` 4건 실패는 HEAD에서도 같은 환경 문제(Windows 통과)
 - 참고: D:\dev-Joy\rcloneGUI에 미커밋 TASK_030(2026-11-04 비교 화면 외형 정리, 이 저장소의 TASK_030과 번호 겹침)이 있어 건드리지 않았고 통합은 미정
 
+[TASK_033] : (2026-11-17) INT-008 Phase 1 — 화면 모양·구조를 1세대 구현(rcloud)과 같게 (관련 Intent: INT-008, T-01~T-04)
+- 모양: `themes/default.css` 토큰 값을 rcloud와 같게 하고 본문 13px·mono `Consolas, "D2Coding", monospace`, `ZBCButton` `small`, Badge 4px/11px, 상태 점 `ZBCDot` 신규, `ZBCToast`를 위쪽 가운데 notice로 바꿈
+- 셸: `AppLayout`을 상단 막대 + 250px 목록 flex로 바꾸고, `TopBar`(브랜드·rclone 상태 알약·설정·다음 자동 실행·일시정지), `JobSidebar`(상태 점·이름·mode 배지·원본→대상·하위 문구·선택 `inset 3px` accent 막대·하단 `+ 새 작업`)로 재구성
+- 작업 화면: `JobWorkspace`를 header(편집·복제·삭제·⋯, 경로 줄)·toolbar(비교·동기화·중지)·안내 줄·실행 배너(`#job-run-panel`)·밑줄 탭(`파일 목록`·`기록`)·footer로 바꾸고 `JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`를 삭제. `job-steps`에서 `jobSteps`·`workMainPanel`을 지우고 `syncButtonText`·`planFooterText`를 더해 동기화 단추 문구·footer에 재사용
+- 상태: `ui-store`의 `view`·`pane`을 `tab`(`files`·`history`)·`editor`·`settingsOpen`으로 바꾸고 `use-run-flow`·`run-store`·`HomePage`·`JobEditor`·`SettingsPage` 사용처를 옮김(설정 변경 확인 흐름 유지)
+- 목록·기록: `CompareToolbar` 상태 칩 5종(추가·변경·삭제/대상만·오류·같음, 같음 기본 꺼짐)·`상태별` 보기, `CompareTable` 6열(항목·원본 크기·원본 수정 시각·할 일·대상 수정 시각·대상 크기), `HistoryView` 표(시작·종류·결과·건수·걸린 시간·내용 + 행마다 목록·정보·로그)
+- 모달·메뉴: 작업 편집·설정을 `ZBCModal`(바깥 클릭으로 닫히지 않음)로 열고 저장 안 한 변경은 닫을 때 확인. `⋯` 메뉴에 미리보기 실행·비교/동기화 명령 복사를 두고 `app:copyText`·`run:command`를 추가(`command-preview`는 표시 전용, rclone 미실행)
+- 테스트: ui-store·run-store·job-editor-store·compare-view·job-steps 단위 갱신, `command-preview`·`copy-text` 단위 신규, E2E 11 spec을 모달·탭·toolbar 선택자로 갱신
+- 문서: CHANGELOG 1줄, MVP_SPEC §13(화면 구조·화면별 요구·디자인)과 구현 반영 행, README 첫 실행·화면 설명
+- 검증: Windows `pnpm run check`(단위 1,351)·`format:check`·`test:e2e`(11 spec/16 테스트, 콘솔 오류 0)·`build:win` 통과. `run-service`·`plan-token`·`command-builder` diff 0
+- 결함: 설정 모달(dialog)을 열면 위쪽 가운데 토스트가 top layer에서 가려짐 → `ZBCToast`를 popover로 띄우고 dialog가 열리고 닫힐 때 다시 올리도록 수정. 확인 모달(dialog 안 dialog)을 닫으면 close가 조부모까지 버블링해 부모 모달까지 닫힘 → `ZBCModal`이 `e.target === e.currentTarget`일 때만 onClose를 부르도록 수정
+- 남은 것: Phase 2(트리 보기·파일 줄 메뉴)·Phase 3(작업 그룹)와 T-07 문서·전체 검증
+
 ## Errors
 
 - (2026-10-28) PowerShell `-ExecutionPolicy Bypass` 실행이 권한 정책으로 거부됨 → probe를 Node 스크립트로 대체 [TASK_001 해결]
@@ -238,6 +251,8 @@
 - (2026-10-29) E2E 설정 화면 제목 셀렉터(`getByRole("heading", { name: "설정" })`)가 'rclone 설정'과 겹쳐 strict mode 위반 → `exact: true` [TASK_012 해결]
 - (2026-10-29) 기존 rcloneGUI 0.1.0 설치로 installer-smoke 사전 확인 중단 → 사용자 승인 후 기존 설치를 제거하고 재실행, 15건 통과 [TASK_012 해결]
 - (2026-11-02) Drive 수용 첫 실측에서 sync 삭제·전체 범위 sync가 대량 삭제 게이트(SAFETY_BLOCKED)로 실패 — 테스트 도우미가 `confirmLargeDeletes`를 넘기지 않음 → 수정 후 14/14 [TASK_023 해결]
+- (2026-11-17) 설정 모달(dialog)을 열면 위쪽 가운데 토스트가 dialog top layer에 가려짐 → `ZBCToast`를 popover로 띄우고 dialog가 열리고 닫힐 때 다시 올림(설정 모달은 바깥 클릭으로 닫지 않음) [TASK_033 해결]
+- (2026-11-17) 확인 모달(dialog 안 dialog)을 닫으면 close 이벤트가 조부모까지 버블링해 부모 모달까지 닫힘 → `ZBCModal`이 `e.target === e.currentTarget`일 때만 onClose를 부르도록 수정 [TASK_033 해결]
 
 [TASK_024] : (2026-11-03) INT-004 작은 파일이 많은 실행에서도 믿을 수 있는 남은 시간 표시 (관련 Intent: INT-004, T-01~T-03)
 - fixture(T-01): 2026-11-03 중단 실행 로그 2,302초·667/1,815에서 stats만 남기고 `msg`·`transferring[].name`·`srcFs`/`dstFs`를 가려 `drive-small-files-progress-partial.stderr.txt`(486줄). 테스트 remote에 작은 파일 200개 + 30MB 1개를 copy해 492.9초·201/201·오류 0으로 끝낸 로그를 같은 방식으로 가리고 30초 뒤 5초 간격으로 줄여 `drive-small-files-progress.stderr.txt`(124줄). 두 파일 모두 remote 이름·사용자 경로·원래 파일 이름 0건 확인

@@ -17,6 +17,10 @@
     &::backdrop {
         background: rgb(0 0 0 / 40%);
     }
+
+    &[data-size="wide"] {
+        width: min(760px, calc(100vw - 32px));
+    }
 }
 
 .zbcModalBody {

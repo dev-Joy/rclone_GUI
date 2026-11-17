@@ -8,6 +8,18 @@
     .HomePage {
         height: 100%;
 
+        /* 온보딩·시작 알림은 작업 화면(또는 빈 상태) 위에 둔다 (INT-008 FR-4) */
+        .banner {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+
+            &:empty {
+                display: none;
+            }
+        }
+
         .notice {
             margin: 0;
             padding: 8px 12px;

@@ -119,6 +119,10 @@ export type typStartRunInput = z.infer<typeof zStartRunInput>;
 export const zRunIdInput = z.object({ runId: z.uuid() }).strict();
 export type typRunIdInput = z.infer<typeof zRunIdInput>;
 
+/** run:command 입력. 명령 복사는 작업 하나를 고른다 */
+export const zRunCommandInput = z.object({ jobId: z.uuid() }).strict();
+export type typRunCommandInput = z.infer<typeof zRunCommandInput>;
+
 /** userData/active-run.json: 실행 중 앱이 비정상 종료됐을 때 남은 rclone을 찾는 기록 */
 export const zActiveRunFile = z.object({
     version: z.literal(1),

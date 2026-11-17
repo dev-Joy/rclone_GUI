@@ -1,7 +1,8 @@
 /**
- * 설정 화면: rclone 설정, 새 작업 기본값(제외 규칙·실행 옵션), 안전 임계값(자동 실행 삭제 한도 포함),
+ * 설정 모달: rclone 설정, 새 작업 기본값(제외 규칙·실행 옵션), 안전 임계값(자동 실행 삭제 한도 포함),
  * 로그·이력(이력 비우기·로그 폴더), 테마, 창 닫기(트레이)·로그인 시 시작, 앱 정보.
  * 저장은 화면에 보이는 항목만 보낸다(settingsToPatch). 기본값은 새 작업에만 적용된다.
+ * 저장에 성공하면 모달을 닫고, 저장하지 않은 변경이 있으면 닫기 전에 확인한다(closeSettings·pendingLeave).
  * 자동 실행 일시정지는 상단 막대·트레이에서 바꾼다(저장 대상 아님). 로그인 시 시작은 설치본에서만 바꿀 수 있다.
  *
  * @author dev-Joy 2026-10-28
@@ -15,6 +16,7 @@ import ZBCButton from "@/components/ZBCButton";
 import ZBCCheckbox from "@/components/ZBCCheckbox";
 import ZBCField from "@/components/ZBCField";
 import ZBCInput from "@/components/ZBCInput";
+import ZBCModal from "@/components/ZBCModal";
 import ZBCSelect from "@/components/ZBCSelect";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import { numberText, toNumber } from "@/lib/form-utils";
@@ -124,6 +126,7 @@ export default function SettingsPage(props: itfSettingsPageProps) {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [clearOpen, setClearOpen] = useState(false);
     const setSettingsDirty = useUiStore((s) => s.setSettingsDirty);
+    const closeSettings = useUiStore((s) => s.closeSettings);
 
     // 저장소 값이 바뀌면(저장·rclone 지정 등) 고치지 않은 화면 값만 새 값으로 맞춘다
     if (settings !== prevSettings) {
@@ -144,10 +147,12 @@ export default function SettingsPage(props: itfSettingsPageProps) {
 
     if (!settings || !draft) {
         return (
-            <div className={styles.SettingsPage}>
-                <RcloneSetupPanel />
-                <p className={styles.muted}>설정을 불러오는 중…</p>
-            </div>
+            <ZBCModal open title="설정" size="wide" closeOnBackdrop={false} onClose={closeSettings}>
+                <div className={styles.SettingsPage}>
+                    <RcloneSetupPanel />
+                    <p className={styles.muted}>설정을 불러오는 중…</p>
+                </div>
+            </ZBCModal>
         );
     }
 
@@ -194,6 +199,9 @@ export default function SettingsPage(props: itfSettingsPageProps) {
         if (ok) {
             setShowErrors(false);
             pushToast("success", "설정을 저장했습니다. 기본값은 새로 만드는 작업부터 적용됩니다.");
+            // 방금 저장했으므로 닫기 확인(pendingLeave)을 거치지 않고 바로 닫는다
+            setSettingsDirty(false);
+            closeSettings();
         } else {
             pushToast("error", useSettingsStore.getState().error ?? "설정을 저장하지 못했습니다.");
         }
@@ -231,164 +239,183 @@ export default function SettingsPage(props: itfSettingsPageProps) {
     };
 
     return (
-        <div className={styles.SettingsPage}>
-            <h2 className={styles.pageTitle}>설정</h2>
-
-            <RcloneSetupPanel />
-            <RemoteConfigPanel />
-            <RemoteBookmarksPanel />
-
-            <section className={styles.section} aria-labelledby="settings-defaults-title">
-                <h3 id="settings-defaults-title" className={styles.sectionTitle}>
-                    새 작업 기본값
-                </h3>
-                <p className={styles.muted}>
-                    새로 만드는 작업에만 적용됩니다. 이미 저장한 작업은 바뀌지 않습니다.
-                </p>
-                <ExcludesEditor
-                    id="settings-excludes"
-                    value={defaultExcludes}
-                    onChange={h_Excludes}
-                    defaults={DEFAULT_EXCLUDES}
-                    defaultsLabel="초기값으로"
-                    error={err("defaults.excludes")}
-                    hint="새 작업의 작업 전용 패턴 기본값입니다. 한 줄에 하나씩 rclone --exclude 형식으로 씁니다. 공용 제외 패턴은 작업 편집기에서 고릅니다."
-                />
-                <JobOptionsFields
-                    idPrefix="defaults"
-                    value={defaultOptions}
-                    onChange={h_Options}
-                    errors={{
-                        checkers: err("defaults.checkers") ?? undefined,
-                        transfers: err("defaults.transfers") ?? undefined,
-                        modtimeToleranceMs: err("defaults.modtimeToleranceMs") ?? undefined,
-                    }}
-                />
-            </section>
-
-            <section className={styles.section} aria-labelledby="settings-safety-title">
-                <h3 id="settings-safety-title" className={styles.sectionTitle}>
-                    안전
-                </h3>
-                <div className={styles.grid}>{SAFETY_FIELDS.map(f_NumberField)}</div>
-                <p className={styles.muted}>
-                    자동 실행은 삭제가 필요하면 작업의 ‘자동 실행 때 삭제 허용’이 켜져 있고, 삭제
-                    수가 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전 사전
-                    확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고 알립니다.
-                </p>
-                <details className={styles.details} open={advancedOpen} onToggle={h_ToggleAdvanced}>
-                    <summary className={styles.summary}>고급</summary>
-                    <div className={styles.detailsBody}>
-                        <ZBCCheckbox
-                            id="settings-case-insensitive"
-                            checked={draft.compare.caseInsensitivePaths}
-                            onChange={h_CaseInsensitive}
-                            label="리모트 경로의 대소문자를 무시하고 비교"
-                            description="로컬·UNC 경로는 항상 대소문자를 무시합니다. 바꾸면 기존 작업은 다음에 저장할 때 다시 검사됩니다."
-                        />
-                    </div>
-                </details>
-            </section>
-
-            <section className={styles.section} aria-labelledby="settings-logs-title">
-                <h3 id="settings-logs-title" className={styles.sectionTitle}>
-                    로그·이력
-                </h3>
-                <div className={styles.grid}>{LOG_FIELDS.map(f_NumberField)}</div>
-                <p className={styles.muted}>
-                    앱을 시작할 때와 하루에 한 번, 보관 일수가 지난 실행 로그와 보관 수를 넘은
-                    이력을 지웁니다(진행 중인 실행은 남김).
-                </p>
-                <div className={styles.buttons}>
-                    <ZBCButton onClick={h_OpenLogs}>로그 폴더 열기</ZBCButton>
-                    <ZBCButton variant="danger" onClick={h_AskClear}>
-                        이력 비우기…
+        <ZBCModal
+            open
+            title="설정"
+            size="wide"
+            closeOnBackdrop={false}
+            onClose={closeSettings}
+            footer={
+                <>
+                    <output className={styles.footerText}>
+                        {showErrors && !check.ok
+                            ? `고칠 곳이 ${Object.keys(check.fieldErrors).length || 1}개 있습니다.`
+                            : dirty
+                              ? "저장하지 않은 설정 변경이 있습니다."
+                              : "저장됨"}
+                    </output>
+                    <ZBCButton onClick={h_Revert} disabled={!dirty || saving}>
+                        되돌리기
                     </ZBCButton>
-                </div>
-            </section>
+                    <ZBCButton variant="primary" onClick={h_Save} disabled={!dirty || saving}>
+                        {saving ? "저장 중…" : "설정 저장"}
+                    </ZBCButton>
+                </>
+            }
+        >
+            <div className={styles.SettingsPage}>
+                <RcloneSetupPanel />
+                <RemoteConfigPanel />
+                <RemoteBookmarksPanel />
 
-            <section className={styles.section} aria-labelledby="settings-ui-title">
-                <h3 id="settings-ui-title" className={styles.sectionTitle}>
-                    화면
-                </h3>
-                <ZBCField label="테마" htmlFor="settings-theme">
-                    <ZBCSelect
-                        id="settings-theme"
-                        name="theme"
-                        value={draft.ui.theme}
-                        options={THEME_OPTIONS}
-                        onChange={h_Theme}
+                <section className={styles.section} aria-labelledby="settings-excludes-title">
+                    <h3 id="settings-excludes-title" className={styles.sectionTitle}>
+                        제외 패턴
+                    </h3>
+                    <ExcludesEditor
+                        id="settings-excludes"
+                        value={defaultExcludes}
+                        onChange={h_Excludes}
+                        defaults={DEFAULT_EXCLUDES}
+                        defaultsLabel="초기값으로"
+                        error={err("defaults.excludes")}
+                        hint="새 작업의 작업 전용 패턴 기본값입니다. 한 줄에 하나씩 rclone --exclude 형식으로 씁니다. 공용 제외 패턴은 작업 편집기에서 고릅니다."
                     />
-                </ZBCField>
-                <ZBCCheckbox
-                    id="settings-show-job-status"
-                    name="showJobStatusText"
-                    checked={draft.ui.showJobStatusText}
-                    onChange={h_ShowJobStatus}
-                    label="작업 목록에 최근 실행 상태 문구 표시"
-                    description="끄면 최근 실행 시각만 보이고 ‘성공’·‘실패’ 같은 문구는 숨깁니다."
-                />
-            </section>
+                </section>
 
-            <section className={styles.section} aria-labelledby="settings-app-title">
-                <h3 id="settings-app-title" className={styles.sectionTitle}>
-                    창·시작
-                </h3>
-                <ZBCCheckbox
-                    id="settings-minimize-to-tray"
-                    name="minimizeToTray"
-                    checked={draft.ui.minimizeToTray}
-                    onChange={h_Tray}
-                    label="창을 닫으면 알림 영역(트레이)으로 숨기기"
-                    description="켜면 창을 닫아도 앱이 트레이에서 계속 실행되고 자동 실행도 계속합니다. 끄면 창을 닫을 때 앱이 끝납니다."
-                />
-                <ZBCCheckbox
-                    id="settings-launch-at-login"
-                    name="launchAtLogin"
-                    checked={draft.ui.launchAtLogin}
-                    onChange={h_LaunchAtLogin}
-                    disabled={info?.isPackaged !== true}
-                    label="Windows에 로그인하면 트레이로 시작"
-                    description={
-                        info?.isPackaged === true
-                            ? "창을 띄우지 않고 트레이에서 시작해 자동 실행을 이어 갑니다."
-                            : "개발 실행에서는 바꿀 수 없습니다(설치본에서만 로그인 항목을 등록합니다)."
-                    }
-                />
-            </section>
+                <section className={styles.section} aria-labelledby="settings-defaults-title">
+                    <h3 id="settings-defaults-title" className={styles.sectionTitle}>
+                        기본 옵션
+                    </h3>
+                    <p className={styles.muted}>
+                        새로 만드는 작업에만 적용됩니다. 이미 저장한 작업은 바뀌지 않습니다.
+                    </p>
+                    <JobOptionsFields
+                        idPrefix="defaults"
+                        value={defaultOptions}
+                        onChange={h_Options}
+                        errors={{
+                            checkers: err("defaults.checkers") ?? undefined,
+                            transfers: err("defaults.transfers") ?? undefined,
+                            modtimeToleranceMs: err("defaults.modtimeToleranceMs") ?? undefined,
+                        }}
+                    />
+                </section>
 
-            <section className={styles.section} aria-labelledby="settings-about-title">
-                <h3 id="settings-about-title" className={styles.sectionTitle}>
-                    앱 정보
-                </h3>
-                <dl className={styles.about}>
-                    <dt>버전</dt>
-                    <dd>
-                        {info
-                            ? `v${info.appVersion} · Electron ${info.electron} · Node ${info.node} · ${info.platform}`
-                            : "불러오는 중…"}
-                    </dd>
-                    <dt>데이터 위치</dt>
-                    <dd className={styles.mono}>{info?.userDataPath ?? "-"}</dd>
-                </dl>
-            </section>
+                <section className={styles.section} aria-labelledby="settings-safety-title">
+                    <h3 id="settings-safety-title" className={styles.sectionTitle}>
+                        안전
+                    </h3>
+                    <div className={styles.grid}>{SAFETY_FIELDS.map(f_NumberField)}</div>
+                    <p className={styles.muted}>
+                        자동 실행은 삭제가 필요하면 작업의 ‘자동 실행 때 삭제 허용’이 켜져 있고,
+                        삭제 수가 ‘자동 실행 최대 삭제 수’ 이하이며, 대량 삭제가 아니고, 실행 직전
+                        사전 확인이 켜져 있을 때만 실행합니다. 하나라도 어기면 아무것도 바꾸지 않고
+                        알립니다.
+                    </p>
+                    <details
+                        className={styles.details}
+                        open={advancedOpen}
+                        onToggle={h_ToggleAdvanced}
+                    >
+                        <summary className={styles.summary}>고급</summary>
+                        <div className={styles.detailsBody}>
+                            <ZBCCheckbox
+                                id="settings-case-insensitive"
+                                checked={draft.compare.caseInsensitivePaths}
+                                onChange={h_CaseInsensitive}
+                                label="리모트 경로의 대소문자를 무시하고 비교"
+                                description="로컬·UNC 경로는 항상 대소문자를 무시합니다. 바꾸면 기존 작업은 다음에 저장할 때 다시 검사됩니다."
+                            />
+                        </div>
+                    </details>
+                </section>
 
-            <footer className={styles.footer}>
-                <output className={styles.footerText}>
-                    {showErrors && !check.ok
-                        ? `고칠 곳이 ${Object.keys(check.fieldErrors).length || 1}개 있습니다.`
-                        : dirty
-                          ? "저장하지 않은 설정 변경이 있습니다."
-                          : "저장됨"}
-                </output>
-                <ZBCButton onClick={h_Revert} disabled={!dirty || saving}>
-                    되돌리기
-                </ZBCButton>
-                <ZBCButton variant="primary" onClick={h_Save} disabled={!dirty || saving}>
-                    {saving ? "저장 중…" : "설정 저장"}
-                </ZBCButton>
-            </footer>
-            <ClearHistoryModal open={clearOpen} onClose={h_CloseClear} />
-        </div>
+                <section className={styles.section} aria-labelledby="settings-ui-title">
+                    <h3 id="settings-ui-title" className={styles.sectionTitle}>
+                        화면
+                    </h3>
+                    <ZBCField label="테마" htmlFor="settings-theme">
+                        <ZBCSelect
+                            id="settings-theme"
+                            name="theme"
+                            value={draft.ui.theme}
+                            options={THEME_OPTIONS}
+                            onChange={h_Theme}
+                        />
+                    </ZBCField>
+                    <ZBCCheckbox
+                        id="settings-show-job-status"
+                        name="showJobStatusText"
+                        checked={draft.ui.showJobStatusText}
+                        onChange={h_ShowJobStatus}
+                        label="작업 목록에 최근 실행 상태 문구 표시"
+                        description="끄면 최근 실행 시각만 보이고 ‘성공’·‘실패’ 같은 문구는 숨깁니다."
+                    />
+                </section>
+
+                <section className={styles.section} aria-labelledby="settings-app-title">
+                    <h3 id="settings-app-title" className={styles.sectionTitle}>
+                        창·시작
+                    </h3>
+                    <ZBCCheckbox
+                        id="settings-minimize-to-tray"
+                        name="minimizeToTray"
+                        checked={draft.ui.minimizeToTray}
+                        onChange={h_Tray}
+                        label="창을 닫으면 알림 영역(트레이)으로 숨기기"
+                        description="켜면 창을 닫아도 앱이 트레이에서 계속 실행되고 자동 실행도 계속합니다. 끄면 창을 닫을 때 앱이 끝납니다."
+                    />
+                    <ZBCCheckbox
+                        id="settings-launch-at-login"
+                        name="launchAtLogin"
+                        checked={draft.ui.launchAtLogin}
+                        onChange={h_LaunchAtLogin}
+                        disabled={info?.isPackaged !== true}
+                        label="Windows에 로그인하면 트레이로 시작"
+                        description={
+                            info?.isPackaged === true
+                                ? "창을 띄우지 않고 트레이에서 시작해 자동 실행을 이어 갑니다."
+                                : "개발 실행에서는 바꿀 수 없습니다(설치본에서만 로그인 항목을 등록합니다)."
+                        }
+                    />
+                </section>
+
+                <section className={styles.section} aria-labelledby="settings-logs-title">
+                    <h3 id="settings-logs-title" className={styles.sectionTitle}>
+                        로그·이력
+                    </h3>
+                    <div className={styles.grid}>{LOG_FIELDS.map(f_NumberField)}</div>
+                    <p className={styles.muted}>
+                        앱을 시작할 때와 하루에 한 번, 보관 일수가 지난 실행 로그와 보관 수를 넘은
+                        이력을 지웁니다(진행 중인 실행은 남김).
+                    </p>
+                    <div className={styles.buttons}>
+                        <ZBCButton onClick={h_OpenLogs}>로그 폴더 열기</ZBCButton>
+                        <ZBCButton variant="danger" onClick={h_AskClear}>
+                            이력 비우기…
+                        </ZBCButton>
+                    </div>
+                </section>
+
+                <section className={styles.section} aria-labelledby="settings-about-title">
+                    <h3 id="settings-about-title" className={styles.sectionTitle}>
+                        앱 정보
+                    </h3>
+                    <dl className={styles.about}>
+                        <dt>버전</dt>
+                        <dd>
+                            {info
+                                ? `v${info.appVersion} · Electron ${info.electron} · Node ${info.node} · ${info.platform}`
+                                : "불러오는 중…"}
+                        </dd>
+                        <dt>데이터 위치</dt>
+                        <dd className={styles.mono}>{info?.userDataPath ?? "-"}</dd>
+                    </dl>
+                </section>
+
+                <ClearHistoryModal open={clearOpen} onClose={h_CloseClear} />
+            </div>
+        </ZBCModal>
     );
 }

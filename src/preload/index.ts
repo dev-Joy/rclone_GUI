@@ -24,6 +24,7 @@ const api: itfRcloneGuiApi = {
         getInfo: () => ipcRenderer.invoke(C.appGetInfo),
         getNotices: () => ipcRenderer.invoke(C.appGetNotices),
         openLogsFolder: () => ipcRenderer.invoke(C.appOpenLogsFolder),
+        copyText: (text) => ipcRenderer.invoke(C.appCopyText, { text }),
     },
     settings: {
         get: () => ipcRenderer.invoke(C.settingsGet),
@@ -71,6 +72,7 @@ const api: itfRcloneGuiApi = {
         start: (input) => ipcRenderer.invoke(C.runStart, input),
         cancel: (runId) => ipcRenderer.invoke(C.runCancel, { runId }),
         getActive: () => ipcRenderer.invoke(C.runGetActive),
+        command: (jobId) => ipcRenderer.invoke(C.runCommand, { jobId }),
     },
     history: {
         list: (query) => ipcRenderer.invoke(C.historyList, query ?? {}),

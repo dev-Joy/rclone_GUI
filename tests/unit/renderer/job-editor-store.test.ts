@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultSettings } from "@/shared/defaults";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
+import { useUiStore } from "@/stores/ui-store";
 import { createFakeApi, fakeUuid, makeJob, type itfFakeApi } from "./fake-api";
 
 let fake: itfFakeApi;
@@ -20,6 +21,7 @@ function f_Dirty(): boolean {
 beforeEach(() => {
     useJobsStore.setState(useJobsStore.getInitialState(), true);
     useJobEditorStore.setState(useJobEditorStore.getInitialState(), true);
+    useUiStore.setState(useUiStore.getInitialState(), true);
     fake = createFakeApi([makeJob({ id: fakeUuid(1), name: "a" })]);
     vi.stubGlobal("window", { rclonegui: fake.api });
 });
@@ -34,7 +36,7 @@ describe("job-editor-store 열기·변경", () => {
         settings.defaults.checkers = 12;
         f_Editor().openNew(settings);
         const s = f_Editor();
-        expect(s.open).toBe(true);
+        expect(s.draft).not.toBeNull();
         expect(s.jobId).toBeNull();
         expect(s.draft?.options.checkers).toBe(12);
         expect(s.draft?.excludes).toEqual(settings.defaults.excludes);
@@ -125,7 +127,8 @@ describe("job-editor-store syncFromJobs", () => {
         expect(f_Editor().externalChange).toBe(true);
         expect(f_Editor().draft?.name).toBe("내 편집");
         f_Editor().syncFromJobs([]);
-        expect(f_Editor().open).toBe(false);
+        expect(f_Editor().draft).toBeNull();
+        expect(useUiStore.getState().editor).toBeNull();
     });
 
     it("같거나 오래된 rev(늦게 온 이벤트)는 무시한다", () => {
@@ -155,6 +158,6 @@ describe("job-editor-store syncFromJobs", () => {
     it("새 작업 편집은 목록 변경으로 닫히지 않는다", () => {
         f_Editor().openNew(createDefaultSettings());
         f_Editor().syncFromJobs([]);
-        expect(f_Editor().open).toBe(true);
+        expect(f_Editor().draft).not.toBeNull();
     });
 });

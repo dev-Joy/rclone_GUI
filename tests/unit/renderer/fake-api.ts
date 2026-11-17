@@ -204,6 +204,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
             getInfo: () => notImplemented("app.getInfo"),
             getNotices: () => notImplemented("app.getNotices"),
             openLogsFolder: () => notImplemented("app.openLogsFolder"),
+            copyText: (text) => {
+                calls.push(`app.copyText:${text.length}`);
+                return f_Ok(true);
+            },
         },
         settings: {
             get: () => {
@@ -432,6 +436,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
             getActive: () => {
                 calls.push("run.getActive");
                 return f_Ok(runActive);
+            },
+            command: (jobId) => {
+                calls.push(`run.command:${jobId}`);
+                return f_Ok({ compare: "rclone lsjson", sync: "rclone sync" });
             },
         },
         history: {

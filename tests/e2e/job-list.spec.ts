@@ -2,7 +2,7 @@
  * 작업 목록 E2E (INT-002 T-04·T-05). 임시 원본·대상 폴더와 임시 userData만 쓰고, 실제 rclone이 없으면 건너뛴다.
  * 목록 한 줄에 원본 → 대상·최근 실행이 보이고, "지금 실행"은 비교 뒤 삭제 확인 모달을 거친다(취소하면 대상 불변,
  * 확인하면 삭제). 실행 뒤 상태 문구 "성공"이 보이고 설정에서 끄면 사라진다(AC-11).
- * 전체 범위 작업은 원본의 빈 폴더를 대상에 만든다(AC-9).
+ * 설정은 상단 막대의 ‘설정’으로 여는 모달이다. 전체 범위 작업은 원본의 빈 폴더를 대상에 만든다(AC-9).
  *
  * @author dev-Joy 2026-11-02
  */
@@ -14,7 +14,15 @@ import { dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 // ========== Internal imports ==========
-import { createJob, expectNoConsoleErrors, HAS_RCLONE, launchApp, waitForApp } from "./app-harness";
+import {
+    createJob,
+    dismissToasts,
+    expectNoConsoleErrors,
+    HAS_RCLONE,
+    launchApp,
+    openSettings,
+    waitForApp,
+} from "./app-harness";
 
 const SYNC_NAME = "E2E 목록 동기화";
 const ALL_NAME = "E2E 빈 폴더 복사";
@@ -31,11 +39,6 @@ function f_Row(page: Page, name: string) {
         .locator('nav[aria-labelledby="jobs-title"]')
         .getByRole("listitem")
         .filter({ hasText: name });
-}
-
-async function f_DismissToasts(page: Page): Promise<void> {
-    const close = page.getByRole("button", { name: "알림 닫기" });
-    while ((await close.count()) > 0) await close.first().click();
 }
 
 let root = "";
@@ -92,12 +95,12 @@ test("목록에서 지금 실행: 비교 → 삭제 확인(취소·확인) → �
         // 3) 상태 문구: 보임 → 설정에서 끄면 숨김
         await expect(row).toContainText("최근 실행");
         await expect(row).toContainText("성공");
-        const nav = page.getByRole("navigation", { name: "화면 전환" });
-        await nav.getByRole("button", { name: "설정" }).click();
-        await page.locator("#settings-show-job-status").uncheck();
-        await f_DismissToasts(page);
-        await page.getByRole("button", { name: "설정 저장", exact: true }).click();
+        await dismissToasts(page);
+        const settings = await openSettings(page);
+        await settings.locator("#settings-show-job-status").uncheck();
+        await settings.getByRole("button", { name: "설정 저장", exact: true }).click();
         await expect(page.getByText(/설정을 저장했습니다/)).toBeVisible();
+        await expect(settings).toBeHidden();
         await expect(row).toContainText("최근 실행");
         await expect(row).not.toContainText("성공");
 

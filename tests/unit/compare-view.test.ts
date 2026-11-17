@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 // ========== Internal imports ==========
 import {
     canStartCompare,
+    compareChips,
     compareStaleReason,
     DEFAULT_COMPARE_VIEW,
     dirSummaryText,
@@ -12,8 +13,8 @@ import {
     selectRowIndexes,
     statusLabel,
     statusTone,
-    summaryCards,
     type itfCompareViewState,
+    type typCompareChip,
     type typCompareSortKey,
 } from "@/lib/compare-view";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -50,6 +51,21 @@ const ENTRIES: itfDiffEntry[] = [
 
 function f_View(over: Partial<itfCompareViewState> = {}): itfCompareViewState {
     return { ...DEFAULT_COMPARE_VIEW, ...over };
+}
+
+/** 칩 다섯 개를 모두 켠 상태에서 off에 든 칩만 끈다 */
+const ALL_CHIPS: Record<typCompareChip, boolean> = {
+    onlySource: true,
+    modified: true,
+    onlyDest: true,
+    typeConflict: true,
+    equal: true,
+};
+
+function f_Chips(...off: typCompareChip[]): Record<typCompareChip, boolean> {
+    const chips = { ...ALL_CHIPS };
+    for (const key of off) chips[key] = false;
+    return chips;
 }
 
 function f_Paths(v: Partial<itfCompareViewState>): string[] {
@@ -107,24 +123,48 @@ describe("라벨·색·사유", () => {
     });
 });
 
-describe("selectRowIndexes 필터", () => {
-    it.each<[itfCompareViewState["status"], boolean, string[]]>([
-        ["all", true, ["a/한글.txt", "b.txt", "d.txt", "e/x"]],
-        ["all", false, ["a/한글.txt", "b.txt", "C.TXT", "d.txt", "e/x"]],
-        ["changes", true, ["a/한글.txt", "b.txt", "d.txt", "e/x"]],
-        ["changes", false, ["a/한글.txt", "b.txt", "d.txt", "e/x"]],
-        ["onlySource", true, ["a/한글.txt"]],
-        ["modified", false, ["b.txt"]],
-        ["onlyDest", true, ["d.txt"]],
-        ["typeConflict", true, ["e/x"]],
-        ["equal", true, ["C.TXT"]],
-        ["equal", false, ["C.TXT"]],
-    ])("status=%s hideEqual=%s", (status, hideEqual, expected) => {
-        expect(f_Paths({ status, hideEqual })).toEqual(expected);
+describe("selectRowIndexes 칩 필터", () => {
+    it("기본값은 같음 칩만 꺼져 있다", () => {
+        expect(DEFAULT_COMPARE_VIEW.chips).toEqual(f_Chips("equal"));
+        expect(f_Paths({})).toEqual(["a/한글.txt", "b.txt", "d.txt", "e/x"]);
+    });
+
+    it("칩을 모두 켜면 같음까지 보인다", () => {
+        expect(f_Paths({ chips: f_Chips() })).toEqual([
+            "a/한글.txt",
+            "b.txt",
+            "C.TXT",
+            "d.txt",
+            "e/x",
+        ]);
+    });
+
+    it.each<[typCompareChip, string[]]>([
+        ["onlySource", ["b.txt", "d.txt", "e/x"]],
+        ["modified", ["a/한글.txt", "d.txt", "e/x"]],
+        ["onlyDest", ["a/한글.txt", "b.txt", "e/x"]],
+        ["typeConflict", ["a/한글.txt", "b.txt", "d.txt"]],
+        ["equal", ["a/한글.txt", "b.txt", "d.txt", "e/x"]],
+    ])("%s 칩을 끄면 그 상태가 빠진다", (off, expected) => {
+        expect(f_Paths({ chips: { ...DEFAULT_COMPARE_VIEW.chips, [off]: false } })).toEqual(
+            expected,
+        );
+    });
+
+    it("칩을 토글하면 행 수가 그 상태만큼 바뀐다", () => {
+        const equalOn = { ...DEFAULT_COMPARE_VIEW.chips, equal: true };
+        expect(f_Paths({ chips: equalOn })).toHaveLength(5);
+        expect(f_Paths({ chips: { ...equalOn, equal: false } })).toHaveLength(4);
+        expect(f_Paths({ chips: { ...equalOn, onlyDest: false } })).toHaveLength(4);
+        expect(
+            f_Paths({
+                chips: f_Chips("onlySource", "modified", "onlyDest", "typeConflict", "equal"),
+            }),
+        ).toEqual([]);
     });
 
     it("검색은 대소문자 무시·NFC 부분 일치", () => {
-        expect(f_Paths({ hideEqual: false, query: "c.t" })).toEqual(["C.TXT"]);
+        expect(f_Paths({ chips: f_Chips(), query: "c.t" })).toEqual(["C.TXT"]);
         expect(f_Paths({ query: "한글".normalize("NFD") })).toEqual(["a/한글.txt"]);
         expect(f_Paths({ query: "  " })).toHaveLength(4);
         expect(f_Paths({ query: "없음" })).toEqual([]);
@@ -140,7 +180,7 @@ describe("selectRowIndexes 정렬", () => {
         ["dstSize", ["b.txt", "C.TXT", "d.txt", "a/한글.txt", "e/x"]],
         ["dstTime", ["C.TXT", "b.txt", "a/한글.txt", "d.txt", "e/x"]],
     ])("%s asc (null은 뒤, 같으면 경로순)", (sortKey, expected) => {
-        expect(f_Paths({ hideEqual: false, sortKey })).toEqual(expected);
+        expect(f_Paths({ chips: f_Chips(), sortKey })).toEqual(expected);
     });
 
     it.each<[typCompareSortKey, string[]]>([
@@ -148,11 +188,11 @@ describe("selectRowIndexes 정렬", () => {
         ["srcSize", ["b.txt", "C.TXT", "a/한글.txt", "e/x", "d.txt"]],
         ["dstTime", ["b.txt", "C.TXT", "a/한글.txt", "d.txt", "e/x"]],
     ])("%s desc (null은 여전히 뒤)", (sortKey, expected) => {
-        expect(f_Paths({ hideEqual: false, sortKey, sortDir: "desc" })).toEqual(expected);
+        expect(f_Paths({ chips: f_Chips(), sortKey, sortDir: "desc" })).toEqual(expected);
     });
 });
 
-describe("summaryCards", () => {
+describe("compareChips", () => {
     const s = {
         ...emptySummary(),
         createFiles: 12,
@@ -162,20 +202,20 @@ describe("summaryCards", () => {
         sameFiles: 40,
     };
 
-    it("일어날 일을 문구로", () => {
-        expect(summaryCards(s, "sync").map((c) => c.label)).toEqual([
-            "대상에 12개 복사",
-            "8개 덮어씀",
-            "3개 삭제",
-            "동일 40개",
+    it("라벨·개수·색: 추가·변경·삭제(sync)·오류·같음", () => {
+        expect(compareChips(s, "sync").map((c) => [c.key, c.label, c.count, c.tone])).toEqual([
+            ["onlySource", "추가", 12, "add"],
+            ["modified", "변경", 8, "change"],
+            ["onlyDest", "삭제", 3, "delete"],
+            ["typeConflict", "오류", 0, "danger"],
+            ["equal", "같음", 40, "same"],
         ]);
-        expect(summaryCards(s, "copy")[2]!.label).toBe("3개 대상에만 있음(유지)");
-        expect(summaryCards(s, "copy")[0]).toMatchObject({ count: 12, bytes: 100 });
     });
 
-    it("형식 충돌은 있을 때만", () => {
-        const cards = summaryCards({ ...s, conflictFiles: 2 }, "copy");
-        expect(cards.at(-1)).toMatchObject({ filter: "typeConflict", label: "형식 충돌 2개" });
+    it("copy에서는 대상만(삭제하지 않음), 형식 충돌 개수를 그대로 센다", () => {
+        const chips = compareChips({ ...s, conflictFiles: 2 }, "copy");
+        expect(chips[2]).toMatchObject({ key: "onlyDest", label: "대상만", count: 3 });
+        expect(chips[3]).toMatchObject({ key: "typeConflict", label: "오류", count: 2 });
     });
 });
 

@@ -15,6 +15,7 @@ import {
     _electron as electron,
     expect,
     type ElectronApplication,
+    type Locator,
     type Page,
 } from "@playwright/test";
 
@@ -132,27 +133,81 @@ export async function waitForApp(page: Page): Promise<void> {
     await expect(page.getByRole("heading", { name: "rcloneGUI", level: 1 })).toBeVisible();
 }
 
-/** 작업 목록(왼쪽)에서 새 작업을 열고 이름·원본·대상(주면 모드·범위도)을 채워 저장한다 */
-export async function createJob(page: Page, job: itfJobInput): Promise<void> {
-    const sidebar = page.locator('nav[aria-labelledby="jobs-title"]');
-    await sidebar.getByRole("button", { name: "새 작업", exact: true }).click();
-    await page.locator("#job-name").fill(job.name);
-    await page.locator("#job-source").fill(job.source);
-    await page.locator("#job-destination").fill(job.destination);
-    if (job.mode) await page.locator(`input[name="mode"][value="${job.mode}"]`).check();
-    if (job.scope) await page.locator(`input[name="scope"][value="${job.scope}"]`).check();
-    await page.getByRole("button", { name: "저장", exact: true }).click();
-    await expect(page.getByText("작업을 저장했습니다.")).toBeVisible();
+/** 왼쪽 작업 목록 */
+export function jobSidebar(page: Page): Locator {
+    return page.locator('nav[aria-labelledby="jobs-title"]');
 }
 
-/** 작업 목록에서 이름으로 작업을 고르고 작업 설정을 연다 */
-export async function openJob(page: Page, name: string): Promise<void> {
-    await page
-        .locator('nav[aria-labelledby="jobs-title"]')
+/** 작업 편집 모달(상단 제목이 대화상자 이름이다) */
+export function jobEditor(page: Page): Locator {
+    return page.getByRole("dialog", { name: "작업 편집" });
+}
+
+/** 설정 모달(상단 제목이 대화상자 이름이다) */
+export function settingsDialog(page: Page): Locator {
+    return page.getByRole("dialog", { name: "설정" });
+}
+
+/** 상단 막대의 설정 단추로 설정 모달을 연다 */
+export async function openSettings(page: Page): Promise<Locator> {
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    const dialog = settingsDialog(page);
+    await expect(dialog).toBeVisible();
+    return dialog;
+}
+
+/** 설정 모달을 닫는다(변경이 없을 때만. 변경이 있으면 확인 모달이 뜬다) */
+export async function closeSettings(page: Page): Promise<void> {
+    const dialog = settingsDialog(page);
+    await dialog.getByRole("button", { name: "닫기", exact: true }).click();
+    await expect(dialog).toBeHidden();
+}
+
+/**
+ * 떠 있는 알림을 모두 닫는다(위쪽 알림이 아래쪽 단추를 가리지 않게).
+ * 모달(<dialog>)이 열려 있으면 문서가 inert가 되어 닫기 단추를 누를 수 없으므로 건너뛴다.
+ * 알림은 모달을 닫은 뒤에 정리한다.
+ */
+export async function dismissToasts(page: Page): Promise<void> {
+    if ((await page.locator("dialog[open]").count()) > 0) return;
+    const close = page.getByRole("button", { name: "알림 닫기" });
+    while ((await close.count()) > 0) await close.first().click();
+}
+
+/** 작업 목록(왼쪽)에서 새 작업을 열고 이름·원본·대상(주면 모드·범위도)을 채워 저장한다 */
+export async function createJob(page: Page, job: itfJobInput): Promise<void> {
+    await jobSidebar(page).getByRole("button", { name: "+ 새 작업", exact: true }).click();
+    const dialog = jobEditor(page);
+    await expect(dialog).toBeVisible();
+    await dialog.locator("#job-name").fill(job.name);
+    await dialog.locator("#job-source").fill(job.source);
+    await dialog.locator("#job-destination").fill(job.destination);
+    if (job.mode) await dialog.locator(`input[name="mode"][value="${job.mode}"]`).check();
+    if (job.scope) await dialog.locator(`input[name="scope"][value="${job.scope}"]`).check();
+    await dialog.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(page.getByText("작업을 저장했습니다.").last()).toBeVisible();
+    // 저장하면 편집 모달이 스스로 닫히고 작업 화면에 남는다
+    await expect(dialog).toBeHidden();
+}
+
+/** 작업 목록에서 이름으로 작업을 고른다(편집 모달은 열지 않는다) */
+export async function selectJob(page: Page, name: string): Promise<void> {
+    await jobSidebar(page)
         .getByRole("button", { name: new RegExp(name) })
         .click();
+    await expect(page.locator("#job-title")).toHaveText(name);
+}
+
+/**
+ * 작업 목록에서 이름으로 작업을 고르고 편집 모달을 연다.
+ * 선택지는 이름으로만 고르고(정규식), 편집 모달은 작업 화면의 `편집` 단추로 연다.
+ */
+export async function openJob(page: Page, name: string): Promise<void> {
+    await selectJob(page, name);
     await page.locator("#job-open-edit").click();
-    await expect(page.locator("#job-name")).toHaveValue(name);
+    const dialog = jobEditor(page);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("#job-name")).toHaveValue(name);
 }
 
 /** renderer 콘솔 오류가 없어야 한다(MVP 수용 기준) */

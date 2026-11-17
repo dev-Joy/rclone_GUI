@@ -25,12 +25,29 @@ export interface itfZBCModalProps {
     /** Esc·닫기·바깥(backdrop) 클릭 → onClose. 파괴 확인 모달에서도 Esc는 "취소" */
     onClose: () => void;
     footer?: ReactNode;
+    /** 바깥(backdrop) 클릭으로 닫을지. 저장 안 한 변경 확인처럼 실수로 닫히면 안 되는 곳은 false */
+    closeOnBackdrop?: boolean;
+    /** wide: 넓은 표·목록을 담는 모달 (760px) */
+    size?: "default" | "wide";
 }
+
+const propsDefault = {
+    closeOnBackdrop: true,
+    size: "default",
+} satisfies Partial<itfZBCModalProps>;
 
 const FOCUSABLE = "input, select, textarea, button:not(.zbcModalClose)";
 
 export default function ZBCModal(props: itfZBCModalProps) {
-    const { open, title, children, onClose, footer } = props;
+    const {
+        open,
+        title,
+        children,
+        onClose,
+        footer,
+        closeOnBackdrop = propsDefault.closeOnBackdrop,
+        size = propsDefault.size,
+    } = props;
 
     // ========== hook & state 변수 선언 ==========
     const ref = useRef<HTMLDialogElement>(null);
@@ -56,12 +73,16 @@ export default function ZBCModal(props: itfZBCModalProps) {
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Cancel = (e: SyntheticEvent<HTMLDialogElement>) => {
+        // 중첩 dialog의 이벤트는 조상 dialog 핸들러까지 올라온다(React 합성 이벤트) — 자기 것만 처리한다
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
         onClose();
     };
 
     /** 네이티브 close 이벤트: 우리가 닫은 경우(open=false)가 아니면 상태를 맞춘다 */
-    const h_NativeClose = () => {
+    const h_NativeClose = (e: SyntheticEvent<HTMLDialogElement>) => {
+        // 확인 모달처럼 dialog 안에 dialog를 두면 close가 조부모까지 버블링된다 — 자기 dialog가 닫힌 것만 알린다
+        if (e.target !== e.currentTarget) return;
         if (open) onClose();
     };
 
@@ -70,7 +91,7 @@ export default function ZBCModal(props: itfZBCModalProps) {
         downOutside.current = e.target === e.currentTarget;
     };
     const h_Click = (e: MouseEvent<HTMLDialogElement>) => {
-        const outside = downOutside.current && e.target === e.currentTarget;
+        const outside = closeOnBackdrop && downOutside.current && e.target === e.currentTarget;
         downOutside.current = false;
         if (outside) onClose();
     };
@@ -81,6 +102,7 @@ export default function ZBCModal(props: itfZBCModalProps) {
             ref={ref}
             className="zbc zbcModal"
             aria-labelledby={titleId}
+            data-size={size}
             onCancel={h_Cancel}
             onClose={h_NativeClose}
             onMouseDown={h_MouseDown}

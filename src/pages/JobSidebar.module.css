@@ -1,5 +1,7 @@
 /**
  * JobSidebar 스타일 (레이아웃)
+ * INT-008 FR-5: 250px 고정 목록, 상태 점·이름·mode 배지·`원본 → 대상`(mono)·하위 문구,
+ * 선택 항목은 왼쪽 accent 막대(inset 3px)와 --panel-2 배경.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -7,35 +9,42 @@
 @layer layouts {
     .JobSidebar {
         display: flex;
+        flex: 0 0 250px;
         flex-direction: column;
-        gap: 8px;
+        width: 250px;
         min-height: 0;
-        padding: 12px;
 
         .head {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
+            padding: 12px 14px 6px;
         }
 
         .title {
             margin: 0;
-            font-size: 14px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
         }
 
         .error {
             margin: 0;
+            padding: 0 14px;
             color: var(--danger);
             font-size: 12px;
         }
 
         .list {
             display: flex;
+            flex: 1;
             flex-direction: column;
-            gap: 4px;
+            gap: 2px;
             margin: 0;
-            padding: 0;
+            padding: 0 6px;
+            overflow-y: auto;
             list-style: none;
         }
 
@@ -47,21 +56,21 @@
         }
 
         .item {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            gap: 2px 8px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
             width: 100%;
-            padding: 8px 10px;
-            border: 1px solid transparent;
-            border-radius: var(--radius);
-            background: transparent;
+            padding: 8px;
+            border: 0;
+            border-radius: 6px;
+            background: none;
             color: var(--text);
             font: inherit;
             text-align: left;
             cursor: pointer;
 
             &:hover {
-                border-color: var(--border);
+                background: var(--panel-2);
             }
 
             &:focus-visible {
@@ -70,40 +79,86 @@
             }
 
             &[aria-current="true"] {
-                border-color: var(--accent);
-                background: var(--accent-weak);
+                background: var(--panel-2);
+                box-shadow: inset 3px 0 0 var(--accent);
+            }
+
+            :global(.zbcDot) {
+                margin-top: 6px;
             }
         }
 
+        .text {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .nameRow {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
+        }
+
         .name {
+            flex: 1;
+            min-width: 0;
             overflow: hidden;
             font-weight: 600;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .badges {
-            display: flex;
-            gap: 4px;
+        /* 원본 → 대상. 끝 폴더 위주로 줄이고, 원본이 길어도 대상이 보이게 둘을 따로 말줄임한다 */
+        .route {
+            display: grid;
+            grid-template-columns: minmax(0, max-content) max-content minmax(0, max-content);
+            justify-content: start;
+            column-gap: 4px;
+            min-width: 0;
+            font-family: var(--font-mono);
+            font-size: 11px;
         }
 
-        .paths {
-            grid-column: 1 / -1;
+        .routePart {
+            min-width: 0;
             overflow: hidden;
-            color: var(--muted);
-            font-size: 12px;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .meta {
-            grid-column: 1 / -1;
+        .routeArrow {
+            color: var(--accent);
+        }
+
+        .sub {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 11px;
+        }
+
+        .subText {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .addRow {
+            display: flex;
+            flex: none;
+            gap: 6px;
+            margin: 10px;
         }
 
         .empty {
-            margin: 0;
+            margin: 0 14px;
             color: var(--muted);
             font-size: 13px;
         }

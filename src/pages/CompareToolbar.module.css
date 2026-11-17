@@ -1,5 +1,5 @@
 /**
- * CompareToolbar 스타일
+ * CompareToolbar 스타일 (rcloud 밀도: 13px·compact, 칩은 끄면 중립·켜면 상태 색)
  *
  * @author dev-Joy 2026-10-28
  */
@@ -7,9 +7,85 @@
 @layer pages {
     .CompareToolbar {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px 10px;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .chip {
+            display: inline-flex;
+            flex: none;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--panel);
+            color: var(--muted);
+            font: inherit;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: 1px;
+            }
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .chipCount {
+            color: inherit;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 켠 칩만 상태 색. 끈 칩은 중립(테두리·muted)으로 남는다 */
+        .chip[aria-pressed="true"] {
+            font-weight: 600;
+        }
+
+        .chip[aria-pressed="true"][data-tone="add"] {
+            border-color: var(--success);
+            background: var(--success-weak);
+            color: var(--success);
+        }
+
+        .chip[aria-pressed="true"][data-tone="change"] {
+            border-color: var(--warning);
+            background: var(--warning-weak);
+            color: var(--warning);
+        }
+
+        .chip[aria-pressed="true"][data-tone="delete"],
+        .chip[aria-pressed="true"][data-tone="danger"] {
+            border-color: var(--danger);
+            background: var(--danger-weak);
+            color: var(--danger);
+        }
+
+        .chip[aria-pressed="true"][data-tone="same"] {
+            background: var(--panel-2);
+            color: var(--text);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 10px;
+        }
 
         .label {
             color: var(--muted);

@@ -16,7 +16,7 @@ export default function DiscardChangesModal() {
     const jobPending = useJobEditorStore((s) => s.pendingAction !== null);
     const confirmDiscard = useJobEditorStore((s) => s.confirmDiscard);
     const cancelDiscard = useJobEditorStore((s) => s.cancelDiscard);
-    const settingsPending = useUiStore((s) => s.pendingLeave !== null);
+    const settingsPending = useUiStore((s) => s.settingsOpen && s.pendingLeave !== null);
     const confirmLeave = useUiStore((s) => s.confirmLeave);
     const cancelLeave = useUiStore((s) => s.cancelLeave);
 

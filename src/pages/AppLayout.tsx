@@ -1,5 +1,6 @@
 /**
- * 앱 전체 틀: 상단 막대, 왼쪽 작업 목록, 오른쪽 본문(위에 알림·배너). 각 영역은 따로 스크롤된다.
+ * 앱 전체 틀: 상단 막대, 왼쪽 작업 목록, 오른쪽 본문. 각 영역은 따로 스크롤된다.
+ * INT-008 FR-4·FR-5: grid를 flex column으로 바꿔 상단 막대를 고정하고 본문을 250px 목록 + 작업 화면으로 나눈다.
  *
  * @author dev-Joy 2026-10-28
  */
@@ -14,22 +15,21 @@ import styles from "./AppLayout.module.css";
 export interface itfAppLayoutProps {
     topBar: ReactNode;
     sidebar: ReactNode;
-    /** 본문 위 알림·온보딩 배너 */
-    banner?: ReactNode;
     children: ReactNode;
 }
 
 export default function AppLayout(props: itfAppLayoutProps) {
-    const { topBar, sidebar, banner, children } = props;
+    const { topBar, sidebar, children } = props;
 
     return (
         <div className={styles.AppLayout}>
-            <div className={styles.top}>{topBar}</div>
-            <aside className={styles.sidebar}>{sidebar}</aside>
-            <main className={styles.main}>
-                {banner && <div className={styles.banner}>{banner}</div>}
-                <div className={styles.content}>{children}</div>
-            </main>
+            <header className={styles.topbar}>{topBar}</header>
+            <div className={styles.body}>
+                <aside className={styles.sidebar}>{sidebar}</aside>
+                <main className={styles.main}>
+                    <div className={styles.content}>{children}</div>
+                </main>
+            </div>
         </div>
     );
 }

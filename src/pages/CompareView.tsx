@@ -1,7 +1,7 @@
 /**
- * 작업 화면 오른쪽 "파일 목록" 열. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과(도구 막대 → 가상 목록 표).
- * 요약 카드·안내 배너·비교 방식·폴더 변화는 왼쪽 ‘대상에 일어날 일’ 패널(ComparePlanPanel)에 있고,
- * 비교 중지는 하단 실행 막대의 공통 중지(JobActivityBar)에 있다.
+ * 작업 화면 "파일 목록" 탭. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과(칩·검색 도구 막대 → 폴더 안내 → 가상 목록 표).
+ * 요약·안내 줄(미리보기 안내·빈 폴더 불가)은 작업 화면(JobWorkspace)에 있고,
+ * 비교 중지는 실행 배너의 공통 중지(JobActivityBar)에 있다.
  * 비교는 원본·대상 목록을 읽기만 하고 파일은 바꾸지 않는다.
  *
  * @author dev-Joy 2026-10-28
@@ -12,6 +12,7 @@ import { useMemo } from "react";
 
 // ========== Internal imports ==========
 import {
+    dirSummaryText,
     selectRowIndexes,
     type itfCompareViewState,
     type typCompareSortKey,
@@ -58,12 +59,15 @@ export default function CompareView(props: itfCompareViewProps) {
     // ========== 내부 변수 (_V) ==========
     const shown = result && result.jobId === job.id ? result : null;
     const running = runningCompare(active, runningJobId);
-    const { status, hideEqual, sortKey, sortDir } = view;
+    const { chips, sortKey, sortDir } = view;
     const rows = useMemo(() => {
         if (!shown) return [];
-        const v: itfCompareViewState = { status, hideEqual, sortKey, sortDir, query };
+        const v: itfCompareViewState = { chips, sortKey, sortDir, query };
         return selectRowIndexes(shown.entries, v);
-    }, [shown, status, hideEqual, sortKey, sortDir, query]);
+    }, [shown, chips, sortKey, sortDir, query]);
+    const dirText = shown
+        ? dirSummaryText(shown.summary, shown.mode, shown.destCanHaveEmptyDirs)
+        : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Sort = (key: typCompareSortKey) =>
@@ -122,9 +126,12 @@ export default function CompareView(props: itfCompareViewProps) {
             <CompareToolbar
                 view={view}
                 onChange={setView}
+                summary={shown.summary}
+                mode={shown.mode}
                 shown={rows.length}
                 total={shown.entries.length}
             />
+            {dirText && <p className={styles.dirs}>{dirText}</p>}
             <CompareTable
                 entries={shown.entries}
                 rows={rows}
