@@ -1,11 +1,11 @@
 ---
 id: INT-009
 title: 비교 결과의 변경 파일 내용 차이(diff)를 동기화 전에 앱에서 보기
-status: planned
+status: done
 priority: P2
 created: 2026-11-17
-updated: 2026-11-17
-updated_at: 2026-11-17T21:45:00+09:00
+updated: 2026-11-18
+updated_at: 2026-11-18T01:05:41+09:00
 ---
 
 # Intent: 비교 결과의 변경 파일 내용 차이(diff)를 동기화 전에 앱에서 보기
@@ -42,6 +42,7 @@ updated_at: 2026-11-17T21:45:00+09:00
 - 원 요구: "변경된 파일을 diff해 볼 수 있는 기능이 필요해. 변경이라고 나오기는 하는데 각각 열어보지 않으면 뭐가 변경됐는지 알 수가 없어서 동기화 전에 비교해보려는데 비교가 어려워." (출처: 2026-11-17 대화 요청)
 - D-01: 요구 분해는 1개다. 근거: 내용 가져오기(main·IPC)와 diff 보기(화면)는 서로 없으면 가치가 없어 5기준 중 ②·④를 충족하지 않는다.
 - D-02: INT-008과 별도 intent로 둔다. 근거: INT-008은 새 IPC 없음·`command-builder` diff 0줄(NFR-1)·메뉴는 `경로 복사`만(D-06)이 전제인데, 이 기능은 cat 빌더와 새 IPC가 필요하다. 폐기 대안: INT-008 범위 확장.
+- D-03: 두 파일의 줄 목록이 같고 바이트만 다르면(BOM·인코딩·줄바꿈) diff 대신 원인만 문구로 알린다. 근거: 2ffe93d 정합성 지적 — BOM/인코딩만 다를 때 "수정 시각만 다름"으로 오표시되고 BOM+줄바꿈 조합에서 BOM이 누락됐다. 폐기 대안: 바이트 차이를 무조건 줄 diff로 표시.
 - 참조: `src/shared/diff-engine.ts:128-151` modified 판정(size→hash→mtime) / `src/shared/types/compare.ts:24-42,79-106` 항목·결과 타입(해시 값·루트 경로 없음) / `src/main/services/compare-service.ts:571-583` lsjson 나열 비교 / `src/pages/CompareTable.tsx:75,144` 행 동작 없음 / `src/pages/ItemMenu.tsx:1-35` 미사용 메뉴 / `src/shared/path-utils.ts:15` local·unc·remote / `src/main/rclone/process.ts:86` stdout 16MB 상한 / `package.json:28-30` 의존성 zod뿐 / INT-008 `spec.md:74,164` 우클릭 메뉴 FR-13·D-06
 - 범위 밖·전제: 파일 편집·병합(3-way merge)·선택 반영, 이미지·바이너리 내용 비교, 같음(equal)·종류 충돌(typeConflict) 항목 보기는 하지 않는다. rclone 비교 방식(lsjson 나열)은 바꾸지 않는다.
 - 환경·재현: Windows 데스크톱 앱(Electron), 원본·대상은 로컬·`\\wsl.localhost\…`·`remote:path` 모두 가능. 재현은 아무 작업에서 비교 → '변경' 줄 확인(현재 줄에 동작 없음).
@@ -53,9 +54,13 @@ updated_at: 2026-11-17T21:45:00+09:00
 - [x] 표시 형식과 상한 — 좌우 나란히(side-by-side) vs 통합(unified), 파일 크기 상한 값과 바이너리 판정 기준(NUL 바이트 등) → 답변: 좌우 나란히(왼쪽 원본·오른쪽 대상), 파일당 2MB 상한, 바이너리는 앞부분 NUL 바이트로 판정 (2026-11-17)
 - [x] 대상 범위 — '변경'만인가, 추가·삭제 파일의 내용 미리보기도 포함하는가 → 답변: 변경은 좌우 diff, 추가(원본에만)·삭제(대상에만)는 같은 화면에서 한쪽만 미리보기 (2026-11-17)
 
+## 결과 (Outcome)
+- 2026-11-18 완료: 비교 결과 파일 행 더블클릭·파일 줄 메뉴로 좌우 나란히 줄 단위 diff 모달을 연다. 추가·삭제 파일은 있는 쪽만 미리보기, 바이너리·2MB 초과·읽기 실패는 이유 문구. main은 캐시된 비교 항목만 `rclone cat`으로 읽고(새 IPC `compare:fileDiff`) 의존성은 늘리지 않았다. 전송·계획 토큰·삭제 확인 흐름은 그대로다.
+- 상세: [result.md](result.md)
+
 ## 작업 (Tasks)
-- [ ] T-01 [P2] 준비 — spec §10 Q-1 확정(A: UTF-8 실패 시 EUC-KR 재디코딩), 미커밋 변경 확인(R-5), 태스크 분해
-- [ ] T-02 [P2] shared 순수 함수 — 줄 단위 diff(`text-diff.ts`)·루트+상대 경로 결합(`joinRootRelative`) 및 단위 테스트
-- [ ] T-03 [P2] 읽기 경로 — `buildCatArgs`·허용 명령·`cat` 시간 제한·`file-diff-service`·IPC `compare:fileDiff`·preload·단위/통합 테스트
-- [ ] T-04 [P2] 화면 — `FileDiffModal`(좌우 diff·한쪽 미리보기·이유 문구), 더블클릭·파일 줄 메뉴 진입, E2E
-- [ ] T-05 [P2] 마감 — CHANGELOG 한 줄·rclone cat 동작 기록·작업 내역·전체 검증(2-pass)
+- [x] T-01 [P2] 준비 — spec §10 Q-1 확정(A: UTF-8 실패 시 EUC-KR 재디코딩), 미커밋 변경 확인(R-5), 태스크 분해 (2026-11-17)
+- [x] T-02 [P2] shared 순수 함수 — 줄 단위 diff(`text-diff.ts`)·루트+상대 경로 결합(`joinRootRelative`) 및 단위 테스트 (2026-11-17)
+- [x] T-03 [P2] 읽기 경로 — `buildCatArgs`·허용 명령·`cat` 시간 제한·`file-diff-service`·IPC `compare:fileDiff`·preload·단위/통합 테스트 (2026-11-17)
+- [x] T-04 [P2] 화면 — `FileDiffModal`(좌우 diff·한쪽 미리보기·이유 문구), 더블클릭·파일 줄 메뉴 진입, E2E (2026-11-17)
+- [x] T-05 [P2] 마감 — CHANGELOG 한 줄·rclone cat 동작 기록·작업 내역·전체 검증(2-pass) (2026-11-18)
