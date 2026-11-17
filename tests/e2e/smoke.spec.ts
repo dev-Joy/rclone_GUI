@@ -172,18 +172,23 @@ test("복제는 값을 채운 편집 모달을 열고, 저장하면 새 작업�
         mkdirSync(dupDestination, { recursive: true });
         await waitForApp(page);
         const name = "E2E 복제 원본";
+        // 이름순 첫 작업을 하나 더 둔다: 복제를 취소해도 이 작업으로 선택이 옮겨 가면 안 된다
+        const firstName = "E2E 가 먼저";
+        await createJob(page, { name: firstName, source: dupSource, destination: dupDestination });
         await createJob(page, { name, source: dupSource, destination: dupDestination });
         // 상단 알림이 header 단추를 가리지 않게 정리한다
         await dismissToasts(page);
         const sidebar = jobSidebar(page);
         const editor = jobEditor(page);
 
-        // 1) 복제를 취소하면 작업이 늘지 않는다
+        // 1) 복제를 취소하면 작업이 늘지 않고, 보던 작업 선택이 그대로다
         await page.getByRole("button", { name: "복제", exact: true }).click();
         await expect(editor).toBeVisible();
         await editor.getByRole("button", { name: "취소", exact: true }).click();
         await expect(editor).toBeHidden();
-        await expect(sidebar.getByRole("listitem")).toHaveCount(1);
+        await expect(sidebar.getByRole("listitem")).toHaveCount(2);
+        await expect(page.locator("#job-title")).toHaveText(name);
+        await expect(sidebar.locator('[aria-current="true"]')).toContainText(name);
 
         // 2) 복제 → 저장: 값을 그대로 이어받고, 저장하면 새 작업이 목록에 생겨 선택된다
         await page.getByRole("button", { name: "복제", exact: true }).click();
@@ -194,7 +199,7 @@ test("복제는 값을 채운 편집 모달을 열고, 저장하면 새 작업�
         await editor.getByRole("button", { name: "저장", exact: true }).click();
         await expect(page.getByText("작업을 저장했습니다.").last()).toBeVisible();
         await expect(editor).toBeHidden();
-        await expect(sidebar.getByRole("listitem")).toHaveCount(2);
+        await expect(sidebar.getByRole("listitem")).toHaveCount(3);
         await expect(page.locator("#job-title")).toHaveText(`${name} (복제)`);
         await expect(sidebar.locator('[aria-current="true"]')).toContainText(`${name} (복제)`);
 

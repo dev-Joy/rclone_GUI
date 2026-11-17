@@ -2,8 +2,8 @@
 
 - 생성일시: 2026-11-17 15:47:35
 - 감지된 환경: React / TypeScript
-- 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 463 건
+- 스캔 대상 디렉터리: `src/components`, `src/pages`, `src/stores`, `src/lib`, `src/main/lib`, `src/main/services`, `src/main/store`, `src/shared`, `src/shared/schemas`, `src/shared/types`
+- 총 인덱싱 자산: 474 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -24,6 +24,13 @@
 | `ZBCTabs` | [`src/components/ZBCTabs.tsx`](../../src/components/ZBCTabs.tsx) | ZBCTabs<T extends string>(props: itfZBCTabsProps<T>) - UI 컴포넌트 |
 | `ZBCTextarea` | [`src/components/ZBCTextarea.tsx`](../../src/components/ZBCTextarea.tsx) | ZBCTextarea(props: itfZBCTextareaProps) - UI 컴포넌트 |
 | `ZBCToast` | [`src/components/ZBCToast.tsx`](../../src/components/ZBCToast.tsx) | ZBCToast(props: itfZBCToastProps) - UI 컴포넌트 |
+| `ZBCDot` | [`src/components/ZBCDot.tsx`](../../src/components/ZBCDot.tsx) | ZBCDot(props: itfZBCDotProps) - 작업 상태 점(tone: none·running·success·failed…) |
+| `ItemMenu` | [`src/pages/ItemMenu.tsx`](../../src/pages/ItemMenu.tsx) | ItemMenu(iProps: itfItemMenuProps) - 화면 좌표에 뜨는 메뉴(키보드 이동·Escape·바깥 클릭 닫힘, `zbcXxx` 스타일) |
+| `CompareHead` | [`src/pages/CompareHead.tsx`](../../src/pages/CompareHead.tsx) | CompareHead(props: itfCompareHeadProps) - 비교 결과 표 6열 머리글(정렬 단추) |
+| `CompareRow` | [`src/pages/CompareRow.tsx`](../../src/pages/CompareRow.tsx) | CompareRow(iProps: itfCompareRowProps) - 파일 행 하나(평면 표·트리 공용, 우클릭·Shift+F10 줄 메뉴) |
+| `CompareTree` | [`src/pages/CompareTree.tsx`](../../src/pages/CompareTree.tsx) | CompareTree(props: itfCompareTreeProps) - 비교 결과 트리 표(30px 고정 행 가상화, 폴더 접기/펼치기) |
+| `FileRowMenu` | [`src/pages/FileRowMenu.tsx`](../../src/pages/FileRowMenu.tsx) | FileRowMenu(props: itfFileRowMenuProps) - 파일 행 우클릭 메뉴(`경로 복사`) |
+| `GroupNameDialog` | [`src/pages/GroupNameDialog.tsx`](../../src/pages/GroupNameDialog.tsx) | GroupNameDialog(props: itfGroupNameDialogProps) - 새 그룹·그룹 이름 바꾸기 대화상자 |
 
 ## 2. Custom Hooks
 
@@ -50,7 +57,8 @@
 | `selectRowIndexes` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | selectRowIndexes(...) - 필터·검색(부분 일치, 대소문자 무시·NFC)·정렬 결과를 entries 인덱스 배열로 돌려준다(객체 복사 없음). entries는 경로 키 오름차순이므로 보조 키(경로 오름차순)는 인덱스 순서로 대신한다. |
 | `statusLabel` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | statusLabel(status: typCompareStatus, mode: typRunMode) - 상태 라벨. onlyDest: copy "대상만(유지)", sync "대상만(삭제 예정)" |
 | `statusTone` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | statusTone(status: typCompareStatus, mode: typRunMode) - 공통 함수/유틸리티 |
-| `summaryCards` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | summaryCards(s: itfCompareSummary, mode: typRunMode) - 요약 카드. 문구는 일어날 일: "대상에 12개 복사", "8개 덮어씀", sync "3개 삭제" / copy "3개 대상에만 있음(유지)" |
+| `buildTreeRows` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | buildTreeRows(entries, rows, expanded) - 필터·정렬된 인덱스에 폴더 행을 끼워 1차원 목록으로 펼친다(접힌 폴더의 하위는 뺀다). 폴더 행은 파일 수·변경 수를 센다 |
+| `collectFolderPaths` | [`src/lib/compare-tree.ts`](../../src/lib/compare-tree.ts) | collectFolderPaths(entries, rows) - 보이는 행이 속한 폴더 경로(모두 펼치기용, 조상 포함) |
 | `excludeChangeConfirmText` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | excludeChangeConfirmText(kind: typExcludeChangeKind, userCount: number) - 확인 버튼 문구(일어날 일). 예: "패턴 지우고 작업 3개의 비교 결과 버리기" |
 | `jobOnlyCommentLike` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | jobOnlyCommentLike(patterns: readonly string[]) - 이 작업 전용 패턴 중 공용으로 둘 수 없는 줄(#·; 시작) |
 | `missingPatternIds` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | missingPatternIds(...) - 선택한 id 중 라이브러리에 없는 것(편집 중 지워진 패턴) |
@@ -124,6 +132,7 @@
 | `nextBackupTime` | [`src/main/services/backup-dir.ts`](../../src/main/services/backup-dir.ts) | nextBackupTime(now: Date, last: Date \| null) - 이번 실행의 백업 시각. last(같은 프로세스에서 마지막으로 쓴 시각)가 없거나 now가 초 단위로 더 늦으면 now, 아니면(같은 초·시계가 뒤로 감) last + 1초. 초 아래는 버린다. |
 | `checkDestProbe` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | checkDestProbe(p: itfParsedPath, probe: itfPathProbe) - 대상 폴더 확인 결과 판정. 대상이 없으면 true(빈 목록으로 비교). 접근할 수 없거나 파일이면 막는다 |
 | `checkSourceProbe` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | checkSourceProbe(p: itfParsedPath, probe: itfPathProbe) - 원본 폴더 확인 결과 판정(비교·OS 예약 경로 사전 확인 공용). 읽을 수 없거나 없거나 폴더가 아니면 던진다. 로컬·UNC는 폴더를 열어 본 경우만 통과(시간 초과·확인 대기 중이면 막는다). |
+| `commandPreview` | [`src/main/services/command-preview.ts`](../../src/main/services/command-preview.ts) | commandPreview(job: typJob, settings: typSettings) - 비교·동기화 명령 문자열(표시·복사 전용, 실행하지 않음). 인자는 command-builder 빌더로만 만든다 |
 | `resolveEffectiveExcludes` | [`src/main/services/effective-excludes.ts`](../../src/main/services/effective-excludes.ts) | resolveEffectiveExcludes(...) - 공통 함수/유틸리티 |
 | `cleanupExcludeFiles` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | cleanupExcludeFiles(dir: string) - 시작 때 남은 제외 파일(excl-*.txt)만 지운다. 지운 수 |
 | `isExcludeFileName` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | isExcludeFileName(name: string) - 앱이 만든 제외 파일 이름인지(테스트·로그 확인용) |
@@ -247,6 +256,7 @@
 | `clsActivityLock` | [`src/main/services/activity-lock.ts`](../../src/main/services/activity-lock.ts) | class clsActivityLock - 공유 서비스/클라이언트 클래스 |
 | `clsCompareService` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | class clsCompareService - 공유 서비스/클라이언트 클래스 |
 | `clsExcludeService` | [`src/main/services/exclude-service.ts`](../../src/main/services/exclude-service.ts) | class clsExcludeService - 공유 서비스/클라이언트 클래스 |
+| `clsGroupStore` | [`src/main/store/group-store.ts`](../../src/main/store/group-store.ts) | class clsGroupStore - 작업 그룹 저장소(v3 groups 표). 이름 1~50자·대소문자 무시 중복 금지, position 순. 지운 그룹의 작업은 그룹 없음으로 남는다(INT-008 FR-17) |
 | `clsOsRunQueue` | [`src/main/services/os-run-queue.ts`](../../src/main/services/os-run-queue.ts) | class clsOsRunQueue - 메인 클래스 |
 | `clsOsScheduler` | [`src/main/services/os-scheduler.ts`](../../src/main/services/os-scheduler.ts) | class clsOsScheduler - OS 예약 등록 수명주기. 모든 schtasks 호출은 내부 큐로 직렬화한다. available이 false면 schtasks를 한 번도 부르지 않는다. |
 | `clsFsGate` | [`src/main/services/path-service.ts`](../../src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
@@ -261,6 +271,7 @@
 | `clsRunService` | [`src/main/services/run-service.ts`](../../src/main/services/run-service.ts) | class clsRunService - 공유 서비스/클라이언트 클래스 |
 | `clsScheduler` | [`src/main/services/scheduler.ts`](../../src/main/services/scheduler.ts) | class clsScheduler - 공유 서비스/클라이언트 클래스 |
 | `clsWslService` | [`src/main/services/wsl.ts`](../../src/main/services/wsl.ts) | class clsWslService - 공유 서비스/클라이언트 클래스 |
+| `useGroupsStore` | [`src/stores/groups-store.ts`](../../src/stores/groups-store.ts) | zustand - 작업 그룹 목록(load·save·remove·subscribe). save·remove는 main(groups:*)의 envelope를 그대로 돌려준다 |
 
 ## 5. Types & Interfaces
 

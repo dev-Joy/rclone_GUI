@@ -27,7 +27,6 @@ import { errorText, getApi, unwrap } from "@/lib/api";
 import { canStartCompare, compareStaleReason, emptyDirsUnsupportedText } from "@/lib/compare-view";
 import { isOsTaskMissing, missingRemoteNames } from "@/lib/job-list-view";
 import { planFooterText, previewNotice, runPanelShown, syncButtonText } from "@/lib/job-steps";
-import { sortJobs } from "@/lib/job-form";
 import { activityStop, canStartRun, etaText, progressPercent } from "@/lib/run-view";
 import { useRunFlow } from "@/lib/use-run-flow";
 import { createDefaultSettings } from "@/shared/defaults";
@@ -66,19 +65,14 @@ export default function JobWorkspace() {
     const [nowMs, setNowMs] = useState(() => Date.now());
     const [tools, setTools] = useState<{ x: number; y: number } | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
-    const draft = useJobEditorStore((s) => s.draft);
     const dirty = useJobEditorStore(selectDirty);
-    const guard = useJobEditorStore((s) => s.guard);
     const openJob = useJobEditorStore((s) => s.openJob);
-    const closeDraft = useJobEditorStore((s) => s.close);
     const jobs = useJobsStore((s) => s.jobs);
     const selectedJobId = useJobsStore((s) => s.selectedJobId);
-    const select = useJobsStore((s) => s.select);
     const removeJob = useJobsStore((s) => s.remove);
     const tab = useUiStore((s) => s.tab);
     const setTab = useUiStore((s) => s.setTab);
     const openEditor = useUiStore((s) => s.openEditor);
-    const closeEditor = useUiStore((s) => s.closeEditor);
     const pushToast = useToastStore((s) => s.push);
     const compareActive = useCompareStore((s) => s.active);
     const compareRunningJobId = useCompareStore((s) => s.runningJobId);
@@ -105,11 +99,10 @@ export default function JobWorkspace() {
     }, []);
 
     // ========== 내부 변수 (_V) ==========
-    // 편집 모달은 HomePage가 띄운다. 작업 화면은 선택한 작업만 보여 준다
+    // 편집 모달은 HomePage가 띄운다. 작업 화면은 선택한 작업만 보여 준다(저장 안 됨 상태는 모달 안에서 보인다)
     const jobId = selectedJobId;
     const job = jobId === null ? null : (jobs.find((j) => j.id === jobId) ?? null);
-    const isNew = jobId === null;
-    const title = job?.name ?? (draft?.name.trim() || "새 작업");
+    const title = job?.name ?? "";
     const running = runningCompare(compareActive, compareRunningJobId);
     const comparing = job !== null && running?.jobId === job.id;
     const runningJobId = runActive?.jobId ?? runStartingJobId;
@@ -250,15 +243,6 @@ export default function JobWorkspace() {
     const h_AskDelete = () => setConfirmDelete(true);
     const h_CancelDelete = () => setConfirmDelete(false);
     const h_ConfirmDelete = () => void f_Delete();
-    /** 새 작업 작성 취소: 첫 작업의 작업 화면으로 돌아간다 */
-    const h_CancelNew = () =>
-        guard(() => {
-            const first = sortJobs(useJobsStore.getState().jobs)[0]?.id ?? null;
-            closeDraft();
-            closeEditor();
-            select(first);
-            setTab("files");
-        });
 
     const menuItems = [
         {
@@ -279,7 +263,6 @@ export default function JobWorkspace() {
                     <h2 id="job-title" className={styles.title} title={title}>
                         {title}
                     </h2>
-                    {isNew && <ZBCBadge tone="warning">저장 안 됨</ZBCBadge>}
                     {job && (
                         <ZBCBadge tone={job.mode === "sync" ? "warning" : "neutral"}>
                             {MODE_LABEL[job.mode]}
@@ -302,34 +285,28 @@ export default function JobWorkspace() {
                         )}
                 </div>
                 <div className={styles.actions}>
-                    {isNew ? (
-                        <ZBCButton onClick={h_CancelNew}>작성 취소</ZBCButton>
-                    ) : (
-                        <>
-                            <ZBCButton id="job-open-edit" small onClick={h_OpenEdit}>
-                                편집
-                            </ZBCButton>
-                            <ZBCButton
-                                small
-                                onClick={h_Duplicate}
-                                disabled={dirty || busy}
-                                title={duplicateReason}
-                            >
-                                복제
-                            </ZBCButton>
-                            <ZBCButton small variant="danger" onClick={h_AskDelete} disabled={busy}>
-                                삭제
-                            </ZBCButton>
-                            <ZBCButton
-                                small
-                                onClick={h_OpenTools}
-                                aria-label="작업 더 보기"
-                                title="미리보기·명령 복사"
-                            >
-                                ⋯
-                            </ZBCButton>
-                        </>
-                    )}
+                    <ZBCButton id="job-open-edit" small onClick={h_OpenEdit}>
+                        편집
+                    </ZBCButton>
+                    <ZBCButton
+                        small
+                        onClick={h_Duplicate}
+                        disabled={dirty || busy}
+                        title={duplicateReason}
+                    >
+                        복제
+                    </ZBCButton>
+                    <ZBCButton small variant="danger" onClick={h_AskDelete} disabled={busy}>
+                        삭제
+                    </ZBCButton>
+                    <ZBCButton
+                        small
+                        onClick={h_OpenTools}
+                        aria-label="작업 더 보기"
+                        title="미리보기·명령 복사"
+                    >
+                        ⋯
+                    </ZBCButton>
                 </div>
                 {job && (
                     <div className={styles.paths} title={`${job.source} → ${job.destination}`}>

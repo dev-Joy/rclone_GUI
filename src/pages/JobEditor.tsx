@@ -29,7 +29,6 @@ import {
     intervalUnitOf,
     serverErrorToCheck,
     shouldShowLoginHint,
-    sortJobs,
     validateJobDraft,
     type itfJobFormCheck,
     type typIntervalUnit,
@@ -146,7 +145,7 @@ export default function JobEditor() {
     const setGroup = useJobEditorStore((s) => s.setGroup);
     const groups = useGroupsStore((s) => s.groups);
     const save = useJobEditorStore((s) => s.save);
-    const closeDraft = useJobEditorStore((s) => s.close);
+    const closeDraftAndReturn = useJobEditorStore((s) => s.closeAndReturn);
     const guard = useJobEditorStore((s) => s.guard);
     const closeEditor = useUiStore((s) => s.closeEditor);
     const baseline = useJobEditorStore((s) => s.baseline);
@@ -310,18 +309,11 @@ export default function JobEditor() {
         closeEditor();
     };
     const h_SaveClick = () => void h_Save();
-    /** 취소·×·Escape: 저장하지 않은 변경이 있으면 먼저 확인한다(DiscardChangesModal) */
-    const h_Close = () =>
-        guard(() => {
-            // 새 작업을 닫으면 작업 화면으로 돌아간다(목록의 첫 작업). 편집은 선택을 바꾸지 않는다
-            const wasNew = jobId === null;
-            closeDraft();
-            closeEditor();
-            if (wasNew) {
-                const jobs = useJobsStore.getState().jobs;
-                useJobsStore.getState().select(sortJobs(jobs)[0]?.id ?? null);
-            }
-        });
+    /**
+     * 취소·×·Escape: 저장하지 않은 변경이 있으면 먼저 확인한다(DiscardChangesModal).
+     * 닫은 뒤 돌아갈 작업은 closeAndReturn이 정한다(새 작업이면 첫 작업, 편집·복제는 보던 작업).
+     */
+    const h_Close = () => guard(closeDraftAndReturn);
 
     return (
         <ZBCModal

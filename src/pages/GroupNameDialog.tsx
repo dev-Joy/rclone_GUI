@@ -27,8 +27,13 @@ export interface itfGroupNameDialogProps {
 
 const GROUP_NAME_MAX = 50;
 
+/** 넘어온 값이 없는 항목만 쓰는 기본값(새 그룹) */
+const propsDefault = {
+    group: undefined,
+} satisfies Partial<itfGroupNameDialogProps>;
+
 export default function GroupNameDialog(props: itfGroupNameDialogProps) {
-    const { group, onClose } = props;
+    const { group = propsDefault.group, onClose } = props;
 
     // ========== hook & state 변수 선언 ==========
     const groups = useGroupsStore((s) => s.groups);

@@ -2,6 +2,22 @@
 
 이 파일은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따르며, `z_skill_git_commit`·`z_skill_git_to_merge`가 `main`/`master` 반영 시 실제 변경 내역을 기록합니다.
 
+## [0.1.74] - 2026-11-17
+
+### Added
+
+- v2 데이터 구조에서 v3로 올라갈 때 백업·작업 보존을 확인하는 E2E
+
+### Changed
+
+- 신규 컴포넌트에 propsDefault 규약 적용, 공통 자산 인덱스 갱신
+
+### Fixed
+
+- 복제를 취소해도 보던 작업 선택이 유지되도록 편집기 닫기 경로를 통일
+- 작업 화면의 도달 불가한 새 작업 분기와 '저장 안 됨' 배지 제거
+- 문서의 toolbar '중지' 서술을 실제 배치(비교·동기화 + 실행 배너 중지)에 맞춤
+
 ## [0.1.73] - 2026-11-17
 
 ### Changed

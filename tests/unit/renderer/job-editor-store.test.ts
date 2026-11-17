@@ -94,6 +94,30 @@ describe("job-editor-store 복제 초안", () => {
     });
 });
 
+describe("job-editor-store 편집기 닫기", () => {
+    it("새 작업을 닫으면 첫 작업을 선택하고, 복제 초안을 닫으면 보던 작업 선택을 유지한다", () => {
+        const a = makeJob({ id: fakeUuid(1), name: "a" });
+        const b = makeJob({ id: fakeUuid(2), name: "b" });
+        useJobsStore.setState({ jobs: [a, b], selectedJobId: b.id });
+
+        // 새 작업: 목록의 첫 작업 화면으로 돌아간다
+        f_Editor().openNew(createDefaultSettings());
+        expect(useUiStore.getState().editor).toEqual({ mode: "new", jobId: null });
+        f_Editor().closeAndReturn();
+        expect(useUiStore.getState().editor).toBeNull();
+        expect(f_Editor().draft).toBeNull();
+        expect(useJobsStore.getState().selectedJobId).toBe(a.id);
+
+        // 복제: jobId는 null이지만 원래 작업을 보던 중이었으므로 선택을 그대로 둔다 (INT-008 F1)
+        useJobsStore.getState().select(b.id);
+        f_Editor().openDuplicate(b);
+        expect(useUiStore.getState().editor).toEqual({ mode: "duplicate", jobId: null });
+        f_Editor().closeAndReturn();
+        expect(useUiStore.getState().editor).toBeNull();
+        expect(useJobsStore.getState().selectedJobId).toBe(b.id);
+    });
+});
+
 describe("job-editor-store 저장", () => {
     it("화면 검증 실패는 IPC를 부르지 않고 오류를 표시한다", async () => {
         f_Editor().openNew(createDefaultSettings());

@@ -8,7 +8,7 @@
   - 전역 UI 변경: 테마 토큰 값 변경으로 CSS 51개 파일에 영향이 있고, `src/pages/` 47개 화면 중 셸·작업 화면·설정·편집의 구조를 바꾼다.
   - 화면 상태 계약(`src/stores/ui-store.ts:13`, `:15`)과 E2E 10개 spec의 선택자를 바꾼다.
   - Phase 3에서 DB 스키마 v3 마이그레이션(`src/main/store/db-schema.ts:115`)과 IPC 계약(`src/shared/ipc-contract.ts:65`)을 추가한다.
-- 하드 게이트 후보: 해당 없음. `[배포·계약 자산 경로]`(src/prompts·agents·skills·mcp·config·scripts) 변경은 없다.
+- 하드 게이트 후보: 해당 없음. `[배포·계약 자산 경로]`(src/prompts·agents·skills·mcp·config·scripts) 변경은 없다. 단 Phase 1~3에서 `scripts/dev/drive-app.mjs`(개발 확인 도구, 계약·규칙 변경 아님)를 갱신했다.
 
 ## 2. 실행 순서 (Steps)
 원 요구: "D:\dev-Joy\rcloud에서 UI만 똑같이" — rcloud main `7d054be`의 모양·구조로 되돌리고 동작은 유지한다.

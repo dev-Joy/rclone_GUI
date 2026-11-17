@@ -47,8 +47,23 @@ const COLUMN_COUNT = 6;
 /** 폴더 이름 앞에 두는 문자 기호(새 아이콘 라이브러리를 들이지 않는다) */
 const FOLDER_ICON = "📁";
 
+/** 넘어온 값이 없는 항목만 쓰는 기본값 */
+const propsDefault = {
+    onFileMenu: undefined,
+} satisfies Partial<itfCompareTreeProps>;
+
 export default function CompareTree(props: itfCompareTreeProps) {
-    const { entries, rows, mode, sortKey, sortDir, onSort, expanded, onToggle, onFileMenu } = props;
+    const {
+        entries,
+        rows,
+        mode,
+        sortKey,
+        sortDir,
+        onSort,
+        expanded,
+        onToggle,
+        onFileMenu = propsDefault.onFileMenu,
+    } = props;
 
     // ========== hook & state 변수 선언 ==========
     /** 필터·정렬·펼침이 바뀔 때만 트리를 다시 만든다(스크롤로 다시 그릴 때는 기억한 값을 쓴다) */

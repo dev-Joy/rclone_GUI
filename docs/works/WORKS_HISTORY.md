@@ -234,7 +234,7 @@
 [TASK_033] : (2026-11-17) INT-008 Phase 1~3 — 화면 모양·구조 복원과 비교 트리·파일 줄 메뉴·작업 그룹 (관련 Intent: INT-008, T-01~T-06)
 - 모양: `themes/default.css` 토큰 값을 rcloud와 같게 하고 본문 13px·mono `Consolas, "D2Coding", monospace`, `ZBCButton` `small`, Badge 4px/11px, 상태 점 `ZBCDot` 신규, `ZBCToast`를 위쪽 가운데 notice로 바꿈
 - 셸: `AppLayout`을 상단 막대 + 250px 목록 flex로 바꾸고, `TopBar`(브랜드·rclone 상태 알약·설정·다음 자동 실행·일시정지), `JobSidebar`(상태 점·이름·mode 배지·원본→대상·하위 문구·선택 `inset 3px` accent 막대·하단 `+ 새 작업`)로 재구성
-- 작업 화면: `JobWorkspace`를 header(편집·복제·삭제·⋯, 경로 줄)·toolbar(비교·동기화·중지)·안내 줄·실행 배너(`#job-run-panel`)·밑줄 탭(`파일 목록`·`기록`)·footer로 바꾸고 `JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`를 삭제. `job-steps`에서 `jobSteps`·`workMainPanel`을 지우고 `syncButtonText`·`planFooterText`를 더해 동기화 단추 문구·footer에 재사용
+- 작업 화면: `JobWorkspace`를 header(편집·복제·삭제·⋯, 경로 줄)·toolbar(비교·동기화)·안내 줄·실행 배너(`#job-run-panel`, 중지는 이 배너에)·밑줄 탭(`파일 목록`·`기록`)·footer로 바꾸고 `JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`를 삭제. `job-steps`에서 `jobSteps`·`workMainPanel`을 지우고 `syncButtonText`·`planFooterText`를 더해 동기화 단추 문구·footer에 재사용
 - 상태: `ui-store`의 `view`·`pane`을 `tab`(`files`·`history`)·`editor`·`settingsOpen`으로 바꾸고 `use-run-flow`·`run-store`·`HomePage`·`JobEditor`·`SettingsPage` 사용처를 옮김(설정 변경 확인 흐름 유지)
 - 목록·기록: `CompareToolbar` 상태 칩 5종(추가·변경·삭제/대상만·오류·같음, 같음 기본 꺼짐)·`상태별` 보기, `CompareTable` 6열(항목·원본 크기·원본 수정 시각·할 일·대상 수정 시각·대상 크기), `HistoryView` 표(시작·종류·결과·건수·걸린 시간·내용 + 행마다 목록·정보·로그)
 - 모달·메뉴: 작업 편집·설정을 `ZBCModal`(바깥 클릭으로 닫히지 않음)로 열고 저장 안 한 변경은 닫을 때 확인. `⋯` 메뉴에 미리보기 실행·비교/동기화 명령 복사를 두고 `app:copyText`·`run:command`를 추가(`command-preview`는 표시 전용, rclone 미실행)
@@ -245,7 +245,7 @@
 - Phase 2(T-05): 신규 `src/lib/compare-tree.ts`가 필터·정렬 결과에서 `/` 구분 폴더 행(하위 파일 수·변경 수)과 접힌 폴더의 하위를 뺀 1차원 행 목록을 만드는 순수 함수(DOM 무의존). `CompareToolbar`에 `트리 | 평면` 토글(기본 평면)과 트리일 때 `모두 펼치기`·`모두 접기`, `CompareTree`·`CompareRow`·`CompareHead`가 기존 `useVirtualRows`로 보이는 행만 그린다. 필터·정렬·작업·결과가 바뀌면 트리는 다시 접힌다. 파일 행 우클릭·Shift+F10으로 `FileRowMenu`(`경로 복사`만, 원본 기준 상대 경로 = `entry.path`, `app:copyText`)를 열고 Escape·바깥 클릭으로 닫는다. rclone을 실행하는 동작은 없다
 - Phase 3(T-06): 저장 구조 v3 — `db-schema`에 `groups` 표(이름·position·created_at·updated_at)와 `jobs.group_id`(`ON DELETE SET NULL`)를 더하고, `group-store`가 만들기·이름 바꾸기·position 순 정렬·지우기(속한 작업은 그룹 없음)를 담당한다. v1·v2 DB는 `PRAGMA user_version` 마이그레이션으로 이관하며 바꾸기 전 `db-backups\`에 `pre-v3` 백업을 남기고, 낮은 버전 앱은 더 새 데이터를 거부한다(기존 규칙 유지). IPC `groups:list`·`groups:save`·`groups:delete`·`jobs:setGroup`과 `groups:changed` 이벤트·preload API. `JobSidebar`는 그룹 머리글(이름·작업 수·접기)과 `그룹 없음` 묶음으로 보이고 그룹이 없으면 평평한 목록이며, 하단 `+ 새 그룹`과 머리글의 이름 바꾸기·지우기는 `GroupNameDialog`로 처리한다. 작업 편집 모달에 `그룹` select를 두고, `jobs:setGroup`은 작업 rev를 올리지 않아 그룹만 바꾸면 비교 계획이 유효하다
 - 테스트: `compare-tree` 단위(폴더 집계·접힘·대소문자 다른 경로 분리), 그룹 저장소 단위와 v2→v3 이관·`pre-v3` 백업 단위, E2E에 트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지 케이스 추가
-- 검증(Phase 2·3): Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 19(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. `run-service`·`plan-token`·`command-builder` diff 0줄, 의존성 무변경. `drive-app` 어서션이 Phase 1~3 UI 변경 뒤 낡아 실패하던 드리프트를 함께 고쳤다
+- 검증(Phase 2·3): Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 21(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. `run-service`·`plan-token`·`command-builder` diff 0줄, 의존성 무변경. `drive-app` 어서션이 Phase 1~3 UI 변경 뒤 낡아 실패하던 드리프트를 함께 고쳤다
 - 문서: CHANGELOG 2줄(그룹·트리), MVP_SPEC §12.2 IPC 채널·§13 화면 구조와 화면별 요구·INT-008 Phase 2·3 구현 반영 표, README §3 화면 설명
 - 남은 것: T-07 마감 — Phase 1~3 전체 검증과 정합성 게이트, intent 완료 전이
 

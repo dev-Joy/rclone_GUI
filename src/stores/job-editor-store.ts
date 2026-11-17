@@ -11,7 +11,13 @@
 import { create } from "zustand";
 
 // ========== Internal imports ==========
-import { isDraftEqual, jobToDraft, validateJobDraft, type itfJobFormCheck } from "@/lib/job-form";
+import {
+    isDraftEqual,
+    jobToDraft,
+    sortJobs,
+    validateJobDraft,
+    type itfJobFormCheck,
+} from "@/lib/job-form";
 import { createJobDraft } from "@/shared/defaults";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobRunOptions } from "@/shared/schemas/job";
@@ -44,6 +50,11 @@ export interface itfJobEditorState {
     /** 기존 작업 값을 복제 초안으로(이름에 " (복제)", 예약은 끔). 저장하면 새 작업이 된다 */
     openDuplicate: (job: typJob) => void;
     close: () => void;
+    /**
+     * 편집기를 닫고 돌아갈 작업을 고른다. 새 작업이면 목록의 첫 작업(작업 화면으로 복귀),
+     * 편집·복제는 보던 작업 선택을 그대로 둔다(중복 초안은 원래 작업에서 열었으므로).
+     */
+    closeAndReturn: () => void;
     setField: <K extends keyof typJobDraft>(key: K, value: typJobDraft[K]) => void;
     setOptions: (patch: Partial<typJobRunOptions>) => void;
     setAutoSync: (patch: Partial<typJobDraft["autoSync"]>) => void;
@@ -68,6 +79,7 @@ type typEditorData = Omit<
     | "openNew"
     | "openDuplicate"
     | "close"
+    | "closeAndReturn"
     | "setField"
     | "setOptions"
     | "setAutoSync"
@@ -155,6 +167,16 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
     close: () => {
         session += 1;
         set({ ...CLOSED });
+    },
+    closeAndReturn: () => {
+        // 새 작업만 첫 작업 화면으로 돌아간다. 복제 초안도 jobId는 null이지만 원래 작업을 보던 중이었다
+        const mode = useUiStore.getState().editor?.mode ?? null;
+        get().close();
+        useUiStore.getState().closeEditor();
+        if (mode === "new") {
+            const first = sortJobs(useJobsStore.getState().jobs)[0]?.id ?? null;
+            useJobsStore.getState().select(first);
+        }
     },
     setField: (key, value) =>
         set((s) => (s.draft ? { draft: { ...s.draft, [key]: value }, serverError: null } : {})),

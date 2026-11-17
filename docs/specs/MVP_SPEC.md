@@ -102,7 +102,7 @@ INT-002(`docs/intent/done/INT-002-scheduler-sqlite-ux/`)로 바뀐 항목이다.
 | 동기화 범위 (§8.1) | 파일만 | 작업 `scope`: `files`(기본, `lsjson --files-only`) / `all`(폴더 포함 목록, copy·sync·dry-run에 `--create-empty-src-dirs`). 비교 결과 `createDirs`·`deleteDirs`·`dirChanges`, 실행 입력 `confirmedDeleteDirs`, 계획 토큰 v3에 scope·폴더 수. `--max-delete`는 파일 삭제 수만(rclone이 폴더를 세지 않음), 폴더 삭제는 확인 수·사전 확인(`remove directory`·`deletedDirs`)으로 맞춤. 자동 실행의 삭제 조건은 파일+폴더 합산 |
 | 스케줄러 (§10) | 균등 interval | `autoSync.kind`: `interval`(분)·`daily`(HH:MM)·`weekly`(요일 마스크 + HH:MM), 로컬 시각·DST(`src/shared/schedule.ts`). 시작 즉시 `nextOccurrence`로 다음 예약 선기록, 끝나면 `nextAfterFinish`(daily·weekly 성공 시 1시간 안 정시 건너뜀). 놓친 예약은 시작·재개 60초 뒤 1회. 게이트·`startAuto`는 그대로 |
 | 종료·로그인 안내 | - | 트레이 `종료`에서만 다음 예약 경고(실행 중이면 기존 확인 창만), 자동 실행을 켤 때 로그인 시 시작이 꺼져 있으면 안내 |
-| 화면 (§13) | 비교·실행·이력 탭 | 상단 막대(브랜드·rclone 상태 알약·설정) + 왼쪽 250px 작업 목록 + 오른쪽 작업 화면. 작업 화면 = header(제목·mode·상태 배지, 편집·복제·삭제·⋯, 경로 줄) → toolbar(비교·동기화·중지) → 안내 줄 → 실행 배너(`#job-run-panel`, `JobActivityBar`) → 밑줄 탭(파일 목록·기록) → footer. 단계 막대·계획 패널·하단 실행 막대(`JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`)는 INT-008 Phase 1에서 제거. 편집·설정은 모달(`ui-store` `editor`·`settingsOpen`), 복제·삭제는 header 단추, ⋯ 메뉴는 미리보기 실행·비교/동기화 명령 복사. 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
+| 화면 (§13) | 비교·실행·이력 탭 | 상단 막대(브랜드·rclone 상태 알약·설정) + 왼쪽 250px 작업 목록 + 오른쪽 작업 화면. 작업 화면 = header(제목·mode·상태 배지, 편집·복제·삭제·⋯, 경로 줄) → toolbar(비교·동기화) → 안내 줄 → 실행 배너(`#job-run-panel`, `JobActivityBar`의 `중지`) → 밑줄 탭(파일 목록·기록) → footer. 단계 막대·계획 패널·하단 실행 막대(`JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`)는 INT-008 Phase 1에서 제거. 편집·설정은 모달(`ui-store` `editor`·`settingsOpen`), 복제·삭제는 header 단추, ⋯ 메뉴는 미리보기 실행·비교/동기화 명령 복사. 작업 목록에 원본→대상·예약·최근 실행·상태 문구(`ui.showJobStatusText`), 목록 `지금 실행`은 비교 → 확인 창(`use-run-flow`) |
 | 이력 (§11.1) | `history.json` | SQLite `run_records` |
 | cron (§2.2) | Post-MVP | 매일·요일 예약은 구현, cron 표현은 계속 미지원 |
 | 패키징 (§17) | - | NSIS 설치본 하나, portable exe 없음(실행 파일 위치가 바뀌면 로그인 항목·예약 경로가 깨짐) |
@@ -191,7 +191,7 @@ INT-008 Phase 2(비교 목록 트리·파일 줄 메뉴)와 Phase 3(작업 그�
 | 비교 목록 보기 | 6열 평면 표 하나 | `CompareToolbar` 오른쪽 `트리 \| 평면` 토글(기본은 지금까지의 평면)과 트리일 때 `모두 펼치기`·`모두 접기`. `src/lib/compare-tree.ts`(순수 함수)가 `/` 구분 경로로 폴더 행을 만들고 폴더마다 하위 파일 수·변경 수를 센다. `CompareTree`·`CompareRow`·`CompareHead`가 접힌 폴더의 하위를 뺀 1차원 행 목록을 가상화(`useVirtualRows`)로 그려 1만 행도 보이는 행만 그린다. 필터·정렬·작업·결과가 바뀌면 트리는 다시 접힌다 |
 | 파일 줄 메뉴 | 없음(경로 복사 수단 없음) | 파일 행 우클릭·키보드 메뉴 키(Shift+F10)로 `FileRowMenu`의 `경로 복사`를 연다. 복사 값은 원본 기준 상대 경로(`entry.path`)이며 `app:copyText`로 클립보드에만 넣는다. Escape·바깥 클릭으로 닫히고 rclone은 실행하지 않는다. `이번 동기화에서 빼기`는 가져오지 않는다 |
 | 작업 그룹 | 평평한 목록만 | 저장 구조 v3: `groups` 표(이름·position·시각)+`jobs.group_id` 열(`ON DELETE SET NULL`). v1·v2 데이터는 `PRAGMA user_version` 마이그레이션으로 자동 이관하며 바꾸기 전 `db-backups\`에 `pre-v3` 백업을 남기고, 더 낮은 버전 앱은 더 새 데이터를 거부한다(기존 규칙 유지). IPC `groups:list`·`groups:save`·`groups:delete`·`jobs:setGroup`과 `groups:changed` 이벤트. 목록은 그룹 머리글(이름·작업 수·접기)과 `그룹 없음` 묶음으로 보이고 그룹이 없으면 평평한 목록이다. 하단 `+ 새 그룹`, 머리글에서 이름 바꾸기·지우기(지워도 작업은 `그룹 없음`으로 남음), 접힘 상태는 세션 안에서만 유지한다. 작업 편집 모달의 `그룹` select로 지정하고, 그룹 지정은 작업 rev를 올리지 않아 비교 계획이 무효가 되지 않는다 |
-| 테스트 | - | `compare-tree` 단위 테스트(폴더 집계·접힘·대소문자 구분), 그룹 저장소·v2→v3 이관과 `pre-v3` 백업 단위 테스트, E2E(트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지). Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 19(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. 안전 3파일(`run-service`·`plan-token`·`command-builder`) diff 0줄, 의존성 변경 없음 |
+| 테스트 | - | `compare-tree` 단위 테스트(폴더 집계·접힘·대소문자 구분), 그룹 저장소·v2→v3 이관과 `pre-v3` 백업 단위 테스트, E2E(트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지). Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 21(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. 안전 3파일(`run-service`·`plan-token`·`command-builder`) diff 0줄, 의존성 변경 없음 |
 
 ---
 
@@ -1656,7 +1656,7 @@ export interface rcloneGUIApi {
 │ Job 목록 250px │ Job Header: 제목 | mode 배지 | 상태 배지          │
 │               │             편집 | 복제 | 삭제 | ⋯                 │
 │ ● Job A       │ 경로 줄: 원본 → 대상 (mono)                        │
-│   원본 → 대상 │ 툴바: 비교 | 동기화(N개 복사·덮어씀·삭제) | 중지   │
+│   원본 → 대상 │ 툴바: 비교 | 동기화(N개 복사·덮어씀·삭제)          │
 │   하위 문구   │ 안내 줄: 사전 확인·빈 폴더 불가·낡음               │
 │ ● Job B       │ 실행 배너(#job-run-panel): 진행률·남은 시간·중지   │
 │ ▾ 그룹 이름   │ 밑줄 탭: 파일 목록 | 기록                          │
@@ -1686,7 +1686,7 @@ export interface rcloneGUIApi {
 
 **작업 화면(header·toolbar·탭·footer)**
 - header: 제목·mode 배지·상태 배지(저장 안 됨·remote 없음·OS 예약 미등록)와 `편집`·`복제`·`삭제`·`⋯` 단추, 아래에 경로 줄(mono, accent 화살표).
-- toolbar: `비교`·`동기화`·`중지`. 동기화 단추 문구는 `동기화: 대상에 N개 복사, N개 덮어씀, N개 삭제`이고, 비교 전에는 `동기화 — 먼저 [비교]를 누르세요`로 꺼진다.
+- toolbar: `비교`·`동기화`. `중지`는 실행 배너(AC-6)에 있다. 동기화 단추 문구는 `동기화: 대상에 N개 복사, N개 덮어씀, N개 삭제`이고, 비교 전에는 `동기화 — 먼저 [비교]를 누르세요`로 꺼진다.
 - 안내 줄: `previewNotice`와 낡음·형식 충돌·빈 폴더 불가 안내를 toolbar 아래 한 줄씩 보인다.
 - 실행 배너(`#job-run-panel`): 비교·미리보기·실행이 진행 중일 때만 보이며 공통 중지(`JobActivityBar`)·진행률·남은 시간·`진행 글 보기`를 둔다.
 - ⋯ 메뉴: `미리보기 실행`·`비교 명령 복사`·`동기화 명령 복사`. 명령 복사는 표시·복사 전용이며 rclone을 실행하지 않는다.
