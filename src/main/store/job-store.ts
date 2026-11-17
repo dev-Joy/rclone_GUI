@@ -9,6 +9,8 @@
  *   캐시를 바꾸고 onChange를 부른다. 읽을 수 없는 행은 건너뛰되 지우지 않는다.
  * - 공용 제외 패턴 연결(excludePatternIds)은 job_exclude_patterns가 원본이다(INT-002 T-03).
  *   jobs.data에는 넣지 않고, 읽을 때 연결 테이블로 채운다(pattern_id 정렬). 작업 행과 연결은 한 트랜잭션.
+ * - 그룹(groupId)은 jobs.group_id 열이 원본이다(INT-008 FR-17). jobs.data에는 넣지 않고, 그룹 지정·해제는
+ *   setGroup으로만 바꾼다(rev/updatedAt을 올리지 않아 비교 계획 토큰이 무효가 되지 않는다).
  * - 저장 입력은 병합 뒤 zJobDraft(새 한도)로 다시 검사한다. 읽기·관리 필드 기록은 zJob(읽기 한도).
  *
  * @author dev-Joy 2026-10-28
@@ -51,11 +53,14 @@ export interface itfJobStoreOptions {
     onChange?: (jobs: typJob[]) => void;
 }
 
-const zDataRow = z.object({ data: z.string() });
+const zDataRow = z.object({ data: z.string(), group_id: z.string().nullish() });
 
-const SQL_SELECT_ALL = "SELECT data FROM jobs ORDER BY seq";
+const SQL_SELECT_ALL = "SELECT data, group_id FROM jobs ORDER BY seq";
+const SQL_SELECT_GROUPS = "SELECT id, group_id FROM jobs";
+const SQL_GROUP_EXISTS = "SELECT id FROM groups WHERE id = $id";
+const SQL_SET_GROUP = "UPDATE jobs SET group_id = $groupId WHERE id = $id";
 const SQL_INSERT =
-    "INSERT INTO jobs (id, name, rev, created_at, updated_at, data) VALUES ($id, $name, $rev, $createdAt, $updatedAt, $data)";
+    "INSERT INTO jobs (id, name, rev, created_at, updated_at, data, group_id) VALUES ($id, $name, $rev, $createdAt, $updatedAt, $data, $groupId)";
 const SQL_UPDATE =
     "UPDATE jobs SET name = $name, rev = $rev, created_at = $createdAt, updated_at = $updatedAt, data = $data WHERE id = $id";
 const SQL_DELETE = "DELETE FROM jobs WHERE id = $id";
@@ -69,10 +74,11 @@ const SQLITE_CONSTRAINT_FOREIGNKEY = 787;
 const SQLITE_CONSTRAINT = 19;
 
 const zLinkRow = z.object({ job_id: z.string(), pattern_id: z.string() });
+const zGroupRow = z.object({ id: z.string(), group_id: z.string().nullish() });
 
-/** DB 행 값. 전체 작업은 data(JSON)에(연결 제외), 조회용 열은 따로 둔다 */
+/** DB 행 값. 전체 작업은 data(JSON)에(연결·그룹 제외), 조회용 열은 따로 둔다 */
 function f_Row(job: typJob): Record<string, string | number> {
-    const { excludePatternIds: _links, ...data } = job;
+    const { excludePatternIds: _links, groupId: _groupId, ...data } = job;
     return {
         id: job.id,
         name: job.name,
@@ -130,13 +136,13 @@ function f_MapLinkError(e: unknown): unknown {
     return e;
 }
 
-/** data 열 → 작업. JSON·스키마가 맞지 않으면 null */
+/** data 열 → 작업. 그룹은 group_id 열 값이 원본이다. JSON·스키마가 맞지 않으면 null */
 function f_ParseRow(row: unknown): typJob | null {
     const r = zDataRow.safeParse(row);
     if (!r.success) return null;
     try {
         const parsed = zJob.safeParse(JSON.parse(r.data.data));
-        return parsed.success ? parsed.data : null;
+        return parsed.success ? { ...parsed.data, groupId: r.data.group_id ?? null } : null;
     } catch {
         return null;
     }
@@ -184,6 +190,37 @@ export class clsJobStore {
         this.opts.onChange?.(this.jobs);
     }
 
+    /**
+     * 작업의 그룹을 바꾼다(그룹 없음은 null). rev/updatedAt은 바꾸지 않는다 — 비교 계획 토큰(jobRev)이
+     * 무효가 되지 않게 하기 위함이다(Q-3). 없는 그룹이면 VALIDATION.
+     */
+    async setGroup(id: string, groupId: string | null): Promise<typJob> {
+        const job = this.get(id);
+        if (groupId !== null && !this.db.get(SQL_GROUP_EXISTS, { id: groupId })) {
+            throw new clsAppError(
+                "VALIDATION",
+                "없는 그룹입니다. 그룹 목록을 새로 고친 뒤 다시 시도하세요.",
+            );
+        }
+        const { changes } = this.db.run(SQL_SET_GROUP, { id, groupId });
+        if (changes === 0) throw new clsAppError("NOT_FOUND", "작업을 찾을 수 없습니다.");
+        const next: typJob = { ...job, groupId };
+        this.jobs = this.jobs.map((j) => (j.id === id ? next : j));
+        this.opts.onChange?.(this.jobs);
+        return next;
+    }
+
+    /** group_id 열을 다시 읽어 캐시를 맞춘다(rev 그대로). 그룹을 지워 작업이 그룹 없음이 된 뒤 부른다 */
+    refreshGroups(): void {
+        const groups = new Map<string, string | null>();
+        for (const row of this.db.all(SQL_SELECT_GROUPS)) {
+            const r = zGroupRow.safeParse(row);
+            if (r.success) groups.set(r.data.id, r.data.group_id ?? null);
+        }
+        this.jobs = this.jobs.map((j) => ({ ...j, groupId: groups.get(j.id) ?? null }));
+        this.opts.onChange?.(this.jobs);
+    }
+
     get(id: string): typJob {
         const job = this.list().find((j) => j.id === id);
         if (!job) throw new clsAppError("NOT_FOUND", "작업을 찾을 수 없습니다.");
@@ -198,6 +235,7 @@ export class clsJobStore {
             ...draft,
             excludePatternIds: f_NormalizeIds(draft.excludePatternIds),
             id: randomUUID(),
+            groupId: null,
             autoSync: {
                 ...draft.autoSync,
                 nextRunAt: nextRunAfterEdit(null, draft.autoSync, new Date(now)),
@@ -330,7 +368,7 @@ export class clsJobStore {
         const job = zJob.parse(jobInput);
         try {
             this.db.transaction(() => {
-                this.db.run(SQL_INSERT, f_Row(job));
+                this.db.run(SQL_INSERT, { ...f_Row(job), groupId: job.groupId });
                 this.writeLinks(job);
             });
         } catch (e) {

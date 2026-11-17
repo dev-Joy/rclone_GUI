@@ -93,6 +93,29 @@ describe("job-editor-store 저장", () => {
         expect(f_Editor().serverError).toMatchObject({ code: "SAFETY_BLOCKED" });
         expect(f_Dirty()).toBe(true);
     });
+
+    it("그룹만 바꾸면 jobs.update 없이 setGroup만 부른다(rev 그대로, FR-17)", async () => {
+        const id = fake.jobs()[0]!.id;
+        fake.setGroups([
+            {
+                id: "g-abc",
+                name: "백업",
+                position: 0,
+                createdAt: "2026-11-17T00:00:00.000Z",
+                updatedAt: "2026-11-17T00:00:00.000Z",
+            },
+        ]);
+        f_Editor().openJob(fake.jobs()[0]!);
+        await useJobsStore.getState().load();
+        f_Editor().setGroup("g-abc");
+        expect(f_Dirty()).toBe(true);
+        expect(await f_Editor().save(true)).toBe(true);
+        expect(fake.calls.filter((c) => c.startsWith("jobs.update"))).toEqual([]);
+        expect(fake.calls).toContain(`jobs.setGroup:${id}:g-abc`);
+        expect(fake.jobs()[0]).toMatchObject({ rev: 0, groupId: "g-abc" });
+        expect(f_Editor().groupId).toBe("g-abc");
+        expect(f_Dirty()).toBe(false);
+    });
 });
 
 describe("job-editor-store 이동 확인", () => {

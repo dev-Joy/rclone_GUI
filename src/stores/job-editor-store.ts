@@ -13,7 +13,7 @@ import { create } from "zustand";
 // ========== Internal imports ==========
 import { isDraftEqual, jobToDraft, validateJobDraft, type itfJobFormCheck } from "@/lib/job-form";
 import { createJobDraft } from "@/shared/defaults";
-import type { typAppErrorPayload } from "@/shared/schemas/common";
+import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { typJob, typJobDraft, typJobRunOptions } from "@/shared/schemas/job";
 import type { typSettings } from "@/shared/schemas/settings";
 import { useJobsStore } from "@/stores/jobs-store";
@@ -24,6 +24,10 @@ export interface itfJobEditorState {
     jobId: string | null;
     baseline: typJobDraft | null;
     draft: typJobDraft | null;
+    /** 편집 중 그룹 지정(저장 입력이 아니라 jobs:setGroup으로 반영한다, FR-17) */
+    groupId: string | null;
+    /** 열었을 때의 그룹. groupId와 다르면 저장할 때 setGroup을 부른다 */
+    baseGroupId: string | null;
     /** 열었을 때의 rev. jobs:changed로 rev가 바뀌면 외부 변경 */
     baseRev: number | null;
     externalChange: boolean;
@@ -41,6 +45,8 @@ export interface itfJobEditorState {
     setField: <K extends keyof typJobDraft>(key: K, value: typJobDraft[K]) => void;
     setOptions: (patch: Partial<typJobRunOptions>) => void;
     setAutoSync: (patch: Partial<typJobDraft["autoSync"]>) => void;
+    /** 그룹 select. 저장 전에는 main을 부르지 않는다(rev를 올리지 않는다) */
+    setGroup: (groupId: string | null) => void;
     /** draft = baseline */
     revert: () => void;
     /** 검증 → create/update → 성공 시 baseline 갱신. caseInsensitive는 settings.compare 값 */
@@ -62,6 +68,7 @@ type typEditorData = Omit<
     | "setField"
     | "setOptions"
     | "setAutoSync"
+    | "setGroup"
     | "revert"
     | "save"
     | "syncFromJobs"
@@ -74,6 +81,8 @@ const CLOSED: typEditorData = {
     jobId: null,
     baseline: null,
     draft: null,
+    groupId: null,
+    baseGroupId: null,
     baseRev: null,
     externalChange: false,
     showErrors: false,
@@ -86,7 +95,11 @@ const CLOSED: typEditorData = {
 let session = 0;
 
 export function selectDirty(s: itfJobEditorState): boolean {
-    return s.draft !== null && s.baseline !== null && !isDraftEqual(s.draft, s.baseline);
+    return (
+        s.draft !== null &&
+        s.baseline !== null &&
+        (!isDraftEqual(s.draft, s.baseline) || s.groupId !== s.baseGroupId)
+    );
 }
 
 export function selectCheck(
@@ -105,6 +118,8 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
             jobId: job.id,
             baseline: jobToDraft(job),
             draft: jobToDraft(job),
+            groupId: job.groupId,
+            baseGroupId: job.groupId,
             baseRev: job.rev,
         });
         useUiStore.getState().openEditor({ mode: "edit", jobId: job.id });
@@ -142,9 +157,11 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
                   }
                 : {},
         ),
+    setGroup: (groupId) => set({ groupId, serverError: null }),
     revert: () =>
         set((s) => ({
             draft: s.baseline ? structuredClone(s.baseline) : null,
+            groupId: s.baseGroupId,
             serverError: null,
             showErrors: false,
         })),
@@ -159,20 +176,46 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
         const submitted = s.draft;
         set({ saving: true, serverError: null });
         const jobs = useJobsStore.getState();
-        const r =
-            s.jobId === null ? await jobs.create(submitted) : await jobs.update(s.jobId, submitted);
+        // 그룹만 바꿨으면 jobs.update(rev +1)를 부르지 않고 setGroup만 한다(비교 계획 보호, Q-3)
+        const draftChanged = s.baseline === null || !isDraftEqual(submitted, s.baseline);
+        let r: typApiResult<typJob>;
+        if (s.jobId === null) {
+            r = await jobs.create(submitted);
+        } else if (draftChanged) {
+            r = await jobs.update(s.jobId, submitted);
+        } else {
+            const cur = jobs.jobs.find((j) => j.id === s.jobId);
+            r = cur
+                ? { ok: true, data: cur }
+                : {
+                      ok: false,
+                      error: { code: "NOT_FOUND", message: "작업을 찾을 수 없습니다." },
+                  };
+        }
         // 저장하는 동안 다른 작업으로 옮겼다면 그 편집을 건드리지 않는다
         if (mine !== session) return r.ok;
         if (!r.ok) {
             set({ saving: false, serverError: r.error, showErrors: true });
             return false;
         }
-        const saved = jobToDraft(r.data);
+        let job = r.data;
+        if (job.groupId !== s.groupId) {
+            const g = await jobs.setGroup(job.id, s.groupId);
+            if (mine !== session) return g.ok;
+            if (!g.ok) {
+                set({ saving: false, serverError: g.error, showErrors: true });
+                return false;
+            }
+            job = g.data;
+        }
+        const saved = jobToDraft(job);
         const cur = get().draft;
         set({
-            jobId: r.data.id,
+            jobId: job.id,
             baseline: saved,
-            baseRev: r.data.rev,
+            baseRev: job.rev,
+            groupId: job.groupId,
+            baseGroupId: job.groupId,
             // 저장 중 더 고친 내용은 남긴다
             draft: cur && !isDraftEqual(cur, submitted) ? cur : structuredClone(saved),
             externalChange: false,
@@ -181,8 +224,8 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
         });
         // 새 작업을 저장했으면 편집기 대상도 그 작업으로 옮긴다(저장 뒤에도 같은 편집기가 이어진다)
         const ui = useUiStore.getState();
-        if (ui.editor !== null && ui.editor.jobId !== r.data.id) {
-            ui.openEditor({ mode: "edit", jobId: r.data.id });
+        if (ui.editor !== null && ui.editor.jobId !== job.id) {
+            ui.openEditor({ mode: "edit", jobId: job.id });
         }
         return true;
     },
@@ -214,13 +257,27 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
                     });
                 }
             }
+            // 그룹 지정은 rev를 올리지 않는다. 사용자가 아직 안 바꿨으면 바깥 변경을 따른다
+            if (
+                job.rev === s.baseRev &&
+                job.groupId !== s.baseGroupId &&
+                s.groupId === s.baseGroupId
+            ) {
+                set({ groupId: job.groupId, baseGroupId: job.groupId });
+            }
             return;
         }
         if (selectDirty(s)) {
             set({ externalChange: true });
             return;
         }
-        set({ baseline: jobToDraft(job), draft: jobToDraft(job), baseRev: job.rev });
+        set({
+            baseline: jobToDraft(job),
+            draft: jobToDraft(job),
+            groupId: job.groupId,
+            baseGroupId: job.groupId,
+            baseRev: job.rev,
+        });
     },
     guard: (action) => {
         if (selectDirty(get())) set({ pendingAction: action });

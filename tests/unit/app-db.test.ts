@@ -209,15 +209,88 @@ describe("openAppDb", () => {
         );
     });
 
-    it("v1 DB를 열면 pre-v2 백업을 만들고 v2로 올린다", async () => {
+    it("v1 DB를 열면 pre-v2 백업을 만들고 최신 버전으로 올린다", async () => {
         const v1 = clsSqliteDb.open({ file: join(dir, DB_FILE_NAME) });
         migrateSchema(v1, () => undefined, MIGRATIONS.slice(0, 1));
         v1.close();
         const r = await f_Open();
-        expect(r.db.getUserVersion()).toBe(2);
+        expect(r.db.getUserVersion()).toBe(SCHEMA_VERSION);
         expect(
             f_Backups().some((n) => /^rclonegui-store-pre-v2-\d{8}-\d{6}\.sqlite$/.test(n)),
         ).toBe(true);
+    });
+
+    it("v2 DB를 열면 pre-v3 백업을 만들고 작업·이력은 그대로, 그룹은 비어 있다", async () => {
+        const v2 = clsSqliteDb.open({ file: join(dir, DB_FILE_NAME) });
+        migrateSchema(v2, () => undefined, MIGRATIONS.slice(0, 2));
+        // 저장된 값은 data(JSON)에 전체 작업이 들어 있다(job-store.f_Row와 같은 모양)
+        const at = "2026-10-01T00:00:00Z";
+        const id = "11111111-1111-4111-8111-111111111111";
+        const job = {
+            id,
+            name: "이전 작업",
+            notes: "",
+            source: "C:\\tmp\\src",
+            destination: "test-remote:dst",
+            mode: "copy",
+            scope: "files",
+            excludes: [],
+            excludePatternIds: [],
+            options: {
+                checkers: 8,
+                transfers: 4,
+                fastList: true,
+                skipLinks: true,
+                ignoreErrors: false,
+                checkHashes: false,
+                modtimeToleranceMs: 2000,
+                preflightBeforeDestructive: true,
+            },
+            configPathOverride: null,
+            backupDir: null,
+            autoSync: {
+                enabled: false,
+                intervalMinutes: 60,
+                allowDeletes: false,
+                kind: "interval",
+                timeOfDay: "09:00",
+                weekdays: 62,
+                backend: "app",
+                nextRunAt: null,
+                lastAutoRunAt: null,
+            },
+            rev: 0,
+            createdAt: at,
+            updatedAt: at,
+            lastRun: null,
+        };
+        v2.run(
+            "INSERT INTO jobs (id, name, rev, created_at, updated_at, data) VALUES ($id, $name, $rev, $createdAt, $updatedAt, $data)",
+            {
+                id,
+                name: job.name,
+                rev: job.rev,
+                createdAt: at,
+                updatedAt: at,
+                data: JSON.stringify(job),
+            },
+        );
+        v2.run(
+            "INSERT INTO run_records (id, job_id, status, started_at, data) VALUES ('r1', $id, 'success', $at, '{}')",
+            { id, at },
+        );
+        // 이미 쓰던 저장소: 예전 JSON 가져오기 표시가 있어 다시 가져오지 않는다
+        v2.run("INSERT INTO meta (key, value) VALUES ('json_import', 'done')");
+        v2.close();
+        const r = await f_Open();
+        expect(r.db.getUserVersion()).toBe(SCHEMA_VERSION);
+        expect(
+            f_Backups().some((n) => /^rclonegui-store-pre-v3-\d{8}-\d{6}\.sqlite$/.test(n)),
+        ).toBe(true);
+        const jobs = new clsJobStore({ db: r.db, caseInsensitive: () => true });
+        const loaded = await jobs.load();
+        expect(loaded.map((j) => [j.name, j.groupId])).toEqual([["이전 작업", null]]);
+        expect(r.db.get("SELECT COUNT(*) AS n FROM run_records")).toEqual({ n: 1 });
     });
 
     it("더 새 버전 데이터: 파일을 바꾸지 않고 거부한다(손상 처리 안 함)", async () => {

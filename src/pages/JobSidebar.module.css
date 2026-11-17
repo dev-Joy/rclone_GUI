@@ -55,6 +55,92 @@
             align-items: start;
         }
 
+        /* 그룹 머리글 + 작업 묶음 (FR-17). 그룹이 없으면 이 묶음 없이 평평한 목록이다 */
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            list-style: none;
+        }
+
+        .groupHead {
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            padding-top: 4px;
+        }
+
+        .groupToggle {
+            display: flex;
+            flex: 1;
+            gap: 6px;
+            align-items: center;
+            min-width: 0;
+            padding: 4px 6px;
+            border: 0;
+            border-radius: 4px;
+            background: none;
+            color: var(--muted);
+            font: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-align: left;
+            cursor: pointer;
+
+            &:hover {
+                background: var(--panel-2);
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: -2px;
+            }
+        }
+
+        .groupCaret {
+            flex: none;
+            width: 10px;
+            color: var(--muted);
+        }
+
+        .groupName {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .groupCount {
+            flex: none;
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .members {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin: 0;
+            padding: 0 0 0 8px;
+            list-style: none;
+        }
+
+        .deleteBody {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+
+            p {
+                margin: 0;
+            }
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
         .item {
             display: flex;
             gap: 8px;

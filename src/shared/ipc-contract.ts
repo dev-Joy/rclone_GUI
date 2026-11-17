@@ -16,6 +16,7 @@ import type {
     typExcludeUpdateInput,
 } from "@/shared/schemas/excludes";
 import type { typHistoryListInput } from "@/shared/schemas/history";
+import type { itfGroup, typGroupSaveInput } from "@/shared/schemas/group";
 import type { typJob, typJobDraft, typJobPatch } from "@/shared/schemas/job";
 import type {
     typRemoteConfigAnswerInput,
@@ -68,6 +69,10 @@ export const IPC_CHANNELS = {
     jobsUpdate: "jobs:update",
     jobsDelete: "jobs:delete",
     jobsDuplicate: "jobs:duplicate",
+    jobsSetGroup: "jobs:setGroup",
+    groupsList: "groups:list",
+    groupsSave: "groups:save",
+    groupsDelete: "groups:delete",
     excludesList: "excludes:list",
     excludesCreate: "excludes:create",
     excludesUpdate: "excludes:update",
@@ -114,6 +119,7 @@ export const IPC_CHANNELS = {
 
 export const IPC_EVENTS = {
     jobsChanged: "jobs:changed",
+    groupsChanged: "groups:changed",
     compareProgress: "compare:progress",
     runEvent: "run:event",
     schedulerState: "scheduler:state",
@@ -195,6 +201,10 @@ export interface itfJobsChangedEvent {
     jobs: typJob[];
 }
 
+export interface itfGroupsChangedEvent {
+    groups: itfGroup[];
+}
+
 /** preload가 window.rclonegui로 노출하는 API */
 export interface itfRcloneGuiApi {
     app: {
@@ -214,6 +224,17 @@ export interface itfRcloneGuiApi {
         update(id: string, patch: typJobPatch): Promise<typApiResult<typJob>>;
         remove(id: string): Promise<typApiResult<null>>;
         duplicate(id: string): Promise<typApiResult<typJob>>;
+        /** 그룹 지정·해제. rev를 올리지 않으므로 비교 계획이 무효가 되지 않는다 */
+        setGroup(jobId: string, groupId: string | null): Promise<typApiResult<typJob>>;
+    };
+    /** 작업 목록을 묶어 보는 그룹(FR-17). 실행에는 영향이 없다 */
+    groups: {
+        /** position 순 */
+        list(): Promise<typApiResult<itfGroup[]>>;
+        /** 같은 이름(대소문자 무시)은 VALIDATION */
+        save(input: typGroupSaveInput): Promise<typApiResult<itfGroup>>;
+        /** 속한 작업을 그룹 없음으로 옮긴 뒤 지운다 */
+        remove(id: string): Promise<typApiResult<true>>;
     };
     excludes: {
         /** 공용 제외 패턴과 쓰는 작업(패턴 순) */
@@ -329,6 +350,7 @@ export interface itfRcloneGuiApi {
     };
     events: {
         onJobsChanged(cb: (e: itfJobsChangedEvent) => void): () => void;
+        onGroupsChanged(cb: (e: itfGroupsChangedEvent) => void): () => void;
         onCompareProgress(cb: (e: itfCompareProgress) => void): () => void;
         onRunEvent(cb: (e: typRunEvent) => void): () => void;
         onSchedulerState(cb: (e: itfSchedulerState) => void): () => void;

@@ -1,0 +1,14 @@
+/**
+ * GroupNameDialog 스타일 (페이지)
+ *
+ * @author dev-Joy 2026-11-17
+ */
+
+@layer pages {
+    .GroupNameDialog {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 320px;
+    }
+}

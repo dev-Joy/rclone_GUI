@@ -1,7 +1,7 @@
 /**
  * 빌드본(out/) 스모크 확인. 임시 userData로 앱을 두 번 띄워 원격 디버깅(CDP)으로 화면을 조작한다.
- * 0단계: 임시 userData에 v1 저장소(빈 DB, user_version 1)를 만들어 두고, 1회차 시작 때 v2로 올라가는지 본다
- *        (pre-v2 백업·연결 테이블). 공용 제외 패턴 IPC(추가·중복·#거부·삭제)도 1회차에서 확인한다.
+ * 0단계: 임시 userData에 v1 저장소(빈 DB, user_version 1)를 만들어 두고, 1회차 시작 때 v3로 올라가는지 본다
+ *        (pre-v2 백업·연결 테이블·그룹 표). 공용 제외 패턴 IPC(추가·중복·#거부·삭제)도 1회차에서 확인한다.
  * 1회차: 창 표시, window.rclonegui 확인, 작업 저장, 차단 경로 거부, 설정 변경,
  *        rclone 감지·경로 확인·WSL 목록·외부 링크 거부(설정 파일은 임시 rclone.conf),
  *        작업 화면(새 작업·저장 차단·저장·변경 확인·복제·삭제·remote 선택·접근 확인: 편집은 header의 ‘편집’ 모달)과
@@ -169,7 +169,7 @@ function f_ReadRunRecord(userData, runId) {
 }
 
 /**
- * v1 저장소를 만든다(db-schema.ts의 V1과 같은 테이블, user_version 1). 시작 때 v2 이전을 확인하는 용도
+ * v1 저장소를 만든다(db-schema.ts의 V1과 같은 테이블, user_version 1). 시작 때 최신(v3)으로 올라가는지 확인하는 용도
  */
 function f_SeedV1Db(userData) {
     const db = new DatabaseSync(join(userData, "rclonegui-store.sqlite"));
@@ -202,7 +202,7 @@ function f_SeedV1Db(userData) {
     }
 }
 
-/** 앱이 끝난 뒤 저장소 스키마 버전과 연결 테이블 유무 */
+/** 앱이 끝난 뒤 저장소 스키마 버전과 연결 테이블·그룹 표 유무 */
 function f_ReadSchema(userData) {
     const db = new DatabaseSync(join(userData, "rclonegui-store.sqlite"), { readOnly: true });
     try {
@@ -212,7 +212,10 @@ function f_ReadSchema(userData) {
                 "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'job_exclude_patterns'",
             )
             .get();
-        return { version, hasLinks: link !== undefined };
+        const groups = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'groups'")
+            .get();
+        return { version, hasLinks: link !== undefined, hasGroups: groups !== undefined };
     } finally {
         db.close();
     }
@@ -534,7 +537,7 @@ try {
     f_Check(
         "window.rclonegui API",
         keys ===
-            "app,settings,jobs,excludes,remotes,remoteConfig,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
+            "app,settings,jobs,groups,excludes,remotes,remoteConfig,compare,run,history,scheduler,rclone,wsl,dialog,system,events",
         keys,
     );
     const info = await a.evaluate("window.rclonegui.app.getInfo()");
@@ -856,13 +859,15 @@ try {
         `${chipState}.map((b) => b.textContent.replace(/\\s+/g, " ").trim() + ":" + b.getAttribute("aria-pressed")).join(" | ")`,
     );
     f_Check(
-        "비교 실행 → 상태 칩(추가 1·변경 1·대상만 1·같음 1, 같음은 꺼짐)",
+        "비교 실행 → 상태 칩(추가 1·변경 1·대상만 1·같음 1, 같음은 꺼짐 / 보기 평면)",
         compared &&
-            chipText.includes("추가 1:true") &&
-            chipText.includes("변경 1:true") &&
-            chipText.includes("대상만 1:true") &&
-            chipText.includes("오류 0:true") &&
-            chipText.includes("같음 1:false"),
+            chipText.includes("추가1:true") &&
+            chipText.includes("변경1:true") &&
+            chipText.includes("대상만1:true") &&
+            chipText.includes("오류0:true") &&
+            chipText.includes("같음1:false") &&
+            chipText.includes("트리:false") &&
+            chipText.includes("평면:true"),
         compared ? chipText : (await ui.text()).slice(0, 300),
     );
     const f_Rows = () =>
@@ -1398,9 +1403,10 @@ try {
         ? readdirSync(join(userData, "db-backups"))
         : [];
     f_Check(
-        "v1 저장소 → v2(연결 테이블)·pre-v2 백업",
-        schema.version === 2 &&
+        "v1 저장소 → v3(연결 테이블·그룹 표)·pre-v2 백업",
+        schema.version === 3 &&
             schema.hasLinks &&
+            schema.hasGroups &&
             backups.some((n) => /^rclonegui-store-pre-v2-\d{8}-\d{6}\.sqlite$/.test(n)),
         `${JSON.stringify(schema)} ${backups.join(",")}`,
     );

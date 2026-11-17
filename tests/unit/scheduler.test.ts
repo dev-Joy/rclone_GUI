@@ -57,6 +57,7 @@ function f_Job(
         rev: 0,
         createdAt: iso(0),
         updatedAt: iso(0),
+        groupId: null,
         lastRun: null,
     };
 }

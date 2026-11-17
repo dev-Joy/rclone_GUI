@@ -39,6 +39,7 @@ import { formatLocalDateTime } from "@/shared/format";
 import { nextOccurrence } from "@/shared/schedule";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { typScheduleBackend, typScheduleKind, typSyncScope } from "@/shared/schemas/job";
+import { useGroupsStore } from "@/stores/groups-store";
 import { selectDirty, useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
 import { osTaskOf, useSchedulerStore } from "@/stores/scheduler-store";
@@ -141,6 +142,9 @@ export default function JobEditor() {
     const setField = useJobEditorStore((s) => s.setField);
     const setOptions = useJobEditorStore((s) => s.setOptions);
     const setAutoSync = useJobEditorStore((s) => s.setAutoSync);
+    const groupId = useJobEditorStore((s) => s.groupId);
+    const setGroup = useJobEditorStore((s) => s.setGroup);
+    const groups = useGroupsStore((s) => s.groups);
     const save = useJobEditorStore((s) => s.save);
     const closeDraft = useJobEditorStore((s) => s.close);
     const guard = useJobEditorStore((s) => s.guard);
@@ -207,6 +211,11 @@ export default function JobEditor() {
         { value: "app", label: BACKEND_APP_LABEL },
         { value: "os", label: BACKEND_OS_LABEL, disabled: !osAvailable },
     ];
+    /** 그룹 select 옵션. 빈 값은 그룹 없음(null) */
+    const groupOptions = [
+        { value: "", label: "그룹 없음" },
+        ...groups.map((g) => ({ value: g.id, label: g.name })),
+    ];
     // 저장된 값 기준: Windows 예약이 켜져 있는데 등록되지 않았거나 실패 문구가 있으면 경고
     const savedOs = job !== null && job.autoSync.enabled && job.autoSync.backend === "os";
     const osTask = osTaskOf(osStatus, jobId);
@@ -227,6 +236,8 @@ export default function JobEditor() {
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Name = (v: string) => setField("name", v);
+    /** 빈 값은 그룹 없음. 저장할 때 jobs:setGroup으로 반영한다(rev를 올리지 않는다) */
+    const h_Group = (v: string) => setGroup(v === "" ? null : v);
     const h_Mode = (e: ChangeEvent<HTMLInputElement>) =>
         setField("mode", e.target.value as typRunMode);
     const h_Scope = (e: ChangeEvent<HTMLInputElement>) =>
@@ -375,6 +386,19 @@ export default function JobEditor() {
                                 placeholder="예: 프로젝트 백업"
                                 invalid={Boolean(err("name"))}
                                 describedBy="job-name-desc"
+                            />
+                        </ZBCField>
+                        <ZBCField
+                            label="그룹"
+                            htmlFor="job-group"
+                            hint="작업 목록에서 묶어 보는 곳입니다. 실행에는 영향이 없습니다."
+                        >
+                            <ZBCSelect
+                                id="job-group"
+                                name="group"
+                                value={groupId ?? ""}
+                                options={groupOptions}
+                                onChange={h_Group}
                             />
                         </ZBCField>
                         <fieldset className={styles.modes}>

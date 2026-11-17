@@ -33,6 +33,8 @@ interface itfJobsState {
     remove: (id: string) => Promise<typApiResult<null>>;
     /** 성공 시 사본 선택 */
     duplicate: (id: string) => Promise<typApiResult<typJob>>;
+    /** 그룹 지정·해제(rev는 그대로). 성공 시 목록 갱신 */
+    setGroup: (id: string, groupId: string | null) => Promise<typApiResult<typJob>>;
     /** main 이벤트 구독. 해제 함수를 돌려준다 */
     subscribe: () => () => void;
 }
@@ -102,6 +104,11 @@ export const useJobsStore = create<itfJobsState>((set, get) => ({
     duplicate: async (id) => {
         const r = await f_Call(getApi().jobs.duplicate(id));
         if (r.ok) set((s) => ({ jobs: f_Upsert(s.jobs, r.data), selectedJobId: r.data.id }));
+        return r;
+    },
+    setGroup: async (id, groupId) => {
+        const r = await f_Call(getApi().jobs.setGroup(id, groupId));
+        if (r.ok) set((s) => ({ jobs: f_Upsert(s.jobs, r.data) }));
         return r;
     },
     subscribe: () =>

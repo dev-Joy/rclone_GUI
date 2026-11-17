@@ -38,14 +38,15 @@ afterEach(() => {
 });
 
 describe("migrateSchema", () => {
-    it("새 DB는 백업 없이 최신(v2) 테이블을 만든다", () => {
+    it("새 DB는 백업 없이 최신(v3) 테이블을 만든다", () => {
         const d = f_Open();
         const backups: number[] = [];
         expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 0, to: SCHEMA_VERSION });
         expect(backups).toEqual([]);
-        expect(SCHEMA_VERSION).toBe(2);
+        expect(SCHEMA_VERSION).toBe(3);
         expect(f_Tables(d)).toEqual([
             "exclude_patterns",
+            "groups",
             "job_exclude_patterns",
             "jobs",
             "meta",
@@ -55,8 +56,54 @@ describe("migrateSchema", () => {
             "settings",
         ]);
         // 이미 최신이면 아무것도 안 한다
-        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 2, to: 2 });
+        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 3, to: 3 });
         expect(backups).toEqual([]);
+    });
+
+    it("v2 → v3: 백업을 먼저 부르고, 기존 작업·이력은 그대로 두며 group_id는 NULL", () => {
+        const d = f_Open();
+        migrateSchema(d, () => undefined, MIGRATIONS.slice(0, 2));
+        expect(d.getUserVersion()).toBe(2);
+        d.run(
+            "INSERT INTO jobs (id, name, rev, created_at, updated_at, data) VALUES ('j1', '이전 작업', 0, 'x', 'x', '{}')",
+        );
+        d.run(
+            "INSERT INTO run_records (id, job_id, status, started_at, data) VALUES ('r1', 'j1', 'success', 'x', '{}')",
+        );
+        const backups: number[] = [];
+        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 2, to: 3 });
+        expect(backups).toEqual([2]);
+        expect(f_Tables(d)).toContain("groups");
+        expect(d.all("SELECT id, name, group_id FROM jobs")).toEqual([
+            { id: "j1", name: "이전 작업", group_id: null },
+        ]);
+        expect(d.all("SELECT id FROM run_records").map((r) => r.id)).toEqual(["r1"]);
+    });
+
+    it("v3 그룹: 이름 CHECK·대소문자 무시 중복 거부, 없는 그룹을 가리키는 작업은 거부", () => {
+        const d = f_Open();
+        migrateSchema(d, () => undefined);
+        const ins = (id: string, name: string, position: number) =>
+            d.run(
+                "INSERT INTO groups (id, name, position, created_at, updated_at) VALUES ($id, $name, $position, 'x', 'x')",
+                { id, name, position },
+            );
+        ins("g-1", "백업", 0);
+        expect(() => ins("g-2", "백업", 1)).toThrow(clsSqliteError);
+        expect(() => ins("g-2", " 백업", 1)).toThrow(clsSqliteError);
+        expect(() => ins("g-2", "", 1)).toThrow(clsSqliteError);
+        ins("g-2", "테스트", 1);
+        expect(() =>
+            d.run(
+                "INSERT INTO jobs (id, name, rev, created_at, updated_at, data, group_id) VALUES ('j', 'n', 0, 'x', 'x', '{}', '없음')",
+            ),
+        ).toThrow(clsSqliteError);
+        d.run(
+            "INSERT INTO jobs (id, name, rev, created_at, updated_at, data, group_id) VALUES ('j', 'n', 0, 'x', 'x', '{}', 'g-2')",
+        );
+        // FK(ON DELETE SET NULL)로 그룹을 지우면 작업의 group_id는 NULL이 된다
+        d.run("DELETE FROM groups WHERE id = 'g-2'");
+        expect(d.all("SELECT group_id FROM jobs")).toEqual([{ group_id: null }]);
     });
 
     it("v1 → v2: 백업을 먼저 부르고, #·;·공백 패턴은 버리고 나머지는 옮긴다", () => {
@@ -76,7 +123,7 @@ describe("migrateSchema", () => {
             );
         }
         const backups: number[] = [];
-        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 1, to: 2 });
+        expect(migrateSchema(d, (v) => backups.push(v))).toEqual({ from: 1, to: SCHEMA_VERSION });
         expect(backups).toEqual([1]);
         expect(d.all("SELECT id FROM exclude_patterns ORDER BY id").map((r) => r.id)).toEqual([
             "k1",

@@ -11,7 +11,12 @@
 // ========== Internal imports ==========
 import { createDefaultSettings } from "@/shared/defaults";
 import { ERROR_MESSAGES, type typErrorCode } from "@/shared/errors";
-import type { itfJobsChangedEvent, itfPathProbe, itfRcloneGuiApi } from "@/shared/ipc-contract";
+import type {
+    itfJobsChangedEvent,
+    itfGroupsChangedEvent,
+    itfPathProbe,
+    itfRcloneGuiApi,
+} from "@/shared/ipc-contract";
 import type {
     itfCompareActive,
     itfCompareProgress,
@@ -20,6 +25,7 @@ import type {
 import { checkPathPair } from "@/shared/path-utils";
 import type { typApiResult, typAppErrorPayload } from "@/shared/schemas/common";
 import type { itfExcludePatternUsage } from "@/shared/schemas/excludes";
+import type { itfGroup } from "@/shared/schemas/group";
 import type { typJob, typJobDraft } from "@/shared/schemas/job";
 import type { typHistoryListInput } from "@/shared/schemas/history";
 import type { typRunRecord, typStartRunInput } from "@/shared/schemas/run";
@@ -81,6 +87,10 @@ export interface itfFakeApi {
     emitAppNotify: (n: itfAppNotify) => void;
     /** excludes.list가 돌려줄 공용 패턴 */
     setExcludes: (items: itfExcludePatternUsage[]) => void;
+    /** groups.list가 돌려줄 그룹(position 순) */
+    setGroups: (items: itfGroup[]) => void;
+    /** main의 groups:changed 이벤트를 흉내 낸다 */
+    emitGroupsChanged: (items: itfGroup[]) => void;
     /** 다음 excludes.update/remove 응답 실패(예: CONFIRM_REQUIRED) */
     setExcludeWriteError: (e: typAppErrorPayload | null) => void;
     /** remotes.list가 돌려줄 북마크 */
@@ -130,6 +140,7 @@ export function makeJob(over: Partial<typJob> = {}): typJob {
         createdAt: "2026-10-28T00:00:00.000Z",
         updatedAt: "2026-10-28T00:00:00.000Z",
         lastRun: null,
+        groupId: null,
         ...over,
     };
 }
@@ -183,6 +194,8 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
     const notifyListeners = new Set<(e: itfAppNotify) => void>();
     let excludes: itfExcludePatternUsage[] = [];
     let excludeWriteError: typAppErrorPayload | null = null;
+    let groups: itfGroup[] = [];
+    const groupListeners = new Set<(e: itfGroupsChangedEvent) => void>();
     let remotes: itfRemoteBookmark[] = [];
     const remoteTestResults = new Map<string, itfPathProbe>();
     let remoteWriteError: typAppErrorPayload | null = null;
@@ -276,6 +289,57 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 jobs = [...jobs, copy];
                 f_Notify();
                 return f_Ok(structuredClone(copy));
+            },
+            setGroup: (jobId, groupId) => {
+                calls.push(`jobs.setGroup:${jobId}:${groupId ?? "null"}`);
+                const cur = jobs.find((j) => j.id === jobId);
+                if (!cur) return f_Fail("NOT_FOUND");
+                if (groupId !== null && !groups.some((g) => g.id === groupId)) {
+                    return f_Fail("VALIDATION");
+                }
+                const next: typJob = { ...cur, groupId };
+                jobs = jobs.map((j) => (j.id === jobId ? next : j));
+                f_Notify();
+                return f_Ok(structuredClone(next));
+            },
+        },
+        groups: {
+            list: () => {
+                calls.push("groups.list");
+                return f_Ok(structuredClone(groups));
+            },
+            save: (input) => {
+                calls.push("groups.save");
+                const name = input.name.trim();
+                const dup = groups.some(
+                    (g) => g.id !== input.id && g.name.toLowerCase() === name.toLowerCase(),
+                );
+                if (name === "" || name.length > 50 || dup) return f_Fail("VALIDATION");
+                const at = "2026-11-17T00:00:00.000Z";
+                const found = groups.find((g) => g.id === input.id);
+                const item: itfGroup = found
+                    ? { ...found, name, updatedAt: at }
+                    : {
+                          id: `g-fake-${groups.length + 1}`,
+                          name,
+                          position: groups.length,
+                          createdAt: at,
+                          updatedAt: at,
+                      };
+                groups = found
+                    ? groups.map((g) => (g.id === item.id ? item : g))
+                    : [...groups, item];
+                for (const l of groupListeners) l({ groups: structuredClone(groups) });
+                return f_Ok(structuredClone(item));
+            },
+            remove: (id) => {
+                calls.push(`groups.remove:${id}`);
+                if (!groups.some((g) => g.id === id)) return f_Fail("NOT_FOUND");
+                groups = groups.filter((g) => g.id !== id);
+                jobs = jobs.map((j) => (j.groupId === id ? { ...j, groupId: null } : j));
+                for (const l of groupListeners) l({ groups: structuredClone(groups) });
+                f_Notify();
+                return f_Ok(true);
             },
         },
         excludes: {
@@ -516,6 +580,10 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
                 listeners.add(cb);
                 return () => listeners.delete(cb);
             },
+            onGroupsChanged: (cb) => {
+                groupListeners.add(cb);
+                return () => groupListeners.delete(cb);
+            },
             onCompareProgress: (cb) => {
                 progressListeners.add(cb);
                 return () => progressListeners.delete(cb);
@@ -596,6 +664,13 @@ export function createFakeApi(seed: typJob[] = []): itfFakeApi {
         },
         setExcludes: (items) => {
             excludes = structuredClone(items);
+        },
+        setGroups: (items) => {
+            groups = structuredClone(items);
+        },
+        emitGroupsChanged: (items) => {
+            groups = structuredClone(items);
+            for (const l of groupListeners) l({ groups: structuredClone(groups) });
         },
         setExcludeWriteError: (e) => {
             excludeWriteError = e;

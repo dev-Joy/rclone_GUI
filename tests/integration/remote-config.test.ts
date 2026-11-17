@@ -71,6 +71,7 @@ function f_Job(over: Partial<typJob>): typJob {
         rev: 0,
         createdAt: NOW,
         updatedAt: NOW,
+        groupId: null,
         lastRun: null,
         ...over,
     };

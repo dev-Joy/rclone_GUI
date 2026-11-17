@@ -12,6 +12,7 @@ import { clsAppError } from "@/main/lib/app-error";
 import { registerCompareIpc, type itfCompareIpcDeps } from "@/main/ipc/compare";
 import { registerDialogIpc, type itfDialogIpcDeps } from "@/main/ipc/dialog";
 import { registerExcludesIpc, type itfExcludesIpcDeps } from "@/main/ipc/excludes";
+import { registerGroupsIpc, type itfGroupsIpcDeps } from "@/main/ipc/groups";
 import { handle } from "@/main/ipc/handle";
 import { registerHistoryIpc, type itfHistoryIpcDeps } from "@/main/ipc/history";
 import { registerRcloneIpc, type itfRcloneIpcDeps } from "@/main/ipc/rclone";
@@ -42,6 +43,7 @@ export interface itfIpcServices
         itfHistoryIpcDeps,
         itfSchedulerIpcDeps,
         itfExcludesIpcDeps,
+        itfGroupsIpcDeps,
         itfRemotesIpcDeps,
         itfRemoteConfigIpcDeps {
     settings: clsSettingsStore;
@@ -145,6 +147,7 @@ export function registerIpc(s: itfIpcServices): void {
     handle(s, IPC_CHANNELS.jobsDuplicate, ({ id }) => s.jobs.duplicate(id), zJobId);
 
     registerExcludesIpc(s);
+    registerGroupsIpc(s);
     registerRemotesIpc(s);
     registerRemoteConfigIpc(s);
     registerCompareIpc(s);

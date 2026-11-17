@@ -17,6 +17,7 @@ import ZBCToast from "@/components/ZBCToast";
 import { errorText, getApi, unwrap } from "@/lib/api";
 import type { itfAppInfo, itfAppNotice } from "@/shared/ipc-contract";
 import { useCompareStore } from "@/stores/compare-store";
+import { useGroupsStore } from "@/stores/groups-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useJobEditorStore } from "@/stores/job-editor-store";
 import { useJobsStore } from "@/stores/jobs-store";
@@ -56,6 +57,8 @@ export default function HomePage(props: itfHomePageProps) {
     const selectedJobId = useJobsStore((s) => s.selectedJobId);
     const loadJobs = useJobsStore((s) => s.load);
     const subscribeJobs = useJobsStore((s) => s.subscribe);
+    const loadGroups = useGroupsStore((s) => s.load);
+    const subscribeGroups = useGroupsStore((s) => s.subscribe);
     const settings = useSettingsStore((s) => s.settings);
     const loadSettings = useSettingsStore((s) => s.load);
     const toasts = useToastStore((s) => s.toasts);
@@ -82,8 +85,14 @@ export default function HomePage(props: itfHomePageProps) {
             .catch((e: unknown) => pushToast("error", errorText(e)));
         void loadSettings();
         void loadJobs();
-        return subscribeJobs();
-    }, [loadJobs, loadSettings, pushToast, subscribeJobs]);
+        void loadGroups();
+        const offJobs = subscribeJobs();
+        const offGroups = subscribeGroups();
+        return () => {
+            offJobs();
+            offGroups();
+        };
+    }, [loadGroups, loadJobs, loadSettings, pushToast, subscribeGroups, subscribeJobs]);
 
     // 비교 진행 이벤트 구독(진행 중인 비교는 getActive로 복구)
     useEffect(() => subscribeCompare(), [subscribeCompare]);

@@ -54,6 +54,7 @@ function f_Job(over: Partial<typJob> = {}): typJob {
         rev: 0,
         createdAt: "2026-10-28T00:00:00.000Z",
         updatedAt: "2026-10-28T00:00:00.000Z",
+        groupId: null,
         lastRun: null,
         ...over,
     };

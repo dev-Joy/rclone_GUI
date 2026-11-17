@@ -30,6 +30,7 @@ function f_Job(id: string, source: string, destination: string): typJob {
         rev: 0,
         createdAt: AT,
         updatedAt: AT,
+        groupId: null,
         lastRun: null,
     };
 }

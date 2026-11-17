@@ -39,6 +39,7 @@ function f_Job(id: string, name: string, createdAt = "2026-10-28T00:00:00.000Z")
         rev: 3,
         createdAt,
         updatedAt: createdAt,
+        groupId: null,
         lastRun: { runId: null, at: createdAt, status: "success" },
     };
 }

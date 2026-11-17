@@ -88,6 +88,7 @@ describe("importLegacyJson", () => {
         expect(await jobs.load()).toEqual(
             f_Fixture<typJobsFile>("jobs.json").jobs.map((j) => ({
                 ...j,
+                groupId: null,
                 excludePatternIds: [],
                 scope: "files",
                 backupDir: null,

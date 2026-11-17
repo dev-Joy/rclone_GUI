@@ -21,6 +21,7 @@ import {
     PATH_MAX_STORED,
 } from "@/shared/option-limits";
 import { zIsoDate, zRunMode, zRunStatus } from "@/shared/schemas/common";
+import { zGroupId } from "@/shared/schemas/group";
 
 const zNoControlChars = (max: number) =>
     z
@@ -180,6 +181,8 @@ export const zJobLastRun = z.object({
 
 export const zJob = zJobStoredDraft.extend({
     id: z.uuid(),
+    /** 작업 그룹(jobs.group_id 열이 원본, INT-008 FR-17). 예전 데이터·저장 입력에는 없다 */
+    groupId: zGroupId.nullable().default(null),
     autoSync: zAutoSync,
     rev: z.number().int().min(0),
     createdAt: zIsoDate,

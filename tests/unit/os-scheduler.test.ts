@@ -68,6 +68,7 @@ function f_Job(id: string, over: Partial<typJob["autoSync"]> = {}): typJob {
         rev: 0,
         createdAt: "2026-10-29T00:00:00.000Z",
         updatedAt: "2026-10-29T00:00:00.000Z",
+        groupId: null,
         lastRun: null,
     };
 }

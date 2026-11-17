@@ -36,6 +36,12 @@ const api: itfRcloneGuiApi = {
         update: (id, patch) => ipcRenderer.invoke(C.jobsUpdate, { id, patch }),
         remove: (id) => ipcRenderer.invoke(C.jobsDelete, { id }),
         duplicate: (id) => ipcRenderer.invoke(C.jobsDuplicate, { id }),
+        setGroup: (jobId, groupId) => ipcRenderer.invoke(C.jobsSetGroup, { id: jobId, groupId }),
+    },
+    groups: {
+        list: () => ipcRenderer.invoke(C.groupsList),
+        save: (input) => ipcRenderer.invoke(C.groupsSave, input),
+        remove: (id) => ipcRenderer.invoke(C.groupsDelete, { id }),
     },
     excludes: {
         list: () => ipcRenderer.invoke(C.excludesList),
@@ -112,6 +118,7 @@ const api: itfRcloneGuiApi = {
     },
     events: {
         onJobsChanged: (cb) => f_Subscribe(E.jobsChanged, cb),
+        onGroupsChanged: (cb) => f_Subscribe(E.groupsChanged, cb),
         onCompareProgress: (cb) => f_Subscribe(E.compareProgress, cb),
         onRunEvent: (cb) => f_Subscribe(E.runEvent, cb),
         onSchedulerState: (cb) => f_Subscribe(E.schedulerState, cb),

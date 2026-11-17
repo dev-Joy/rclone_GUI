@@ -66,6 +66,7 @@ import { clsScheduler } from "@/main/services/scheduler";
 import { clsWslService } from "@/main/services/wsl";
 import { openAppDb } from "@/main/store/app-db";
 import { clsExcludeStore } from "@/main/store/exclude-store";
+import { clsGroupStore } from "@/main/store/group-store";
 import { clsHistoryStore } from "@/main/store/history-store";
 import { clsJobStore } from "@/main/store/job-store";
 import { clsRemoteStore } from "@/main/store/remote-store";
@@ -141,6 +142,7 @@ const headlessExit = { running: false, again: false };
 interface itfServices {
     settings: clsSettingsStore;
     jobs: clsJobStore;
+    groups: clsGroupStore;
     history: clsHistoryStore;
     compare: clsCompareService;
     runs: clsRunService;
@@ -620,6 +622,14 @@ async function f_InitCore(): Promise<itfServices> {
         },
     });
     await jobs.load();
+    // 작업 그룹(INT-008 FR-17). 그룹이 바뀌면 groups:changed로 알린다
+    const groups = new clsGroupStore({
+        db,
+        onChange: (list) => {
+            mainWindow?.webContents.send(IPC_EVENTS.groupsChanged, { groups: list });
+        },
+    });
+    groups.load();
     const excludeStore = new clsExcludeStore({ db });
     excludeStore.load();
     const remoteStore = new clsRemoteStore({ db });
@@ -747,6 +757,7 @@ async function f_InitCore(): Promise<itfServices> {
     return {
         settings,
         jobs,
+        groups,
         history,
         compare,
         runs,
@@ -768,7 +779,7 @@ async function f_StartGui(hidden: boolean): Promise<void> {
     if (guiStarted || !svc) return;
     guiStarted = true;
     const { settings, jobs, history, compare, runs, scheduler, osScheduler } = svc;
-    const { rcloneEnv, remoteService, remoteConfig, wsl, excludes } = svc;
+    const { rcloneEnv, remoteService, remoteConfig, wsl, excludes, groups } = svc;
     f_SyncLoginItem(settings.get().ui.launchAtLogin);
 
     powerMonitor.on("resume", () => {
@@ -792,6 +803,7 @@ async function f_StartGui(hidden: boolean): Promise<void> {
         scheduler,
         osScheduler,
         excludes,
+        groups,
         remotes: remoteService,
         remoteConfig,
         getWindow: () => mainWindow,

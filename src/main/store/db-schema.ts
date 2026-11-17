@@ -112,9 +112,30 @@ const V2: readonly string[] = [
     "CREATE INDEX job_exclude_patterns_pattern ON job_exclude_patterns (pattern_id)",
 ];
 
+/**
+ * v3 (INT-008 T-06): 작업 그룹(FR-17). 그룹은 이름을 대소문자 없이 비교해 중복을 막고(position 순으로 보인다),
+ * jobs.group_id가 그룹을 가리킨다. 그룹을 지우면 속한 작업은 그룹 없음(NULL)이 된다.
+ * 그룹 지정은 jobs.data(JSON)가 아니라 이 열이 원본이다(job-store.setGroup).
+ */
+const V3: readonly string[] = [
+    `CREATE TABLE groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (
+            length(name) BETWEEN 1 AND 50
+            AND name = trim(name)
+        ),
+        position INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    ) STRICT`,
+    "ALTER TABLE jobs ADD COLUMN group_id TEXT REFERENCES groups (id) ON DELETE SET NULL",
+    "CREATE INDEX jobs_group ON jobs (group_id)",
+];
+
 export const MIGRATIONS: readonly itfMigration[] = [
     { version: 1, statements: V1 },
     { version: 2, statements: V2 },
+    { version: 3, statements: V3 },
 ];
 
 export const SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;
