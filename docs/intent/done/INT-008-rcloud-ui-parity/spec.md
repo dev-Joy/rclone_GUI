@@ -1,5 +1,5 @@
 # Spec: 화면 모양과 구조를 1세대 구현(rcloud)과 같게 되돌리기
-- Intent: [INT-008](intent.md) | Status: planned | 작성일: 2026-11-17
+- Intent: [INT-008](intent.md) | Status: done (2026-11-17) | 작성일: 2026-11-17
 - Intent updated_at: 2026-11-17T15:33:49+09:00
 
 > 표기: `rcloud/…`는 `D:\dev-Joy\rcloud`(= `/mnt/d/dev-Joy/rcloud`, HEAD `7d054be`) 기준 경로다. 접두사가 없는 경로는 rcloneGUI 저장소 기준이다.

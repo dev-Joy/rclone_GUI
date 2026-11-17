@@ -1,7 +1,7 @@
 ---
 id: INT-008
 title: 화면 모양과 구조를 1세대 구현(rcloud)과 같게 되돌리기
-status: planned
+status: done
 priority: P2
 created: 2026-11-17
 updated: 2026-11-17
@@ -60,6 +60,10 @@ updated_at: 2026-11-17T15:33:49+09:00
 - [x] 분해 여부 — 작업 그룹(DB 마이그레이션)과 파일 트리 보기(새 의존성)를 별도 intent로 나눌지, 이 intent 하나에서 Phase로 나눌지 → 답변: 한 intent, Phase 분리(Phase 1 시각 스타일·레이아웃 → Phase 2 우클릭 메뉴·트리 보기 → Phase 3 작업 그룹 DB) (2026-11-17)
 - [x] 우클릭 메뉴 범위 — rcloud ItemMenu는 작업 목록이 아니라 비교 파일 줄 메뉴(`rcloud/src/pages/ItemMenu.tsx:6`)였다 → 답변: 파일 줄 메뉴에 `경로 복사`만, `빼기`는 제외 (2026-11-17)
 
+## 결과 (Outcome)
+- 2026-11-17 완료: 테마·글꼴·공용 컴포넌트 값을 rcloud와 같게 하고 화면을 상단 막대·250px 작업 목록·작업 화면(header·toolbar·탭) 구조로 되돌렸다. 편집·설정은 모달, Phase 2 트리 보기·파일 줄 `경로 복사`, Phase 3 DB v3 작업 그룹까지 반영. 실행·비교·삭제 확인과 안전 게이트는 그대로다.
+- 상세: [result.md](result.md)
+
 ## 작업 (Tasks)
 - [x] T-01 [P2] 기준 화면·미해결 질문 확정 (Phase 1, plan Step 0) — §10 Q-1~Q-4 결정, rcloud 빌드본 캡처 7장(라이트·다크)을 비교 기준으로 확보
 - [x] T-02 [P2] 테마 값·공용 컴포넌트 모양 (Phase 1, Step 1~2) — 토큰 이름은 두고 값을 rcloud와 같게, 본문 13px·mono `Consolas, "D2Coding", monospace`, Button `small`, Badge 4px/11px, `ZBCDot` 신규, 토스트를 위쪽 가운데 notice로
@@ -67,4 +71,4 @@ updated_at: 2026-11-17T15:33:49+09:00
 - [x] T-04 [P2] 파일 목록·기록 탭·모달·E2E (Phase 1, Step 6~8) — 상태 칩 5종(같음 기본 꺼짐)·`상태별` 보기·6열 표, 기록 표와 행마다 목록·정보·로그, 작업 편집·설정 모달(바깥 클릭으로 닫히지 않고 저장 안 한 변경은 확인), `⋯` 메뉴(미리보기 실행·비교/동기화 명령 복사), E2E 갱신·`build:win`
 - [x] T-05 [P2] 트리 보기·파일 줄 메뉴 (Phase 2, Step 9~10) — 폴더 트리 빌드·평탄화 후 `useVirtualRows`, 모두 펼치기/접기, 트리|평면 토글, 파일 행 우클릭·메뉴 키 `경로 복사`
 - [x] T-06 [P2] 작업 그룹 DB·UI (Phase 3, Step 11~12) — DB v3 `groups` 테이블·마이그레이션·백업, `groups:*` IPC, 목록 그룹 머리글(접기·이름 바꾸기·지우기)·`+ 새 그룹`, 편집 모달 그룹 select
-- [ ] T-07 [P2] 문서·전체 검증 (마감, Step 13) — CHANGELOG·MVP_SPEC §13·README·`docs/works` 갱신, Phase 1~3 전체 검증과 정합성 게이트
+- [x] T-07 [P2] 문서·전체 검증 (마감, Step 13) — CHANGELOG·MVP_SPEC §13·README·`docs/works` 갱신, Phase 1~3 전체 검증과 정합성 게이트 (2026-11-17)
