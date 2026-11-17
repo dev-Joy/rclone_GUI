@@ -2,7 +2,10 @@
 
 이 문서는 일반 사용자를 위해 버전별 주요 변경사항을 알기 쉽게 정리한 이력입니다.
 
-<!-- version-history: last-sha=1b6420d47dd5562bd8fe2d15a752773fdf90d7d7 last-date=2026-11-17 -->
+<!-- version-history: last-sha=acb1d9df65d91ab03bedf3f975dc4a6d92a4843c last-date=2026-11-17 -->
+
+## v0.1.79 (2026-11-17)
+- 줄 단위 diff와 루트·상대 경로 결합 함수를 추가한다
 
 ## v0.1.74 (2026-11-17)
 - INT-008 정합성 2차 지적 사항을 반영한다

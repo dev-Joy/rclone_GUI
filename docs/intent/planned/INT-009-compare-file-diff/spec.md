@@ -1,6 +1,6 @@
 # Spec: 비교 결과의 변경 파일 내용 차이(diff)를 동기화 전에 앱에서 보기
 - Intent: [INT-009](intent.md) | Status: planned | 작성일: 2026-11-17
-- Intent updated_at: 2026-11-17T16:42:44+09:00
+- Intent updated_at: 2026-11-17T21:45:00+09:00
 
 > 기준: rcloneGUI HEAD `a830acb`(2026-11-17). intent 작성 뒤 INT-008 Phase 2(`8d2ed8c`)가 들어와 "행에 동작 없음·ItemMenu 미사용" 전제가 바뀌었다. 이 문서는 바뀐 현재 코드를 기준으로 쓴다(§3 드리프트 교정).
 
@@ -199,4 +199,4 @@ export function joinRootRelative(root: itfParsedPath, rel: string): string;
 - 모의 독해: 새 세션이 spec·plan만으로 §10 Q-1 확정 후 plan Step 1부터 시작할 수 있다 — 통과.
 
 ## 10. 미해결 질문 (Open questions)
-- [ ] Q-1 비 UTF-8 텍스트 — CP949(EUC-KR)로 저장된 한글 텍스트를 어떻게 보일까? 선택지: (A, 권장) UTF-8 엄격 디코딩이 실패하면 `TextDecoder("euc-kr")`로 다시 디코딩하고 상단에 "인코딩: EUC-KR로 읽음" 표시 / (B) UTF-8만, 깨진 글자는 대체 문자(�)로 보이고 "UTF-8이 아님" 표시 / (C) 바이너리처럼 "UTF-8 텍스트가 아니라 비교를 보여 줄 수 없음". 영향: A는 디코딩 판정 함수와 단위 테스트가 늘고, B·C는 한글 Windows 메모장 옛 파일을 못 읽는다.
+- [x] Q-1 비 UTF-8 텍스트 — CP949(EUC-KR)로 저장된 한글 텍스트를 어떻게 보일까? 선택지: (A, 권장) UTF-8 엄격 디코딩이 실패하면 `TextDecoder("euc-kr")`로 다시 디코딩하고 상단에 "인코딩: EUC-KR로 읽음" 표시 / (B) UTF-8만, 깨진 글자는 대체 문자(�)로 보이고 "UTF-8이 아님" 표시 / (C) 바이너리처럼 "UTF-8 텍스트가 아니라 비교를 보여 줄 수 없음". 영향: A는 디코딩 판정 함수와 단위 테스트가 늘고, B·C는 한글 Windows 메모장 옛 파일을 못 읽는다. → 답변: A — UTF-8(BOM 제거) 엄격 디코딩 실패 시 `TextDecoder("euc-kr")`로 다시 읽고 응답에 `encoding: "euc-kr"`을 담아 화면 상단에 "인코딩: EUC-KR로 읽음"을 표시한다. unit test로 CP949 한글 바이트 디코딩을 검증한다. (2026-11-17)

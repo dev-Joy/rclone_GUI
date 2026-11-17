@@ -2,6 +2,12 @@
 
 이 파일은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따르며, `z_skill_git_commit`·`z_skill_git_to_merge`가 `main`/`master` 반영 시 실제 변경 내역을 기록합니다.
 
+## [0.1.79] - 2026-11-17
+
+### Added
+
+- feat(compare): 줄 단위 diff와 루트·상대 경로 결합 함수를 추가한다
+
 ## [0.1.78] - 2026-11-17
 
 ### Changed

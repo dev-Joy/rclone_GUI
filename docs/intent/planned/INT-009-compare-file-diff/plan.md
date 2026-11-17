@@ -1,6 +1,6 @@
 # Plan: 비교 결과의 변경 파일 내용 차이(diff)를 동기화 전에 앱에서 보기
 - Intent: [INT-009](intent.md) | Tier: 3 | 작성일: 2026-11-17
-- Intent updated_at: 2026-11-17T16:42:44+09:00
+- Intent updated_at: 2026-11-17T21:45:00+09:00
 - Spec: [spec.md](spec.md)
 
 ## 1. Tier 산정

@@ -399,6 +399,31 @@ export function joinBackupPath(base: itfParsedPath, subdir: string): string {
         : `${base.normalized}\\${subdir}`;
 }
 
+/**
+ * 루트 경로 + 비교 결과의 상대 경로(항목 `path`, "/" 구분) → rclone에 넘길 경로 (INT-009 FR-15).
+ * - local·UNC: rel의 "/"를 "\"로 바꿔 루트 뒤에 "\"로 붙인다. 루트가 이미 "\"로 끝나면 그대로 붙인다.
+ * - remote: 루트가 `name:`이면 `name:rel`, `name:/`이면 `name:/rel`, 아니면 `name:dir/rel`이다.
+ *   `name:` + "/" 결합으로 `name:/rel`(절대)을 새로 만들지 않는다(sftp·ftp에서 다른 위치).
+ * rel이 비었거나 제어문자(NUL 포함)·절대 경로·드라이브 문자·`..` 조각을 포함하면 던진다.
+ */
+export function joinRootRelative(root: itfParsedPath, rel: string): string {
+    if (rel.trim() === "") throw new Error("상대 경로가 비어 있습니다.");
+    if (CONTROL_CHARS.test(rel)) throw new Error("상대 경로에 제어문자가 있습니다.");
+    if (/^[\\/]/.test(rel)) throw new Error("상대 경로는 / 또는 \\로 시작할 수 없습니다.");
+    if (/^[A-Za-z]:/.test(rel)) throw new Error("상대 경로에 드라이브 문자를 쓸 수 없습니다.");
+    const parts = rel.split(/[\\/]+/);
+    if (parts.some((part) => part === "..")) {
+        throw new Error("상대 경로에 ..를 쓸 수 없습니다.");
+    }
+    const base = root.normalized;
+    if (root.kind === "remote") {
+        const joined = parts.filter((part) => part !== "").join("/");
+        return base.endsWith(":") || base.endsWith("/") ? `${base}${joined}` : `${base}/${joined}`;
+    }
+    const joined = parts.filter((part) => part !== "").join("\\");
+    return base.endsWith("\\") ? `${base}${joined}` : `${base}\\${joined}`;
+}
+
 /** WSL 리눅스 절대 경로를 UNC로 바꾼다. 예: ("Distro", "/home/a") → \\wsl.localhost\Distro\home\a */
 export function linuxPathToWslUnc(distro: string, linuxPath: string): string | null {
     const name = distro.trim();

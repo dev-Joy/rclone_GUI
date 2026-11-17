@@ -5,7 +5,7 @@ status: planned
 priority: P2
 created: 2026-11-17
 updated: 2026-11-17
-updated_at: 2026-11-17T16:42:44+09:00
+updated_at: 2026-11-17T21:45:00+09:00
 ---
 
 # Intent: 비교 결과의 변경 파일 내용 차이(diff)를 동기화 전에 앱에서 보기
@@ -54,4 +54,8 @@ updated_at: 2026-11-17T16:42:44+09:00
 - [x] 대상 범위 — '변경'만인가, 추가·삭제 파일의 내용 미리보기도 포함하는가 → 답변: 변경은 좌우 diff, 추가(원본에만)·삭제(대상에만)는 같은 화면에서 한쪽만 미리보기 (2026-11-17)
 
 ## 작업 (Tasks)
-- [ ] T-01 [P2] (착수 시 분해 예정)
+- [ ] T-01 [P2] 준비 — spec §10 Q-1 확정(A: UTF-8 실패 시 EUC-KR 재디코딩), 미커밋 변경 확인(R-5), 태스크 분해
+- [ ] T-02 [P2] shared 순수 함수 — 줄 단위 diff(`text-diff.ts`)·루트+상대 경로 결합(`joinRootRelative`) 및 단위 테스트
+- [ ] T-03 [P2] 읽기 경로 — `buildCatArgs`·허용 명령·`cat` 시간 제한·`file-diff-service`·IPC `compare:fileDiff`·preload·단위/통합 테스트
+- [ ] T-04 [P2] 화면 — `FileDiffModal`(좌우 diff·한쪽 미리보기·이유 문구), 더블클릭·파일 줄 메뉴 진입, E2E
+- [ ] T-05 [P2] 마감 — CHANGELOG 한 줄·rclone cat 동작 기록·작업 내역·전체 검증(2-pass)

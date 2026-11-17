@@ -8,6 +8,7 @@ import {
     checkRunPaths,
     isRemoteAbsolute,
     joinBackupPath,
+    joinRootRelative,
     linuxPathToWslUnc,
     mntPathToWindows,
     parsePath,
@@ -270,6 +271,44 @@ describe("checkBackupDir (INT-003 FR-24, AC-11·AC-17)", () => {
         expect(joinBackupPath(f_Ok("\\\\srv\\share\\bk"), sub)).toBe(`\\\\srv\\share\\bk\\${sub}`);
         expect(joinBackupPath(f_Ok("gd:bk"), sub)).toBe(`gd:bk/${sub}`);
         expect(joinBackupPath(f_Ok("sftp:/abs/bk"), sub)).toBe(`sftp:/abs/bk/${sub}`);
+    });
+});
+
+describe("joinRootRelative (INT-009 FR-15, AC-6)", () => {
+    it.each([
+        ["로컬 폴더", "E:\\dir", "x/y.txt", "E:\\dir\\x\\y.txt"],
+        ["로컬 드라이브 루트", "E:\\", "x", "E:\\x"],
+        ["로컬 역슬래시 혼용", "E:\\dir", "x\\y.txt", "E:\\dir\\x\\y.txt"],
+        ["로컬 중복 구분자", "E:\\dir", "a//b/c.txt", "E:\\dir\\a\\b\\c.txt"],
+        [
+            "UNC(WSL)",
+            "\\\\wsl.localhost\\Ubuntu\\home",
+            "me/a.txt",
+            "\\\\wsl.localhost\\Ubuntu\\home\\me\\a.txt",
+        ],
+        ["remote 루트 이름만", "gd:", "a/b", "gd:a/b"],
+        ["remote 상대 폴더", "gd:base", "a/b", "gd:base/a/b"],
+        ["remote 절대 폴더", "gd:/abs", "a/b", "gd:/abs/a/b"],
+        ["remote 절대 루트", "gd:/", "a/b", "gd:/a/b"],
+        ["remote 역슬래시 혼용", "gd:base", "a\\b", "gd:base/a/b"],
+    ])("%s: %s + %s → %s", (_label: string, base: string, rel: string, expected: string) => {
+        expect(joinRootRelative(f_Ok(base), rel)).toBe(expected);
+    });
+
+    it.each([
+        ["빈 문자열", "", "비어 있습니다"],
+        ["공백만", "   ", "비어 있습니다"],
+        ["상위 참조", "..", "..를 쓸 수 없습니다"],
+        ["상위 참조 조각", "../x", "..를 쓸 수 없습니다"],
+        ["중간 상위 참조", "a/../b", "..를 쓸 수 없습니다"],
+        ["절대 경로 /", "/abs", "시작할 수 없습니다"],
+        ["절대 경로 \\", "\\abs", "시작할 수 없습니다"],
+        ["드라이브 문자", "C:x", "드라이브 문자"],
+        ["NUL", "a\u0000b", "제어문자"],
+        ["줄바꿈", "a\nb", "제어문자"],
+    ])("거부: %s", (_label: string, rel: string, message: string) => {
+        expect(() => joinRootRelative(f_Ok("E:\\dir"), rel)).toThrow(message);
+        expect(() => joinRootRelative(f_Ok("gd:base"), rel)).toThrow(message);
     });
 });
 
