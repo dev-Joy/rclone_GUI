@@ -2,7 +2,8 @@
  * 비교 결과 표의 파일 행 하나. 평면 표(CompareTable)와 트리 표(CompareTree)가 함께 쓴다.
  * 열: 항목(경로) · 원본 크기 · 원본 수정 시각 · 할 일(+사유) · 대상 수정 시각 · 대상 크기.
  * 대상에만 있는 rclone 임시 파일(.partial)은 항목 앞에 "취소로 남은 임시 파일"로 표시한다.
- * 파일 행에서 우클릭·키보드 메뉴 키(ContextMenu·Shift+F10)로 줄 메뉴(경로 복사)를 연다.
+ * 파일 행에서 우클릭·키보드 메뉴 키(ContextMenu·Shift+F10)로 줄 메뉴를 열고,
+ * modified·onlySource·onlyDest 행은 더블클릭으로 원본·대상 내용 비교를 연다(INT-009 FR-1).
  *
  * @author dev-Joy 2026-11-17
  */
@@ -20,7 +21,8 @@ import { reasonText, statusLabel, statusTone } from "@/lib/compare-view";
 import { formatBytes, formatModTime } from "@/shared/format";
 import { isRclonePartial, PARTIAL_BADGE_TEXT, PARTIAL_BADGE_TITLE } from "@/shared/partial-files";
 import type { typRunMode } from "@/shared/schemas/common";
-import type { itfDiffEntry } from "@/shared/types/compare";
+import type { itfDiffEntry, typCompareStatus } from "@/shared/types/compare";
+import type { itfFileDiffTarget } from "@/shared/types/file-diff";
 import type { itfFileMenuTarget } from "./FileRowMenu";
 import styles from "./CompareTable.module.css";
 
@@ -33,6 +35,8 @@ export interface itfCompareRowProps {
     depth?: number;
     /** 주면 파일 행에서 우클릭·메뉴 키로 줄 메뉴를 연다 */
     onFileMenu?: (target: itfFileMenuTarget) => void;
+    /** 주면 비교할 수 있는 파일 행 더블클릭으로 원본·대상 내용 비교를 연다 */
+    onFileDiff?: (target: itfFileDiffTarget) => void;
 }
 
 const propsDefault = {
@@ -48,8 +52,13 @@ function f_Time(side: itfDiffEntry["source"]): string {
     return side ? formatModTime(side.modTimeMs) : "—";
 }
 
+/** 내용 비교를 열 수 있는 상태인가(equal·typeConflict 제외, INT-009 FR-1) */
+function f_IsDiffable(status: typCompareStatus): status is itfFileDiffTarget["status"] {
+    return status === "modified" || status === "onlySource" || status === "onlyDest";
+}
+
 export const CompareRow = memo(function CompareRow(iProps: itfCompareRowProps) {
-    const { entry, mode, rowIndex, onFileMenu } = iProps;
+    const { entry, mode, rowIndex, onFileMenu, onFileDiff } = iProps;
     const depth = iProps.depth ?? propsDefault.depth;
     const reasons = entry.status === "modified" ? reasonText(entry.reasons) : "";
     const partial = entry.status === "onlyDest" && isRclonePartial(entry.dest?.path ?? entry.path);
@@ -64,7 +73,12 @@ export const CompareRow = memo(function CompareRow(iProps: itfCompareRowProps) {
         if (!onFileMenu) return;
         event.preventDefault();
         event.currentTarget.focus();
-        onFileMenu({ path: entry.path, x: event.clientX, y: event.clientY });
+        onFileMenu({
+            path: entry.path,
+            status: entry.status,
+            x: event.clientX,
+            y: event.clientY,
+        });
     };
     /** 키보드 메뉴 키·Shift+F10은 줄 아래쪽을 기준점으로 연다 */
     const h_KeyDown = (event: typReactKeyboardEvent<HTMLTableRowElement>) => {
@@ -72,7 +86,17 @@ export const CompareRow = memo(function CompareRow(iProps: itfCompareRowProps) {
         if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
         event.preventDefault();
         const rect = event.currentTarget.getBoundingClientRect();
-        onFileMenu({ path: entry.path, x: rect.left + 24, y: rect.bottom - 4 });
+        onFileMenu({
+            path: entry.path,
+            status: entry.status,
+            x: rect.left + 24,
+            y: rect.bottom - 4,
+        });
+    };
+    /** 더블클릭으로 내용 비교를 연다. 같음·형식 충돌 행은 아무 일도 하지 않는다 */
+    const h_DoubleClick = () => {
+        if (!onFileDiff || !f_IsDiffable(entry.status)) return;
+        onFileDiff({ path: entry.path, status: entry.status });
     };
 
     return (
@@ -84,6 +108,7 @@ export const CompareRow = memo(function CompareRow(iProps: itfCompareRowProps) {
             tabIndex={0}
             onContextMenu={h_ContextMenu}
             onKeyDown={h_KeyDown}
+            onDoubleClick={h_DoubleClick}
         >
             <td
                 className={styles.path}

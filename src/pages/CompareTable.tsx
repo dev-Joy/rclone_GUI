@@ -12,6 +12,7 @@ import type { typCompareSortKey, typSortDir } from "@/lib/compare-view";
 import { useVirtualRows } from "@/lib/use-virtual-rows";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { itfDiffEntry } from "@/shared/types/compare";
+import type { itfFileDiffTarget } from "@/shared/types/file-diff";
 import type { itfFileMenuTarget } from "./FileRowMenu";
 import CompareHead from "./CompareHead";
 import { CompareRow } from "./CompareRow";
@@ -28,6 +29,8 @@ export interface itfCompareTableProps {
     onSort: (key: typCompareSortKey) => void;
     /** 파일 행 우클릭·메뉴 키로 연다 */
     onFileMenu?: (target: itfFileMenuTarget) => void;
+    /** 비교할 수 있는 파일 행 더블클릭으로 원본·대상 내용 비교를 연다 */
+    onFileDiff?: (target: itfFileDiffTarget) => void;
 }
 
 /** CompareTable.module.css의 행 높이와 맞춘다 */
@@ -37,7 +40,7 @@ const ROW_HEIGHT = 30;
 const COLUMN_COUNT = 6;
 
 export default function CompareTable(props: itfCompareTableProps) {
-    const { entries, rows, mode, sortKey, sortDir, onSort, onFileMenu } = props;
+    const { entries, rows, mode, sortKey, sortDir, onSort, onFileMenu, onFileDiff } = props;
 
     // ========== hook & state 변수 선언 ==========
     const { ref, win } = useVirtualRows<HTMLElement>(rows.length, ROW_HEIGHT, 10, rows);
@@ -82,6 +85,7 @@ export default function CompareTable(props: itfCompareTableProps) {
                                 mode={mode}
                                 rowIndex={win.start + k + 2}
                                 onFileMenu={onFileMenu}
+                                onFileDiff={onFileDiff}
                             />
                         ))}
                         {win.padBottom > 0 && (

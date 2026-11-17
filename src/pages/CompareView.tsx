@@ -1,7 +1,8 @@
 /**
  * 작업 화면 "파일 목록" 탭. 상태: 결과 없음 / 진행 중(단계·파일 수) / 오류 / 결과(칩·검색 도구 막대 → 폴더 안내 → 가상 목록 표).
  * 목록은 평면(CompareTable)과 폴더 트리(CompareTree) 두 모양이고, 트리 펼침 상태는 이 컴포넌트가 들고 있다가
- * 필터·정렬·작업·결과가 바뀌면 접는다. 파일 행 우클릭 메뉴(경로 복사)도 여기서 한 번만 그린다.
+ * 필터·정렬·작업·결과가 바뀌면 접는다. 파일 행 우클릭 메뉴(경로 복사·원본·대상 내용 비교)와
+ * 내용 비교 모달(FileDiffModal)도 여기서 한 번만 그린다. 모달은 같은 resetKey에 묶어 목록 조건이 바뀌면 닫힌다.
  * 요약·안내 줄(미리보기 안내·빈 폴더 불가)은 작업 화면(JobWorkspace)에 있고,
  * 비교 중지는 실행 배너의 공통 중지(JobActivityBar)에 있다.
  * 비교는 원본·대상 목록을 읽기만 하고 파일은 바꾸지 않는다.
@@ -23,10 +24,12 @@ import {
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import type { typJob } from "@/shared/schemas/job";
 import type { itfCompareActive } from "@/shared/types/compare";
+import type { itfFileDiffTarget } from "@/shared/types/file-diff";
 import { runningCompare, useCompareStore } from "@/stores/compare-store";
 import CompareTable from "./CompareTable";
 import CompareToolbar from "./CompareToolbar";
 import CompareTree from "./CompareTree";
+import FileDiffModal from "./FileDiffModal";
 import FileRowMenu, { type itfFileMenuTarget } from "./FileRowMenu";
 import styles from "./CompareView.module.css";
 
@@ -69,10 +72,15 @@ export default function CompareView(props: itfCompareViewProps) {
         key: string;
         expanded: ReadonlySet<string>;
     } | null>(null);
-    /** 파일 행 줄 메뉴(경로 복사). 평면·트리가 함께 쓴다 */
+    /** 파일 행 줄 메뉴(경로 복사·원본·대상 내용 비교). 평면·트리가 함께 쓴다 */
     const [menuState, setMenuState] = useState<{
         key: string;
         target: itfFileMenuTarget;
+    } | null>(null);
+    /** 원본·대상 내용 비교 모달. resetKey가 바뀌면(필터·정렬·작업·결과) 닫힌다 */
+    const [diffState, setDiffState] = useState<{
+        key: string;
+        target: itfFileDiffTarget;
     } | null>(null);
 
     // ========== 내부 변수 (_V) ==========
@@ -102,6 +110,7 @@ export default function CompareView(props: itfCompareViewProps) {
     ]);
     const expanded = treeState?.key === resetKey ? treeState.expanded : EMPTY_EXPANDED;
     const menu = menuState?.key === resetKey ? menuState.target : null;
+    const diffTarget = diffState?.key === resetKey ? diffState.target : null;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
     const h_Sort = (key: typCompareSortKey) =>
@@ -122,6 +131,8 @@ export default function CompareView(props: itfCompareViewProps) {
     const h_CollapseAll = () => setTreeState({ key: resetKey, expanded: EMPTY_EXPANDED });
     const h_OpenMenu = (target: itfFileMenuTarget) => setMenuState({ key: resetKey, target });
     const h_CloseMenu = () => setMenuState(null);
+    const h_OpenDiff = (target: itfFileDiffTarget) => setDiffState({ key: resetKey, target });
+    const h_CloseDiff = () => setDiffState(null);
 
     if (running && running.jobId === job.id) {
         return (
@@ -192,6 +203,7 @@ export default function CompareView(props: itfCompareViewProps) {
                     expanded={expanded}
                     onToggle={h_ToggleFolder}
                     onFileMenu={h_OpenMenu}
+                    onFileDiff={h_OpenDiff}
                 />
             ) : (
                 <CompareTable
@@ -202,9 +214,11 @@ export default function CompareView(props: itfCompareViewProps) {
                     sortDir={sortDir}
                     onSort={h_Sort}
                     onFileMenu={h_OpenMenu}
+                    onFileDiff={h_OpenDiff}
                 />
             )}
-            <FileRowMenu target={menu} onClose={h_CloseMenu} />
+            <FileRowMenu target={menu} onOpenDiff={h_OpenDiff} onClose={h_CloseMenu} />
+            <FileDiffModal jobId={job.id} target={diffTarget} onClose={h_CloseDiff} />
         </section>
     );
 }

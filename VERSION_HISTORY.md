@@ -2,7 +2,10 @@
 
 이 문서는 일반 사용자를 위해 버전별 주요 변경사항을 알기 쉽게 정리한 이력입니다.
 
-<!-- version-history: last-sha=0e8812f820d2ca2ab3d171556a0e80135d54bc5a last-date=2026-11-17 -->
+<!-- version-history: last-sha=6af53a3a1262ddf5fc5faf369593ae184fc54376 last-date=2026-11-17 -->
+
+## v0.1.81 (2026-11-17)
+- 파일 행에서 원본·대상 내용 비교를 연다
 
 ## v0.1.80 (2026-11-17)
 - 파일 내용을 읽는 compare:fileDiff API를 추가한다

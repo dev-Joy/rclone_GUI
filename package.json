@@ -1,7 +1,7 @@
 {
     "name": "rclonegui",
     "productName": "rcloneGUI",
-    "version": "0.1.80",
+    "version": "0.1.81",
     "private": true,
     "description": "rclone 기반 Windows 폴더 비교·동기화 데스크톱 앱",
     "author": "dev-Joy",

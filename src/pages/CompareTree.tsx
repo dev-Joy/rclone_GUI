@@ -16,6 +16,7 @@ import type { typCompareSortKey, typSortDir } from "@/lib/compare-view";
 import { useVirtualRows } from "@/lib/use-virtual-rows";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { itfDiffEntry } from "@/shared/types/compare";
+import type { itfFileDiffTarget } from "@/shared/types/file-diff";
 import type { itfFileMenuTarget } from "./FileRowMenu";
 import CompareHead from "./CompareHead";
 import { CompareRow } from "./CompareRow";
@@ -36,6 +37,8 @@ export interface itfCompareTreeProps {
     onToggle: (path: string) => void;
     /** 파일 행 우클릭·메뉴 키로 연다 */
     onFileMenu?: (target: itfFileMenuTarget) => void;
+    /** 비교할 수 있는 파일 행 더블클릭으로 원본·대상 내용 비교를 연다 */
+    onFileDiff?: (target: itfFileDiffTarget) => void;
 }
 
 /** CompareTable.module.css의 행 높이와 맞춘다 */
@@ -50,6 +53,7 @@ const FOLDER_ICON = "📁";
 /** 넘어온 값이 없는 항목만 쓰는 기본값 */
 const propsDefault = {
     onFileMenu: undefined,
+    onFileDiff: undefined,
 } satisfies Partial<itfCompareTreeProps>;
 
 export default function CompareTree(props: itfCompareTreeProps) {
@@ -63,6 +67,7 @@ export default function CompareTree(props: itfCompareTreeProps) {
         expanded,
         onToggle,
         onFileMenu = propsDefault.onFileMenu,
+        onFileDiff = propsDefault.onFileDiff,
     } = props;
 
     // ========== hook & state 변수 선언 ==========
@@ -120,6 +125,7 @@ export default function CompareTree(props: itfCompareTreeProps) {
                                         rowIndex={rowIndex}
                                         depth={row.depth}
                                         onFileMenu={onFileMenu}
+                                        onFileDiff={onFileDiff}
                                     />
                                 );
                             }
