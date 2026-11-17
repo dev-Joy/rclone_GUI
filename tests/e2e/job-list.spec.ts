@@ -21,6 +21,7 @@ import {
     HAS_RCLONE,
     launchApp,
     openSettings,
+    runNowFromList,
     waitForApp,
 } from "./app-harness";
 
@@ -71,17 +72,15 @@ test("목록에서 지금 실행: 비교 → 삭제 확인(취소·확인) → �
         await expect(row).toContainText("실행 기록 없음");
 
         // 1) 지금 실행 → 비교 → 삭제 확인 모달 → 취소: 대상 불변
-        await row.getByRole("button", { name: "지금 실행" }).click();
         const dialog = page.getByRole("dialog", { name: "동기화 실행 (삭제 포함)" });
-        await expect(dialog).toBeVisible({ timeout: 60_000 });
+        await runNowFromList(page, row, dialog);
         await expect(dialog).toContainText("extra.txt");
         await dialog.getByRole("button", { name: "취소", exact: true }).click();
         await expect(dialog).toBeHidden();
         expect(existsSync(join(destination, "extra.txt"))).toBe(true);
 
         // 2) 다시 지금 실행 → 체크 → 실행: 삭제됨
-        await row.getByRole("button", { name: "지금 실행" }).click();
-        await expect(dialog).toBeVisible({ timeout: 60_000 });
+        await runNowFromList(page, row, dialog);
         await dialog.locator("#delete-confirm-ack").check();
         // 대상 2개 중 1개(50%)라 대량 삭제 확인도 필요하다
         await dialog.locator("#delete-confirm-large").check();
@@ -125,9 +124,8 @@ test("전체 범위 복사는 원본의 빈 폴더를 대상에 만든다 (AC-9)
         await waitForApp(page);
         await createJob(page, { name: ALL_NAME, source, destination, scope: "all" });
 
-        await f_Row(page, ALL_NAME).getByRole("button", { name: "지금 실행" }).click();
         const dialog = page.getByRole("dialog", { name: "복사 실행" });
-        await expect(dialog).toBeVisible({ timeout: 60_000 });
+        await runNowFromList(page, f_Row(page, ALL_NAME), dialog);
         await expect(dialog).toContainText("빈 폴더 2개 생성");
         await dialog.getByRole("button", { name: "복사 실행", exact: true }).click();
         await expect(

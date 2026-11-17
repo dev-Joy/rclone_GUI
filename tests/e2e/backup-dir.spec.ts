@@ -31,6 +31,7 @@ import {
     HAS_RCLONE,
     jobEditor,
     launchApp,
+    runNowFromList,
     waitForApp,
 } from "./app-harness";
 
@@ -138,9 +139,8 @@ test("실행: 오류 무시 + 백업 폴더 → 삭제 확인 창 안내 → 지
         await expect(dialog).toBeHidden();
         await dismissToasts(page);
 
-        await f_Row(page, name).getByRole("button", { name: "지금 실행" }).click();
         const confirm = page.getByRole("dialog", { name: "동기화 실행 (삭제 포함)" });
-        await expect(confirm).toBeVisible({ timeout: 60_000 });
+        await runNowFromList(page, f_Row(page, name), confirm);
         await expect(confirm.locator("#delete-confirm-backup")).toContainText("옮깁니다");
         await confirm.locator("#delete-confirm-ack").check();
         // 대상 2개 중 1개(50%)라 대량 삭제 확인도 필요하다

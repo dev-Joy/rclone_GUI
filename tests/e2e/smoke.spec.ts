@@ -2,6 +2,7 @@
  * Electron 스모크 E2E. 임시 userData로 앱을 띄워 창·preload API·온보딩 셸을 확인하고,
  * 새 작업을 저장한 뒤 앱을 다시 띄워 작업과 설정 모달이 유지되는지 본다.
  * 작업이 없을 때 빈 화면의 ‘새 작업 만들기’로 저장하면 작업 화면에 머무는지 본다.
+ * 복제는 값을 채운 편집 모달을 열고, 저장하면 새 작업이 목록에 생겨 선택되는지 본다.
  * 작업 선택은 목록에서 하나만 강조되고(aria-current), 설정은 상단 막대의 단추로 여는 모달이다.
  * 실제 사용자 데이터·remote는 쓰지 않는다.
  *
@@ -18,6 +19,7 @@ import { expect, test } from "@playwright/test";
 import {
     closeSettings,
     createJob,
+    dismissToasts,
     expectNoConsoleErrors,
     jobEditor,
     jobSidebar,
@@ -153,6 +155,48 @@ test("작업이 없을 때 빈 화면의 새 작업 만들기로 저장하면 �
         await expect(editor).toBeHidden();
         await expect(page.locator("#job-title")).toHaveText("E2E 첫 작업");
         await expect(page.locator("#job-open-edit")).toBeVisible();
+
+        expectNoConsoleErrors(harness.consoleErrors);
+    } finally {
+        await harness.close();
+    }
+});
+
+test("복제는 값을 채운 편집 모달을 열고, 저장하면 새 작업이 선택된다", async () => {
+    const harness = await launchApp();
+    try {
+        const { page } = harness;
+        const dupSource = join(harness.paths.root, "source");
+        const dupDestination = join(harness.paths.root, "destination");
+        mkdirSync(dupSource, { recursive: true });
+        mkdirSync(dupDestination, { recursive: true });
+        await waitForApp(page);
+        const name = "E2E 복제 원본";
+        await createJob(page, { name, source: dupSource, destination: dupDestination });
+        // 상단 알림이 header 단추를 가리지 않게 정리한다
+        await dismissToasts(page);
+        const sidebar = jobSidebar(page);
+        const editor = jobEditor(page);
+
+        // 1) 복제를 취소하면 작업이 늘지 않는다
+        await page.getByRole("button", { name: "복제", exact: true }).click();
+        await expect(editor).toBeVisible();
+        await editor.getByRole("button", { name: "취소", exact: true }).click();
+        await expect(editor).toBeHidden();
+        await expect(sidebar.getByRole("listitem")).toHaveCount(1);
+
+        // 2) 복제 → 저장: 값을 그대로 이어받고, 저장하면 새 작업이 목록에 생겨 선택된다
+        await page.getByRole("button", { name: "복제", exact: true }).click();
+        await expect(editor).toBeVisible();
+        await expect(editor.locator("#job-name")).toHaveValue(`${name} (복제)`);
+        await expect(editor.locator("#job-source")).toHaveValue(dupSource);
+        await expect(editor.locator("#job-destination")).toHaveValue(dupDestination);
+        await editor.getByRole("button", { name: "저장", exact: true }).click();
+        await expect(page.getByText("작업을 저장했습니다.").last()).toBeVisible();
+        await expect(editor).toBeHidden();
+        await expect(sidebar.getByRole("listitem")).toHaveCount(2);
+        await expect(page.locator("#job-title")).toHaveText(`${name} (복제)`);
+        await expect(sidebar.locator('[aria-current="true"]')).toContainText(`${name} (복제)`);
 
         expectNoConsoleErrors(harness.consoleErrors);
     } finally {

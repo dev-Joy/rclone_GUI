@@ -2,6 +2,16 @@
 
 이 파일은 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식을 따르며, `z_skill_git_commit`·`z_skill_git_to_merge`가 `main`/`master` 반영 시 실제 변경 내역을 기록합니다.
 
+## [0.1.73] - 2026-11-17
+
+### Changed
+
+- E2E에서 `지금 실행` 직후 비교 종료 경합을 조건 대기·1회 재시도로 안정화
+
+### Fixed
+
+- `복제`가 작업을 바로 만들지 않고 편집 모달을 열어 값을 확인한 뒤 저장하도록 맞춤(spec FR-15)
+
 ## [0.1.72] - 2026-11-17
 
 ### Changed

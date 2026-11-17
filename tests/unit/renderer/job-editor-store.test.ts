@@ -55,6 +55,45 @@ describe("job-editor-store 열기·변경", () => {
     });
 });
 
+describe("job-editor-store 복제 초안", () => {
+    it("openDuplicate: 값을 그대로 채우고 이름에 (복제), 예약은 끄고 jobId null·mode duplicate", () => {
+        const base = fake.jobs()[0]!;
+        const job = {
+            ...base,
+            autoSync: { ...base.autoSync, enabled: true, intervalMinutes: 30 },
+            groupId: "g-abc",
+        };
+        f_Editor().openDuplicate(job);
+        const s = f_Editor();
+        expect(s.jobId).toBeNull();
+        expect(s.draft).toMatchObject({
+            name: "a (복제)",
+            source: job.source,
+            destination: job.destination,
+            autoSync: { enabled: false, intervalMinutes: 30 },
+        });
+        expect(s.draft?.excludePatternIds).toEqual(job.excludePatternIds);
+        expect(s.groupId).toBe("g-abc");
+        expect(useUiStore.getState().editor).toEqual({ mode: "duplicate", jobId: null });
+        expect(f_Dirty()).toBe(false);
+    });
+
+    it("복제 초안을 취소하면 작업이 생기지 않고, 저장하면 새 작업이 선택된다", async () => {
+        f_Editor().openDuplicate(fake.jobs()[0]!);
+        f_Editor().close();
+        useUiStore.getState().closeEditor();
+        expect(fake.jobs()).toHaveLength(1);
+        expect(fake.calls.filter((c) => c.startsWith("jobs."))).toEqual([]);
+
+        f_Editor().openDuplicate(fake.jobs()[0]!);
+        expect(await f_Editor().save(true)).toBe(true);
+        expect(fake.calls).toContain("jobs.create");
+        expect(fake.jobs()).toHaveLength(2);
+        expect(useJobsStore.getState().selectedJobId).toBe(f_Editor().jobId);
+        expect(f_Editor().draft?.name).toBe("a (복제)");
+    });
+});
+
 describe("job-editor-store 저장", () => {
     it("화면 검증 실패는 IPC를 부르지 않고 오류를 표시한다", async () => {
         f_Editor().openNew(createDefaultSettings());

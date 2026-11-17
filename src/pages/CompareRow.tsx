@@ -39,7 +39,7 @@ const propsDefault = {
     depth: 0,
 } satisfies Partial<itfCompareRowProps>;
 
-// ========== 내부 함수 ==========
+// ========== 내부 함수 (_F) ==========
 function f_Size(side: itfDiffEntry["source"]): string {
     return side ? formatBytes(side.size) : "—";
 }

@@ -210,6 +210,62 @@ export async function openJob(page: Page, name: string): Promise<void> {
     await expect(dialog.locator("#job-name")).toHaveValue(name);
 }
 
+/** 비교 진행 단계 문구(CompareView가 active일 때만 그린다) */
+const COMPARE_PHASE_TEXT = /경로 확인 중|목록 읽는 중|차이 계산 중/;
+
+/** 비교가 끝난 직후가 아니라 진행 표시가 남아 있을 때 "지금 실행"을 누르면 뜨는 안내 토스트 */
+const RUN_NOW_BUSY_TOAST = "비교가 끝난 뒤 실행할 수 있습니다.";
+
+/** 비교 결과 패널(파일 목록 탭의 결과) */
+function f_ComparePanel(page: Page): Locator {
+    return page.locator('section[aria-label="파일 목록"]');
+}
+
+/**
+ * 비교가 완전히 유휴가 될 때까지 기다린다: 진행 단계 문구가 없고, 경합 안내 토스트가 없고,
+ * 비교 결과 패널이 보일 때. 결과가 먼저 도착해도 진행 표시 해제 이벤트가 늦게 오면 화면은
+ * 아직 "비교 중"이므로, 결과 패널만 보고 누르면 안 된다.
+ */
+export async function waitCompareIdle(page: Page): Promise<void> {
+    await expect(page.getByText(COMPARE_PHASE_TEXT)).toHaveCount(0);
+    await expect(page.getByText(RUN_NOW_BUSY_TOAST)).toHaveCount(0);
+    await expect(f_ComparePanel(page)).toBeVisible();
+}
+
+/**
+ * 작업 목록의 "지금 실행"을 눌러 실행 확인 창을 연다.
+ * "지금 실행"은 비교를 마친 뒤 확인 창을 여는데, 비교 결과가 먼저 도착하고 앱 전역 진행 표시(active)를
+ * 해제하는 이벤트가 늦게 도착하는 미세 구간에 클릭이 들어가면 확인 창 대신 안내 토스트만 뜬다.
+ * 그 경우 토스트를 닫고 비교가 유휴가 될 때까지 기다린 뒤 **1회만** 다시 누른다(단언은 그대로 둔다).
+ */
+export async function runNowFromList(page: Page, row: Locator, dialog: Locator): Promise<void> {
+    const busy = page.getByText(RUN_NOW_BUSY_TOAST);
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await waitCompareIdle(page);
+        await row.getByRole("button", { name: "지금 실행" }).click();
+        // 확인 창이 뜨거나 경합 안내 토스트가 뜨는 쪽을 먼저 기다린다(둘 중 하나는 반드시 온다)
+        const outcome = await Promise.race([
+            dialog.waitFor({ state: "visible", timeout: 60_000 }).then(
+                () => "dialog" as const,
+                () => "timeout" as const,
+            ),
+            busy
+                .first()
+                .waitFor({ state: "visible", timeout: 60_000 })
+                .then(
+                    () => "busy" as const,
+                    () => "timeout" as const,
+                ),
+        ]);
+        if (outcome === "dialog") return;
+        if (outcome === "timeout") break;
+        // 경합: 안내 토스트를 닫아야 다음 시도의 확인 창을 가리지 않는다
+        await dismissToasts(page);
+    }
+    // 재시도까지 실패하면 여기서 실제 상태를 그대로 단언한다(통과로 덮지 않는다)
+    await expect(dialog).toBeVisible({ timeout: 60_000 });
+}
+
 /** renderer 콘솔 오류가 없어야 한다(MVP 수용 기준) */
 export function expectNoConsoleErrors(consoleErrors: readonly string[]): void {
     expect(consoleErrors).toEqual([]);

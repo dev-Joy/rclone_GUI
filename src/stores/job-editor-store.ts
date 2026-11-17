@@ -41,6 +41,8 @@ export interface itfJobEditorState {
     openJob: (job: typJob) => void;
     /** 설정 기본값(createJobDraft)으로 새 초안 */
     openNew: (settings: typSettings) => void;
+    /** 기존 작업 값을 복제 초안으로(이름에 " (복제)", 예약은 끔). 저장하면 새 작업이 된다 */
+    openDuplicate: (job: typJob) => void;
     close: () => void;
     setField: <K extends keyof typJobDraft>(key: K, value: typJobDraft[K]) => void;
     setOptions: (patch: Partial<typJobRunOptions>) => void;
@@ -64,6 +66,7 @@ type typEditorData = Omit<
     itfJobEditorState,
     | "openJob"
     | "openNew"
+    | "openDuplicate"
     | "close"
     | "setField"
     | "setOptions"
@@ -132,6 +135,22 @@ export const useJobEditorStore = create<itfJobEditorState>((set, get) => ({
             draft: createJobDraft(settings),
         });
         useUiStore.getState().openEditor({ mode: "new", jobId: null });
+    },
+    openDuplicate: (job) => {
+        session += 1;
+        // 1세대 rcloud cloneJob과 같다: 이름에 " (복제)", 예약은 끄고, id는 저장할 때 새로 만든다
+        const draft = jobToDraft(job);
+        draft.name = `${job.name} (복제)`;
+        draft.autoSync = { ...draft.autoSync, enabled: false };
+        set({
+            ...CLOSED,
+            baseline: structuredClone(draft),
+            draft,
+            // 그룹은 그대로 이어받는다(저장할 때 jobs:setGroup으로 반영된다)
+            groupId: job.groupId,
+            baseGroupId: job.groupId,
+        });
+        useUiStore.getState().openEditor({ mode: "duplicate", jobId: null });
     },
     close: () => {
         session += 1;

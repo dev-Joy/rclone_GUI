@@ -75,7 +75,6 @@ export default function JobWorkspace() {
     const selectedJobId = useJobsStore((s) => s.selectedJobId);
     const select = useJobsStore((s) => s.select);
     const removeJob = useJobsStore((s) => s.remove);
-    const duplicateJob = useJobsStore((s) => s.duplicate);
     const tab = useUiStore((s) => s.tab);
     const setTab = useUiStore((s) => s.setTab);
     const openEditor = useUiStore((s) => s.openEditor);
@@ -191,13 +190,10 @@ export default function JobWorkspace() {
     const duplicateReason = dirty ? "저장하지 않은 변경이 있어 복제할 수 없습니다." : undefined;
 
     // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const f_Duplicate = async () => {
+    /** 복제: 값을 채운 편집 모달을 열고, 저장하면 새 작업이 된다(즉시 복제하지 않는다) */
+    const f_Duplicate = () => {
         if (!job) return;
-        setBusy(true);
-        const r = await duplicateJob(job.id);
-        setBusy(false);
-        if (r.ok) pushToast("success", `‘${r.data.name}’ 작업을 만들었습니다.`);
-        else pushToast("error", r.error.message);
+        useJobEditorStore.getState().openDuplicate(job);
     };
     const f_Delete = async () => {
         if (!job) return;
