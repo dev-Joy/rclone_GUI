@@ -65,6 +65,6 @@ updated_at: 2026-11-17T15:33:49+09:00
 - [x] T-02 [P2] 테마 값·공용 컴포넌트 모양 (Phase 1, Step 1~2) — 토큰 이름은 두고 값을 rcloud와 같게, 본문 13px·mono `Consolas, "D2Coding", monospace`, Button `small`, Badge 4px/11px, `ZBCDot` 신규, 토스트를 위쪽 가운데 notice로
 - [x] T-03 [P2] 화면 상태·셸·작업 화면 (Phase 1, Step 3~5) — `ui-store` `tab`·`editor`·`settingsOpen`, 상단 막대 + 250px 작업 목록(상태 점·경로·하위 문구·선택 accent·`+ 새 작업`), header·경로 줄·toolbar·안내 줄·실행 배너·밑줄 탭·footer, 단계 막대·계획 패널·하단 실행 막대(워크벤치) 제거
 - [x] T-04 [P2] 파일 목록·기록 탭·모달·E2E (Phase 1, Step 6~8) — 상태 칩 5종(같음 기본 꺼짐)·`상태별` 보기·6열 표, 기록 표와 행마다 목록·정보·로그, 작업 편집·설정 모달(바깥 클릭으로 닫히지 않고 저장 안 한 변경은 확인), `⋯` 메뉴(미리보기 실행·비교/동기화 명령 복사), E2E 갱신·`build:win`
-- [ ] T-05 [P2] 트리 보기·파일 줄 메뉴 (Phase 2, Step 9~10) — 폴더 트리 빌드·평탄화 후 `useVirtualRows`, 모두 펼치기/접기, 트리|평면 토글, 파일 행 우클릭·메뉴 키 `경로 복사`
-- [ ] T-06 [P2] 작업 그룹 DB·UI (Phase 3, Step 11~12) — DB v3 `groups` 테이블·마이그레이션·백업, `groups:*` IPC, 목록 그룹 머리글(접기·이름 바꾸기·지우기)·`+ 새 그룹`, 편집 모달 그룹 select
+- [x] T-05 [P2] 트리 보기·파일 줄 메뉴 (Phase 2, Step 9~10) — 폴더 트리 빌드·평탄화 후 `useVirtualRows`, 모두 펼치기/접기, 트리|평면 토글, 파일 행 우클릭·메뉴 키 `경로 복사`
+- [x] T-06 [P2] 작업 그룹 DB·UI (Phase 3, Step 11~12) — DB v3 `groups` 테이블·마이그레이션·백업, `groups:*` IPC, 목록 그룹 머리글(접기·이름 바꾸기·지우기)·`+ 새 그룹`, 편집 모달 그룹 select
 - [ ] T-07 [P2] 문서·전체 검증 (마감, Step 13) — CHANGELOG·MVP_SPEC §13·README·`docs/works` 갱신, Phase 1~3 전체 검증과 정합성 게이트

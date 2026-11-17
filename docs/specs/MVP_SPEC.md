@@ -3,8 +3,8 @@
 - 프로젝트: `/mnt/d/dev-Joy/rcloneGUI` (Windows `D:\dev-Joy\rcloneGUI`)
 - 연결 Intent: `docs/intent/done/INT-001-rclone-sync-gui/intent.md`, `docs/intent/done/INT-002-scheduler-sqlite-ux/intent.md`, `docs/intent/done/INT-003-os-schedule-backup-gcs-followup/intent.md`, `docs/intent/active/INT-004-file-aware-eta/intent.md`, `docs/intent/planned/INT-006-in-app-remote-config/intent.md`, `docs/intent/planned/INT-008-rcloud-ui-parity/intent.md`
 - 작성일: 2026-10-27
-- 최종 수정일: 2026-11-17 (INT-008 Phase 1 화면 구조·모양 반영, §13 갱신)
-- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1 반영 (2026-11-17), 아래 "구현 반영" 참고**
+- 최종 수정일: 2026-11-17 (INT-008 Phase 2·3 비교 트리·파일 줄 메뉴·작업 그룹 반영, §12·§13 갱신)
+- 상태: **설계 확정안 — Phase 0~8 구현 완료 (2026-10-29), INT-002 Phase 1~6 반영 (2026-11-02), INT-003 Phase 2~4 반영 (2026-11-02), INT-004 반영 (2026-11-03), INT-006 반영 (2026-11-03), INT-008 Phase 1~3 반영 (2026-11-17), 아래 "구현 반영" 참고**
 - 대상 환경: Windows 11 x64, Node 24.20.0, npm 9.2.0, rclone 1.75.1
 - 관련 문서: `docs/specs/IMPLEMENTATION_PLAN.md`
 
@@ -181,6 +181,17 @@ INT-006(spec FR-1~FR-26, AC-1~AC-16)로 rclone.conf의 remote 설정을 앱에�
 | 없는 remote | rclone 원문 오류를 힌트로 바꿈 | `resolveJobContext`가 conf의 `listremotes`에 이름이 있는지 확인하고, 없으면 `REMOTE_NOT_FOUND`로 비교·수동·자동·OS 예약을 모두 막는다. 작업 목록·작업 화면·북마크에 “remote 없음” 배지를 단다 |
 | 비밀 값 | - | 비밀 값은 rcd 본문에만 넣고 보관하지 않는다. 오류 detail은 `redactSecrets`로 값을 지운 뒤 남긴다. `config redacted` 원문은 메모리에서만 쓰고 로그·IPC·fixture에 남기지 않는다 |
 | 테스트 | - | 단위: providers·rc 응답·redacted 파서, 이름 검증, 비밀 가림, 인자·본문·삭제 순서, OAuth 질문·취소·재인증, `REMOTE_NOT_FOUND`. 통합: 임시 conf의 local·memory·alias·sftp 추가/수정/삭제, rcd 401·허용 경로·종료(AC-15). E2E: 임시 `RCLONE_CONFIG`로 추가·수정·삭제 |
+
+### 구현 반영 (INT-008 Phase 2·3 — 비교 트리·파일 줄 메뉴·작업 그룹, 2026-11-17)
+
+INT-008 Phase 2(비교 목록 트리·파일 줄 메뉴)와 Phase 3(작업 그룹·저장 구조 v3). 화면 구조는 §13.1·§13.2와 같고, 실행·비교·삭제 확인 흐름과 안전 게이트는 바뀌지 않는다.
+
+| 항목 | 이전 | 실제 구현 |
+| :--- | :--- | :--- |
+| 비교 목록 보기 | 6열 평면 표 하나 | `CompareToolbar` 오른쪽 `트리 \| 평면` 토글(기본은 지금까지의 평면)과 트리일 때 `모두 펼치기`·`모두 접기`. `src/lib/compare-tree.ts`(순수 함수)가 `/` 구분 경로로 폴더 행을 만들고 폴더마다 하위 파일 수·변경 수를 센다. `CompareTree`·`CompareRow`·`CompareHead`가 접힌 폴더의 하위를 뺀 1차원 행 목록을 가상화(`useVirtualRows`)로 그려 1만 행도 보이는 행만 그린다. 필터·정렬·작업·결과가 바뀌면 트리는 다시 접힌다 |
+| 파일 줄 메뉴 | 없음(경로 복사 수단 없음) | 파일 행 우클릭·키보드 메뉴 키(Shift+F10)로 `FileRowMenu`의 `경로 복사`를 연다. 복사 값은 원본 기준 상대 경로(`entry.path`)이며 `app:copyText`로 클립보드에만 넣는다. Escape·바깥 클릭으로 닫히고 rclone은 실행하지 않는다. `이번 동기화에서 빼기`는 가져오지 않는다 |
+| 작업 그룹 | 평평한 목록만 | 저장 구조 v3: `groups` 표(이름·position·시각)+`jobs.group_id` 열(`ON DELETE SET NULL`). v1·v2 데이터는 `PRAGMA user_version` 마이그레이션으로 자동 이관하며 바꾸기 전 `db-backups\`에 `pre-v3` 백업을 남기고, 더 낮은 버전 앱은 더 새 데이터를 거부한다(기존 규칙 유지). IPC `groups:list`·`groups:save`·`groups:delete`·`jobs:setGroup`과 `groups:changed` 이벤트. 목록은 그룹 머리글(이름·작업 수·접기)과 `그룹 없음` 묶음으로 보이고 그룹이 없으면 평평한 목록이다. 하단 `+ 새 그룹`, 머리글에서 이름 바꾸기·지우기(지워도 작업은 `그룹 없음`으로 남음), 접힘 상태는 세션 안에서만 유지한다. 작업 편집 모달의 `그룹` select로 지정하고, 그룹 지정은 작업 rev를 올리지 않아 비교 계획이 무효가 되지 않는다 |
+| 테스트 | - | `compare-tree` 단위 테스트(폴더 집계·접힘·대소문자 구분), 그룹 저장소·v2→v3 이관과 `pre-v3` 백업 단위 테스트, E2E(트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지). Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 19(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. 안전 3파일(`run-service`·`plan-token`·`command-builder`) diff 0줄, 의존성 변경 없음 |
 
 ---
 
@@ -1446,6 +1457,10 @@ startAuto(jobId):
 | `jobs:update` | invoke | `{id, patch: JobPatch}` | `Job` |
 | `jobs:delete` | invoke | `{id}` | `void` |
 | `jobs:duplicate` | invoke | `{id}` | `Job` |
+| `jobs:setGroup` | invoke | `{id, groupId}` | `Job`(그룹 지정은 rev를 올리지 않는다) |
+| `groups:list` | invoke | - | `Group[]`(position 순) |
+| `groups:save` | invoke | `{id?, name}` | `Group`(같은 이름은 `VALIDATION`) |
+| `groups:delete` | invoke | `{id}` | `true`(속한 작업은 `그룹 없음`으로 남는다) |
 | `compare:run` | invoke | `{jobId}` | `CompareResult` |
 | `compare:cancel` | invoke | `{jobId}` | `void` |
 | `compare:get` | invoke | `{jobId}` | `CompareResult \| null` |
@@ -1463,6 +1478,7 @@ startAuto(jobId):
 | `compare:progress` | event | - | `{jobId, phase, at}` |
 | `scheduler:state` | event | - | `SchedulerState` |
 | `jobs:changed` | event | - | `{jobs: Job[]}` (자동 실행 후 lastRun/nextRun 갱신) |
+| `groups:changed` | event | - | `{groups: Group[]}` (그룹 만들기·이름 바꾸기·지우기 뒤) |
 
 ```ts
 export interface StartRunInput {
@@ -1643,13 +1659,15 @@ export interface rcloneGUIApi {
 │   원본 → 대상 │ 툴바: 비교 | 동기화(N개 복사·덮어씀·삭제) | 중지   │
 │   하위 문구   │ 안내 줄: 사전 확인·빈 폴더 불가·낡음               │
 │ ● Job B       │ 실행 배너(#job-run-panel): 진행률·남은 시간·중지   │
-│               │ 밑줄 탭: 파일 목록 | 기록                          │
-│ + 새 작업     │  칩(추가·변경·삭제·오류·같음) | 보기 | 경로 검색   │
-│               │  표: 항목|원본 크기|원본 수정 시각|할 일|          │
+│ ▾ 그룹 이름   │ 밑줄 탭: 파일 목록 | 기록                          │
+│   ● Job C     │  칩(추가·변경·삭제·오류·같음) | 보기 | 경로 검색   │
+│ + 새 작업     │  보기: 트리 | 평면 (트리면 모두 펼치기/접기)       │
+│ + 새 그룹     │  표: 항목|원본 크기|원본 수정 시각|할 일|          │
 │               │      대상 수정 시각|대상 크기                      │
 │               │ Footer: 비교 시각·걸린 시간 | 계획 상태 문구       │
 └───────────────┴────────────────────────────────────────────────────┘
 작업 편집·설정은 모달(dialog)로 열고, 알림(토스트)은 화면 위쪽 가운데에 띄운다.
+파일 행을 우클릭(또는 Shift+F10)하면 `경로 복사` 메뉴가 그 자리에 열린다.
 ```
 
 ### 13.2 화면별 요구
@@ -1664,7 +1682,7 @@ export interface rcloneGUIApi {
 - 항목: 상태 점(`ZBCDot`)·이름·mode 배지·`원본 → 대상`·하위 문구(최근 실행·예약·상태 문구, `ui.showJobStatusText`로 숨김). remote 없음·OS 예약 미등록 배지는 하위 문구 줄에 둔다.
 - 선택 항목은 `inset 3px` accent 왼쪽 막대와 `--panel-2` 배경. 목록 하단에 `+ 새 작업`.
 - 항목의 `지금 실행`은 비교 → 확인 창(삭제가 있는 동기화는 삭제 확인 창)을 거친다.
-- 작업 그룹은 Phase 3(INT-008)에서 추가한다.
+- 그룹: 목록은 그룹 머리글(이름·속한 작업 수·접기/펼치기) 아래에 작업을 묶어 보여 주고, 그룹이 없는 작업은 `그룹 없음` 묶음에 둔다. 그룹이 하나도 없으면 머리글 없이 지금처럼 평평한 목록이다. 목록 하단 `+ 새 그룹`으로 만들고(이름 1~50자, 대소문자 무시 중복 금지), 머리글에서 이름을 바꾸거나 지운다. 그룹을 지워도 속한 작업은 `그룹 없음`으로 남고, 접힘 상태는 앱을 끄면 초기화된다. 그룹 지정은 작업 편집 모달의 `그룹` select로 하며 `jobs:setGroup`이 작업 rev를 올리지 않아 비교 결과가 그대로다.
 
 **작업 화면(header·toolbar·탭·footer)**
 - header: 제목·mode 배지·상태 배지(저장 안 됨·remote 없음·OS 예약 미등록)와 `편집`·`복제`·`삭제`·`⋯` 단추, 아래에 경로 줄(mono, accent 화살표).
@@ -1678,6 +1696,7 @@ export interface rcloneGUIApi {
 **작업 편집(모달)**
 - `+ 새 작업`·`편집`·`복제`가 작업 편집 모달을 연다. 바깥 클릭으로 닫히지 않고, 저장 안 한 변경이 있으면 닫을 때 확인한다.
 - 필수: 이름/원본/대상/모드.
+- 그룹: `그룹 없음` 또는 저장된 그룹 중에서 고르는 select. 그룹만 바꿔 저장하면 작업 rev가 그대로라 비교 결과가 유지된다.
 - 경로 필드: 텍스트 입력 + 종류 배지 + 폴더 선택 + WSL 도우미 + remote 선택 + 테스트.
 - WSL 도우미 모달: distro, Linux path, preview UNC, `/mnt/<drive>` 대안, 적용 대상 선택.
 - excludes: 한 줄에 하나, "기본값 불러오기".
@@ -1689,6 +1708,8 @@ export interface rcloneGUIApi {
 **파일 목록 탭**
 - 상태 칩 5종(추가·변경·삭제/대상만·오류·같음)과 개수. 켠 칩의 행만 보이며 같음은 기본 꺼짐.
 - `보기: 상태별` select(대응 데이터가 있는 보기는 이것 하나), 경로 검색(부분일치·대소문자 무시·150ms 디바운스), 표시 개수.
+- `트리 | 평면` 토글(기본은 평면)과 트리일 때 `모두 펼치기`·`모두 접기`. 트리는 `/` 구분 경로로 폴더 행을 만들고 폴더마다 접기/펼치기와 하위 파일 수·변경 수를 보여 준다. 트리도 가상화(보이는 행만 그린다)이고, 필터·정렬·작업·결과가 바뀌면 다시 접힌다.
+- 파일 행을 우클릭하거나 Shift+F10을 누르면 `경로 복사` 메뉴가 열린다. 원본 기준 상대 경로를 클립보드에 넣고 Escape·바깥 클릭으로 닫힌다. 복사는 표시 전용이며 rclone을 실행하지 않는다.
 - 표 6열: 항목·원본 크기·원본 수정 시각·할 일(+사유)·대상 수정 시각·대상 크기. 고정 헤더, 30px 행, 가상화.
 - 정렬: 경로/상태/원본 크기/원본 수정 시각/대상 크기/대상 수정 시각.
 - copy 모드의 onlyDest는 `대상만`, sync 모드는 `삭제`로 표시. `.partial` 파일은 `취소로 남은 임시 파일`로 표시.

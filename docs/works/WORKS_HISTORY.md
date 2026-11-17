@@ -231,7 +231,7 @@
 - 검증(Windows 클론 D:\dev-Joy\rcloneGUI-workbench): `pnpm run check` 1,352 통과, `format:check`, `test:e2e` 16(콘솔 오류 0), `build:win` 통과. 정합성 게이트 필수(하드)① 2-pass + 재판정 PASS. WSL에서 `path-service.test.ts` 4건 실패는 HEAD에서도 같은 환경 문제(Windows 통과)
 - 참고: D:\dev-Joy\rcloneGUI에 미커밋 TASK_030(2026-11-04 비교 화면 외형 정리, 이 저장소의 TASK_030과 번호 겹침)이 있어 건드리지 않았고 통합은 미정
 
-[TASK_033] : (2026-11-17) INT-008 Phase 1 — 화면 모양·구조를 1세대 구현(rcloud)과 같게 (관련 Intent: INT-008, T-01~T-04)
+[TASK_033] : (2026-11-17) INT-008 Phase 1~3 — 화면 모양·구조 복원과 비교 트리·파일 줄 메뉴·작업 그룹 (관련 Intent: INT-008, T-01~T-06)
 - 모양: `themes/default.css` 토큰 값을 rcloud와 같게 하고 본문 13px·mono `Consolas, "D2Coding", monospace`, `ZBCButton` `small`, Badge 4px/11px, 상태 점 `ZBCDot` 신규, `ZBCToast`를 위쪽 가운데 notice로 바꿈
 - 셸: `AppLayout`을 상단 막대 + 250px 목록 flex로 바꾸고, `TopBar`(브랜드·rclone 상태 알약·설정·다음 자동 실행·일시정지), `JobSidebar`(상태 점·이름·mode 배지·원본→대상·하위 문구·선택 `inset 3px` accent 막대·하단 `+ 새 작업`)로 재구성
 - 작업 화면: `JobWorkspace`를 header(편집·복제·삭제·⋯, 경로 줄)·toolbar(비교·동기화·중지)·안내 줄·실행 배너(`#job-run-panel`)·밑줄 탭(`파일 목록`·`기록`)·footer로 바꾸고 `JobWorkView`·`JobStepBar`·`ComparePlanPanel`·`JobRunBar`를 삭제. `job-steps`에서 `jobSteps`·`workMainPanel`을 지우고 `syncButtonText`·`planFooterText`를 더해 동기화 단추 문구·footer에 재사용
@@ -242,7 +242,12 @@
 - 문서: CHANGELOG 1줄, MVP_SPEC §13(화면 구조·화면별 요구·디자인)과 구현 반영 행, README 첫 실행·화면 설명
 - 검증: Windows `pnpm run check`(단위 1,351)·`format:check`·`test:e2e`(11 spec/16 테스트, 콘솔 오류 0)·`build:win` 통과. `run-service`·`plan-token`·`command-builder` diff 0
 - 결함: 설정 모달(dialog)을 열면 위쪽 가운데 토스트가 top layer에서 가려짐 → `ZBCToast`를 popover로 띄우고 dialog가 열리고 닫힐 때 다시 올리도록 수정. 확인 모달(dialog 안 dialog)을 닫으면 close가 조부모까지 버블링해 부모 모달까지 닫힘 → `ZBCModal`이 `e.target === e.currentTarget`일 때만 onClose를 부르도록 수정
-- 남은 것: Phase 2(트리 보기·파일 줄 메뉴)·Phase 3(작업 그룹)와 T-07 문서·전체 검증
+- Phase 2(T-05): 신규 `src/lib/compare-tree.ts`가 필터·정렬 결과에서 `/` 구분 폴더 행(하위 파일 수·변경 수)과 접힌 폴더의 하위를 뺀 1차원 행 목록을 만드는 순수 함수(DOM 무의존). `CompareToolbar`에 `트리 | 평면` 토글(기본 평면)과 트리일 때 `모두 펼치기`·`모두 접기`, `CompareTree`·`CompareRow`·`CompareHead`가 기존 `useVirtualRows`로 보이는 행만 그린다. 필터·정렬·작업·결과가 바뀌면 트리는 다시 접힌다. 파일 행 우클릭·Shift+F10으로 `FileRowMenu`(`경로 복사`만, 원본 기준 상대 경로 = `entry.path`, `app:copyText`)를 열고 Escape·바깥 클릭으로 닫는다. rclone을 실행하는 동작은 없다
+- Phase 3(T-06): 저장 구조 v3 — `db-schema`에 `groups` 표(이름·position·created_at·updated_at)와 `jobs.group_id`(`ON DELETE SET NULL`)를 더하고, `group-store`가 만들기·이름 바꾸기·position 순 정렬·지우기(속한 작업은 그룹 없음)를 담당한다. v1·v2 DB는 `PRAGMA user_version` 마이그레이션으로 이관하며 바꾸기 전 `db-backups\`에 `pre-v3` 백업을 남기고, 낮은 버전 앱은 더 새 데이터를 거부한다(기존 규칙 유지). IPC `groups:list`·`groups:save`·`groups:delete`·`jobs:setGroup`과 `groups:changed` 이벤트·preload API. `JobSidebar`는 그룹 머리글(이름·작업 수·접기)과 `그룹 없음` 묶음으로 보이고 그룹이 없으면 평평한 목록이며, 하단 `+ 새 그룹`과 머리글의 이름 바꾸기·지우기는 `GroupNameDialog`로 처리한다. 작업 편집 모달에 `그룹` select를 두고, `jobs:setGroup`은 작업 rev를 올리지 않아 그룹만 바꾸면 비교 계획이 유효하다
+- 테스트: `compare-tree` 단위(폴더 집계·접힘·대소문자 다른 경로 분리), 그룹 저장소 단위와 v2→v3 이관·`pre-v3` 백업 단위, E2E에 트리 토글·모두 펼치기/접기·경로 복사 메뉴·그룹 만들기/이름 바꾸기/지우기·편집 모달 그룹 select·그룹만 바꾼 뒤 비교 계획 유지 케이스 추가
+- 검증(Phase 2·3): Windows `pnpm run check`(단위 1,371)·`format:check`·`test:e2e` 19(콘솔 오류 0)·`build:win` 통과, `drive-app` 113건 통과. `run-service`·`plan-token`·`command-builder` diff 0줄, 의존성 무변경. `drive-app` 어서션이 Phase 1~3 UI 변경 뒤 낡아 실패하던 드리프트를 함께 고쳤다
+- 문서: CHANGELOG 2줄(그룹·트리), MVP_SPEC §12.2 IPC 채널·§13 화면 구조와 화면별 요구·INT-008 Phase 2·3 구현 반영 표, README §3 화면 설명
+- 남은 것: T-07 마감 — Phase 1~3 전체 검증과 정합성 게이트, intent 완료 전이
 
 ## Errors
 
@@ -253,6 +258,7 @@
 - (2026-11-02) Drive 수용 첫 실측에서 sync 삭제·전체 범위 sync가 대량 삭제 게이트(SAFETY_BLOCKED)로 실패 — 테스트 도우미가 `confirmLargeDeletes`를 넘기지 않음 → 수정 후 14/14 [TASK_023 해결]
 - (2026-11-17) 설정 모달(dialog)을 열면 위쪽 가운데 토스트가 dialog top layer에 가려짐 → `ZBCToast`를 popover로 띄우고 dialog가 열리고 닫힐 때 다시 올림(설정 모달은 바깥 클릭으로 닫지 않음) [TASK_033 해결]
 - (2026-11-17) 확인 모달(dialog 안 dialog)을 닫으면 close 이벤트가 조부모까지 버블링해 부모 모달까지 닫힘 → `ZBCModal`이 `e.target === e.currentTarget`일 때만 onClose를 부르도록 수정 [TASK_033 해결]
+- (2026-11-17) `drive-app` 확인 도구의 어서션이 Phase 1~3 UI 변경(그룹 머리글·트리/평면 토글·파일 줄 메뉴)을 따라가지 못해 실패 → 어서션을 새 화면 구조에 맞춘 뒤 113건 통과 [TASK_033 해결]
 
 [TASK_024] : (2026-11-03) INT-004 작은 파일이 많은 실행에서도 믿을 수 있는 남은 시간 표시 (관련 Intent: INT-004, T-01~T-03)
 - fixture(T-01): 2026-11-03 중단 실행 로그 2,302초·667/1,815에서 stats만 남기고 `msg`·`transferring[].name`·`srcFs`/`dstFs`를 가려 `drive-small-files-progress-partial.stderr.txt`(486줄). 테스트 remote에 작은 파일 200개 + 30MB 1개를 copy해 492.9초·201/201·오류 0으로 끝낸 로그를 같은 방식으로 가리고 30초 뒤 5초 간격으로 줄여 `drive-small-files-progress.stderr.txt`(124줄). 두 파일 모두 remote 이름·사용자 경로·원래 파일 이름 0건 확인
