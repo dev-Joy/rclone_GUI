@@ -22,6 +22,7 @@
         "src/main/**/*",
         "src/preload/**/*",
         "src/shared/**/*",
+        "src/lib/compare-tree.ts",
         "src/lib/compare-view.ts",
         "src/lib/exclude-view.ts",
         "src/lib/form-utils.ts",

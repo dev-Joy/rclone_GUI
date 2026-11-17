@@ -1,0 +1,54 @@
+/**
+ * CompareTree 스타일 (표 틀·셀은 CompareTable.module.css를 그대로 쓰고, 폴더 행 부품만 더한다)
+ *
+ * @author dev-Joy 2026-11-17
+ */
+
+@layer pages {
+    .CompareTree {
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+            padding: 0;
+            border: 0;
+            border-radius: 3px;
+            background: none;
+            color: var(--text);
+            font: inherit;
+            font-family: var(--font);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+
+            &:focus-visible {
+                outline: 2px solid var(--focus);
+                outline-offset: 1px;
+            }
+        }
+
+        .arrow {
+            width: 10px;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .folderIcon {
+            font-size: 12px;
+        }
+
+        .name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .summary {
+            margin-left: 8px;
+            color: var(--muted);
+            font-family: var(--font);
+            font-size: 11px;
+        }
+    }
+}

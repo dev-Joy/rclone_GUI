@@ -1,30 +1,20 @@
 /**
- * 비교 결과 표(고정 높이 30px 행의 가상 목록). 보이는 행만 그리고 위·아래는 빈 행으로 채운다.
+ * 비교 결과 평면 표(고정 높이 30px 행의 가상 목록). 보이는 행만 그리고 위·아래는 빈 행으로 채운다.
  * 열: 항목 · 원본 크기 · 원본 수정 시각 · 할 일(+사유) · 대상 수정 시각 · 대상 크기(rcloud와 같은 차례).
- * 머리글 버튼으로 정렬한다. 화면 읽기 프로그램용으로 aria-rowcount·aria-rowindex·aria-sort를 둔다.
- * 머리글은 스크롤해도 고정된다.
- * 대상에만 있는 rclone 임시 파일(.partial)은 항목 앞에 "취소로 남은 임시 파일"로 표시한다.
+ * 머리글(CompareHead)과 행(CompareRow)은 트리 보기(CompareTree)와 함께 쓴다.
+ * 머리글은 스크롤해도 고정되고, 화면 읽기 프로그램용으로 aria-rowcount·aria-rowindex·aria-sort를 둔다.
  *
  * @author dev-Joy 2026-10-28
  */
 
-// ========== External imports ==========
-import { memo } from "react";
-
 // ========== Internal imports ==========
-import ZBCBadge from "@/components/ZBCBadge";
-import {
-    reasonText,
-    statusLabel,
-    statusTone,
-    type typCompareSortKey,
-    type typSortDir,
-} from "@/lib/compare-view";
+import type { typCompareSortKey, typSortDir } from "@/lib/compare-view";
 import { useVirtualRows } from "@/lib/use-virtual-rows";
-import { formatBytes, formatModTime } from "@/shared/format";
-import { isRclonePartial, PARTIAL_BADGE_TEXT, PARTIAL_BADGE_TITLE } from "@/shared/partial-files";
 import type { typRunMode } from "@/shared/schemas/common";
 import type { itfDiffEntry } from "@/shared/types/compare";
+import type { itfFileMenuTarget } from "./FileRowMenu";
+import CompareHead from "./CompareHead";
+import { CompareRow } from "./CompareRow";
 import styles from "./CompareTable.module.css";
 
 // ========== Props & Types ==========
@@ -36,84 +26,24 @@ export interface itfCompareTableProps {
     sortKey: typCompareSortKey;
     sortDir: typSortDir;
     onSort: (key: typCompareSortKey) => void;
-}
-
-interface itfRowProps {
-    entry: itfDiffEntry;
-    mode: typRunMode;
-    rowIndex: number;
+    /** 파일 행 우클릭·메뉴 키로 연다 */
+    onFileMenu?: (target: itfFileMenuTarget) => void;
 }
 
 /** CompareTable.module.css의 행 높이와 맞춘다 */
 const ROW_HEIGHT = 30;
 
-const COLUMNS: ReadonlyArray<{ key: typCompareSortKey; label: string }> = [
-    { key: "path", label: "항목" },
-    { key: "srcSize", label: "원본 크기" },
-    { key: "srcTime", label: "원본 수정 시각" },
-    { key: "status", label: "할 일" },
-    { key: "dstTime", label: "대상 수정 시각" },
-    { key: "dstSize", label: "대상 크기" },
-];
-
-function f_Size(side: itfDiffEntry["source"]): string {
-    return side ? formatBytes(side.size) : "—";
-}
-
-function f_Time(side: itfDiffEntry["source"]): string {
-    return side ? formatModTime(side.modTimeMs) : "—";
-}
-
-const CompareRow = memo(function CompareRow(props: itfRowProps) {
-    const { entry, mode, rowIndex } = props;
-    const reasons = entry.status === "modified" ? reasonText(entry.reasons) : "";
-    const partial = entry.status === "onlyDest" && isRclonePartial(entry.dest?.path ?? entry.path);
-    const pathTitle =
-        entry.dest && entry.source && entry.dest.path !== entry.source.path
-            ? `원본: ${entry.source.path}\n대상: ${entry.dest.path}`
-            : entry.path;
-    return (
-        <tr className={styles.row} aria-rowindex={rowIndex} data-status={entry.status}>
-            <td className={styles.path} title={pathTitle}>
-                {partial && (
-                    <span className={styles.partial}>
-                        <ZBCBadge tone="warning" title={PARTIAL_BADGE_TITLE}>
-                            {PARTIAL_BADGE_TEXT}
-                        </ZBCBadge>
-                    </span>
-                )}
-                {entry.path}
-                {entry.caseOnly && <span className={styles.caseOnly}> 대소문자만 다름</span>}
-            </td>
-            <td className={styles.num}>{f_Size(entry.source)}</td>
-            <td className={styles.time}>{f_Time(entry.source)}</td>
-            <td>
-                <ZBCBadge tone={statusTone(entry.status, mode)}>
-                    {statusLabel(entry.status, mode)}
-                </ZBCBadge>
-                {reasons && <span className={styles.reason}>{reasons}</span>}
-            </td>
-            <td className={styles.time}>{f_Time(entry.dest)}</td>
-            <td className={styles.num}>{f_Size(entry.dest)}</td>
-        </tr>
-    );
-});
+/** 표의 열 수(빈 행 colSpan) */
+const COLUMN_COUNT = 6;
 
 export default function CompareTable(props: itfCompareTableProps) {
-    const { entries, rows, mode, sortKey, sortDir, onSort } = props;
+    const { entries, rows, mode, sortKey, sortDir, onSort, onFileMenu } = props;
 
     // ========== hook & state 변수 선언 ==========
     const { ref, win } = useVirtualRows<HTMLElement>(rows.length, ROW_HEIGHT, 10, rows);
 
     // ========== 내부 변수 (_V) ==========
     const visible = rows.slice(win.start, win.end);
-
-    // ========== 이벤트 핸들러 및 내부 함수 ==========
-    const h_Sort = (key: typCompareSortKey) => () => onSort(key);
-    function f_AriaSort(key: typCompareSortKey): "ascending" | "descending" | "none" {
-        if (key !== sortKey) return "none";
-        return sortDir === "asc" ? "ascending" : "descending";
-    }
 
     return (
         <div className={styles.CompareTable}>
@@ -134,32 +64,12 @@ export default function CompareTable(props: itfCompareTableProps) {
                         <col className={styles.colTime} />
                         <col className={styles.colSize} />
                     </colgroup>
-                    <thead className={styles.head}>
-                        <tr className={styles.row} aria-rowindex={1}>
-                            {COLUMNS.map((c) => (
-                                <th key={c.key} scope="col" aria-sort={f_AriaSort(c.key)}>
-                                    <button
-                                        type="button"
-                                        className={styles.sort}
-                                        data-sort-key={c.key}
-                                        onClick={h_Sort(c.key)}
-                                    >
-                                        {c.label}
-                                        {c.key === sortKey && (
-                                            <span aria-hidden="true">
-                                                {sortDir === "asc" ? " ▲" : " ▼"}
-                                            </span>
-                                        )}
-                                    </button>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
+                    <CompareHead sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <tbody>
                         {win.padTop > 0 && (
                             <tr className={styles.spacer} aria-hidden="true">
                                 <td
-                                    colSpan={COLUMNS.length}
+                                    colSpan={COLUMN_COUNT}
                                     style={{ height: win.padTop }}
                                     aria-hidden="true"
                                 />
@@ -171,12 +81,13 @@ export default function CompareTable(props: itfCompareTableProps) {
                                 entry={entries[entryIndex]!}
                                 mode={mode}
                                 rowIndex={win.start + k + 2}
+                                onFileMenu={onFileMenu}
                             />
                         ))}
                         {win.padBottom > 0 && (
                             <tr className={styles.spacer} aria-hidden="true">
                                 <td
-                                    colSpan={COLUMNS.length}
+                                    colSpan={COLUMN_COUNT}
                                     style={{ height: win.padBottom }}
                                     aria-hidden="true"
                                 />

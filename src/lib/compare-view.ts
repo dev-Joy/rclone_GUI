@@ -30,12 +30,17 @@ export type typCompareChipTone = "add" | "change" | "delete" | "danger" | "same"
 export type typCompareSortKey = "path" | "status" | "srcSize" | "srcTime" | "dstSize" | "dstTime";
 export type typSortDir = "asc" | "desc";
 
+/** 목록 모양. flat은 지금까지의 평면 표, tree는 폴더로 접고 펴는 표다 */
+export type typCompareLayout = "tree" | "flat";
+
 export interface itfCompareViewState {
     /** 상태 칩. 켠 상태의 행만 목록에 보인다(같음은 기본 꺼짐) */
     chips: Record<typCompareChip, boolean>;
     query: string;
     sortKey: typCompareSortKey;
     sortDir: typSortDir;
+    /** 보기 모양. 기존 사용자에게 익숙한 평면이 기본이고 트리는 토글로 켠다 */
+    layout: typCompareLayout;
 }
 
 export const DEFAULT_COMPARE_VIEW: itfCompareViewState = {
@@ -49,6 +54,7 @@ export const DEFAULT_COMPARE_VIEW: itfCompareViewState = {
     query: "",
     sortKey: "path",
     sortDir: "asc",
+    layout: "flat",
 };
 
 /** 상태 정렬 순서: 충돌 → 복사 → 덮어씀 → 대상만 → 동일 */

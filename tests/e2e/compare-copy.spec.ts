@@ -72,7 +72,7 @@ test("비교 칩과 동기화 단추를 확인하고 복사한 뒤 기록이 남
         await workspace.locator("#job-compare").click();
 
         // 비교 요약은 상태 칩 5개(추가 2·변경 0·대상만 1·오류 0·같음 1)로 보인다
-        await expect(workspace.locator("button[aria-pressed]")).toHaveCount(5);
+        await expect(workspace.locator("button[aria-pressed][data-tone]")).toHaveCount(5);
         await expect(workspace.getByRole("button", { name: /^추가\s*2/ })).toHaveAttribute(
             "aria-pressed",
             "true",
