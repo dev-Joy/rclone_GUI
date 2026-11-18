@@ -1,9 +1,9 @@
 # Project Code Asset Index: rclonegui
 
-- 생성일시: 2026-11-17 21:23:58
+- 생성일시: 2026-11-18 16:39:43
 - 감지된 환경: React / TypeScript
 - 스캔 대상 디렉터리: `src/components`, `src/lib`, `src/main/lib`, `src/main/services`, `src/shared`, `src/shared/schemas`, `src/shared/types`
-- 총 인덱싱 자산: 480 건
+- 총 인덱싱 자산: 499 건
 
 > 이 카탈로그는 AI 에이전트와 개발자가 기존 공통 자산을 재사용하고 중복 구현을 방지하기 위한 인덱스입니다.
 > 신규 컴포넌트/함수/훅 작성 전 반드시 아래 목록을 대조하고 적극 재사용하십시오.
@@ -58,6 +58,7 @@
 | `jobOnlyCommentLike` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | jobOnlyCommentLike(patterns: readonly string[]) - 이 작업 전용 패턴 중 공용으로 둘 수 없는 줄(#·; 시작) |
 | `missingPatternIds` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | missingPatternIds(...) - 선택한 id 중 라이브러리에 없는 것(편집 중 지워진 패턴) |
 | `togglePatternId` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | togglePatternId(selected: readonly string[], id: string, on: boolean) - 선택 토글. 결과는 정렬한다(저장소가 정렬해 돌려주므로 변경 여부 비교가 맞게) |
+| `resolveDiffView` | [`src/lib/file-diff-view.ts`](../../src/lib/file-diff-view.ts) | resolveDiffView(data: itfFileDiffData) - 응답 데이터를 화면 표시 모델로 바꾼다(분기 문구·안내·행) |
 | `excludesIssueText` | [`src/lib/form-utils.ts`](../../src/lib/form-utils.ts) | excludesIssueText(...) - 제외 규칙(zExcludes) 오류 문구. issue.path는 excludes 기준 상대 경로 |
 | `numberIssueText` | [`src/lib/form-utils.ts`](../../src/lib/form-utils.ts) | numberIssueText(value: unknown, range: itfNumberRange) - 숫자 필드 오류 문구 |
 | `numberText` | [`src/lib/form-utils.ts`](../../src/lib/form-utils.ts) | numberText(value: number) - number → 입력란 문자열. NaN은 빈칸 |
@@ -200,6 +201,7 @@
 | `checkRunPaths` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | checkRunPaths(...) - 비교·실행 시작 전 검사. checkPathPair(S1~S4a)에 더해 드라이브 상대 경로(`x:folder`, `C:foo`)를 거부한다. Windows의 rclone은 이 형태를 드라이브의 현재 폴더 기준 경로로 해석해 위치가 정해지지 않는다. |
 | `isRemoteAbsolute` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | isRemoteAbsolute(p: itfParsedPath) - remote 경로가 맨 앞 / 로 시작하는지(절대 경로). local·UNC는 false |
 | `joinBackupPath` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | joinBackupPath(base: itfParsedPath, subdir: string) - 백업 기준 경로 + 실행별 하위 폴더 이름 → rclone에 넘길 경로. 로컬·UNC는 "\\", remote는 "/" |
+| `joinRootRelative` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | joinRootRelative(root: itfParsedPath, rel: string) - 루트 경로 + 비교 결과의 상대 경로(항목 `path`, "/" 구분) → rclone에 넘길 경로 (INT-009 FR-15). - local·UNC: rel의 "/"를 "\"로 바꿔 루트 뒤에 "\"로 붙인다. 루트가 이미 "\"로 끝나면 그대로 붙인다. |
 | `linuxPathToWslUnc` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | linuxPathToWslUnc(distro: string, linuxPath: string) - WSL 리눅스 절대 경로를 UNC로 바꾼다. 예: ("Distro", "/home/a") → \\wsl.localhost\Distro\home\a |
 | `mntPathToWindows` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | mntPathToWindows(linuxPath: string) - `/mnt/<drive>/...` 를 Windows 경로로 바꾼다. 해당하지 않으면 null |
 | `parsePath` | [`src/shared/path-utils.ts`](../../src/shared/path-utils.ts) | parsePath(raw: string) - 경로 원문을 분류하고 정규화한다. 지원하지 않는 형태는 이유와 함께 거부한다. |
@@ -240,6 +242,9 @@
 | `rescheduleOnUnpause` | [`src/shared/schedule.ts`](../../src/shared/schedule.ts) | rescheduleOnUnpause(auto: typAutoSyncState, now: Date) - 일시정지 해제: 지난 예약만 now + 30초. 없거나 미래면 그대로 |
 | `scheduleText` | [`src/shared/schedule.ts`](../../src/shared/schedule.ts) | scheduleText(spec: typScheduleSpec) - 예약 표시: "30분마다", "2시간마다", "매일 09:00", "매주 월·수 09:00", "평일 09:00" |
 | `weekdaysText` | [`src/shared/schedule.ts`](../../src/shared/schedule.ts) | weekdaysText(mask: number) - 요일 마스크 표시: "매일", "평일", "주말", 그 밖에는 "월·수"(월요일부터) |
+| `diffLines` | [`src/shared/text-diff.ts`](../../src/shared/text-diff.ts) | diffLines(...) - 두 줄 목록의 줄 단위 diff. 같음·삭제·추가 연산을 앞에서부터 순서대로 돌려준다. 공통 앞뒤 줄은 먼저 잘라내고 가운데만 계산하며, 편집 거리 D가 maxEdits를 넘으면 null(FR-12). |
+| `splitLines` | [`src/shared/text-diff.ts`](../../src/shared/text-diff.ts) | splitLines(text: string) - 텍스트를 줄로 나눈다. `\r\n`·`\n`·`\r` 을 모두 줄바꿈으로 보고, 끝에 붙은 빈 줄 하나는 버린다("a\n" → ["a"]). 빈 문자열은 줄 0개다. |
+| `toSideBySide` | [`src/shared/text-diff.ts`](../../src/shared/text-diff.ts) | toSideBySide(ops: readonly typDiffOp[]) - 연산 목록을 좌우 2열 행으로 접는다(FR-7). 이어진 삭제·추가 묶음은 앞에서부터 하나씩 짝지어 changed로 만들고, 남는 줄은 delete(왼쪽만)· |
 
 ## 4. Shared Services & Clients
 
@@ -252,6 +257,7 @@
 | `clsActivityLock` | [`src/main/services/activity-lock.ts`](../../src/main/services/activity-lock.ts) | class clsActivityLock - 공유 서비스/클라이언트 클래스 |
 | `clsCompareService` | [`src/main/services/compare-service.ts`](../../src/main/services/compare-service.ts) | class clsCompareService - 공유 서비스/클라이언트 클래스 |
 | `clsExcludeService` | [`src/main/services/exclude-service.ts`](../../src/main/services/exclude-service.ts) | class clsExcludeService - 공유 서비스/클라이언트 클래스 |
+| `clsFileDiffService` | [`src/main/services/file-diff-service.ts`](../../src/main/services/file-diff-service.ts) | class clsFileDiffService - 비교 결과 항목 하나의 원본·대상 내용을 읽는다 |
 | `clsOsRunQueue` | [`src/main/services/os-run-queue.ts`](../../src/main/services/os-run-queue.ts) | class clsOsRunQueue - 메인 클래스 |
 | `clsOsScheduler` | [`src/main/services/os-scheduler.ts`](../../src/main/services/os-scheduler.ts) | class clsOsScheduler - OS 예약 등록 수명주기. 모든 schtasks 호출은 내부 큐로 직렬화한다. available이 false면 schtasks를 한 번도 부르지 않는다. |
 | `clsFsGate` | [`src/main/services/path-service.ts`](../../src/main/services/path-service.ts) | class clsFsGate - 응답 없는 fs 호출 제한. 시간 제한은 기다림만 끊고 fs.stat/opendir은 libuv 스레드풀(기본 4)에 남는다. 응답 없는 UNC·WSL 경로를 |
@@ -300,6 +306,10 @@
 | `typCompareTone` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typCompareTone - ZBCBadge의 tone과 같은 값 (컴포넌트 파일을 node 환경에 끌어오지 않으려고 따로 둔다) |
 | `typSortDir` | [`src/lib/compare-view.ts`](../../src/lib/compare-view.ts) | type typSortDir - 타입 별칭 정의 |
 | `typExcludeChangeKind` | [`src/lib/exclude-view.ts`](../../src/lib/exclude-view.ts) | type typExcludeChangeKind - 타입 별칭 정의 |
+| `itfDiffCell` | [`src/lib/file-diff-view.ts`](../../src/lib/file-diff-view.ts) | interface itfDiffCell - 인터페이스 정의 |
+| `itfDiffRow` | [`src/lib/file-diff-view.ts`](../../src/lib/file-diff-view.ts) | interface itfDiffRow - 좌우 한 줄. 한쪽에 줄이 없으면 null(빈칸)이다 |
+| `itfDiffView` | [`src/lib/file-diff-view.ts`](../../src/lib/file-diff-view.ts) | interface itfDiffView - 인터페이스 정의 |
+| `typDiffTone` | [`src/lib/file-diff-view.ts`](../../src/lib/file-diff-view.ts) | type typDiffTone - ========== Props & Types ========== |
 | `itfNumberRange` | [`src/lib/form-utils.ts`](../../src/lib/form-utils.ts) | interface itfNumberRange - 인터페이스 정의 |
 | `itfHistoryFilter` | [`src/lib/history-view.ts`](../../src/lib/history-view.ts) | interface itfHistoryFilter - 인터페이스 정의 |
 | `typHistoryKind` | [`src/lib/history-view.ts`](../../src/lib/history-view.ts) | type typHistoryKind - 타입 별칭 정의 |
@@ -336,6 +346,7 @@
 | `itfEffectiveExcludes` | [`src/main/services/effective-excludes.ts`](../../src/main/services/effective-excludes.ts) | interface itfEffectiveExcludes - 인터페이스 정의 |
 | `itfExcludeFileHandle` | [`src/main/services/exclude-file.ts`](../../src/main/services/exclude-file.ts) | interface itfExcludeFileHandle - 인터페이스 정의 |
 | `itfExcludeServiceDeps` | [`src/main/services/exclude-service.ts`](../../src/main/services/exclude-service.ts) | interface itfExcludeServiceDeps - 인터페이스 정의 |
+| `itfFileDiffServiceDeps` | [`src/main/services/file-diff-service.ts`](../../src/main/services/file-diff-service.ts) | interface itfFileDiffServiceDeps - 인터페이스 정의 |
 | `itfJobContext` | [`src/main/services/job-context.ts`](../../src/main/services/job-context.ts) | interface itfJobContext - 인터페이스 정의 |
 | `itfJobContextDeps` | [`src/main/services/job-context.ts`](../../src/main/services/job-context.ts) | interface itfJobContextDeps - 인터페이스 정의 |
 | `itfOsRunClock` | [`src/main/services/os-run-queue.ts`](../../src/main/services/os-run-queue.ts) | interface itfOsRunClock - 인터페이스 정의 |
@@ -418,6 +429,7 @@
 | `typRunPhase` | [`src/shared/schemas/common.ts`](../../src/shared/schemas/common.ts) | type typRunPhase - 타입 별칭 정의 |
 | `typRunStatus` | [`src/shared/schemas/common.ts`](../../src/shared/schemas/common.ts) | type typRunStatus - 타입 별칭 정의 |
 | `typRunTrigger` | [`src/shared/schemas/common.ts`](../../src/shared/schemas/common.ts) | type typRunTrigger - 타입 별칭 정의 |
+| `typCompareFileDiffInput` | [`src/shared/schemas/compare.ts`](../../src/shared/schemas/compare.ts) | type typCompareFileDiffInput - 타입 별칭 정의 |
 | `typCompareJobInput` | [`src/shared/schemas/compare.ts`](../../src/shared/schemas/compare.ts) | type typCompareJobInput - 타입 별칭 정의 |
 | `itfExcludePatternUsage` | [`src/shared/schemas/excludes.ts`](../../src/shared/schemas/excludes.ts) | interface itfExcludePatternUsage - 인터페이스 정의 |
 | `itfExcludeUser` | [`src/shared/schemas/excludes.ts`](../../src/shared/schemas/excludes.ts) | interface itfExcludeUser - 패턴을 쓰는 작업 |
@@ -472,6 +484,8 @@
 | `typOpenExternalInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typOpenExternalInput - 타입 별칭 정의 |
 | `typPickDirectoryInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typPickDirectoryInput - 타입 별칭 정의 |
 | `typPickFileInput` | [`src/shared/schemas/system.ts`](../../src/shared/schemas/system.ts) | type typPickFileInput - 타입 별칭 정의 |
+| `itfSideBySideRow` | [`src/shared/text-diff.ts`](../../src/shared/text-diff.ts) | interface itfSideBySideRow - 인터페이스 정의 |
+| `typDiffOp` | [`src/shared/text-diff.ts`](../../src/shared/text-diff.ts) | type typDiffOp - 타입 별칭 정의 |
 | `itfCompareActive` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | interface itfCompareActive - 진행 중인 비교(앱 전역 하나) |
 | `itfCompareMethod` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | interface itfCompareMethod - 결과에 비교 방식을 남긴다(화면 표시·Phase 7 게이트) |
 | `itfCompareProgress` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | interface itfCompareProgress - compare:progress 이벤트 |
@@ -485,6 +499,11 @@
 | `typComparePhase` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | type typComparePhase - 비교 진행 단계: 경로 확인 → 목록 읽기 → 차이 계산 |
 | `typCompareStatus` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | type typCompareStatus - 타입 별칭 정의 |
 | `typModifiedReason` | [`src/shared/types/compare.ts`](../../src/shared/types/compare.ts) | type typModifiedReason - 타입 별칭 정의 |
+| `itfFileDiffData` | [`src/shared/types/file-diff.ts`](../../src/shared/types/file-diff.ts) | interface itfFileDiffData - 인터페이스 정의 |
+| `itfFileDiffTarget` | [`src/shared/types/file-diff.ts`](../../src/shared/types/file-diff.ts) | interface itfFileDiffTarget - 화면이 파일 행 메뉴·더블클릭에 넘기는 대상(상태로 진입 가능 여부를 가른다) |
+| `typFileDiffStatus` | [`src/shared/types/file-diff.ts`](../../src/shared/types/file-diff.ts) | type typFileDiffStatus - 내용을 볼 수 있는 상태만 요청한다. typCompareStatus의 부분집합(equal·typeConflict 제외) |
+| `typFileSideState` | [`src/shared/types/file-diff.ts`](../../src/shared/types/file-diff.ts) | type typFileSideState - 한쪽(원본 또는 대상)의 읽기 결과 |
+| `typFileTextEncoding` | [`src/shared/types/file-diff.ts`](../../src/shared/types/file-diff.ts) | type typFileTextEncoding - 텍스트로 읽은 인코딩. UTF-8 엄격 디코딩이 실패하면 EUC-KR로 다시 읽는다(spec §10 Q-1) |
 | `itfRunLogView` | [`src/shared/types/history.ts`](../../src/shared/types/history.ts) | interface itfRunLogView - 실행 로그 파일 끝부분 |
 | `itfRemoteAuthAnswerResult` | [`src/shared/types/remote-config.ts`](../../src/shared/types/remote-config.ts) | interface itfRemoteAuthAnswerResult - 인터페이스 정의 |
 | `itfRemoteAuthProgress` | [`src/shared/types/remote-config.ts`](../../src/shared/types/remote-config.ts) | interface itfRemoteAuthProgress - remoteConfig:authProgress 이벤트. 비밀 값·토큰은 담지 않는다 |
